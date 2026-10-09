@@ -49,10 +49,6 @@
         "title": "Pi: 生成代码"
       },
       {
-        "command": "pi-assistant.setApiKey",
-        "title": "Pi: 设置 API Key"
-      },
-      {
         "command": "pi-assistant.clearChat",
         "title": "Pi: 清空对话"
       }
@@ -100,31 +96,6 @@
         }
       ]
     },
-    "configuration": {
-      "title": "Pi Assistant",
-      "properties": {
-        "pi-assistant.apiKey": {
-          "type": "string",
-          "default": "",
-          "description": "Anthropic API Key (sk-ant-...)"
-        },
-        "pi-assistant.model": {
-          "type": "string",
-          "default": "claude-sonnet-4-20250514",
-          "description": "Claude 模型名称（如 claude-sonnet-4-20250514、claude-opus-4-20250514）"
-        },
-        "pi-assistant.maxTokens": {
-          "type": "number",
-          "default": 4096,
-          "description": "最大响应 token 数"
-        },
-        "pi-assistant.temperature": {
-          "type": "number",
-          "default": 0.7,
-          "description": "生成温度 (0-1)"
-        }
-      }
-    },
     "keybindings": [
       {
         "command": "pi-assistant.openChat",
@@ -140,12 +111,14 @@
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
-    "@types/vscode": "^1.80.0",
     "@types/node": "^18.0.0",
-    "typescript": "^5.0.0",
+    "@types/vscode": "^1.80.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
-    "eslint": "^8.0.0"
+    "eslint": "^8.0.0",
+    "typescript": "^5.0.0"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^1.1.0"
+  }
 }

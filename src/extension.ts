@@ -2,33 +2,35 @@ import * as vscode from 'vscode';
 import { ChatPanel } from './chatPanel';
 
 export function activate(context: vscode.ExtensionContext) {
-    console.log('Pi Assistant 已激活');
+    console.log('Pi Assistant 已激活（基于本地 pi agent）');
 
     // ---- 打开对话面板 ----
     const openChat = vscode.commands.registerCommand('pi-assistant.openChat', () => {
-        ChatPanel.createOrShow(context.extensionUri);
+        ChatPanel.createOrShow(context.extensionPath);
     });
 
     // ---- 解释选中代码 ----
     const explainCode = vscode.commands.registerCommand('pi-assistant.explainCode', async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.selection.isEmpty) {
-            vscode.window.showWarningMessage('请先选中要解释的代码');
+        const ctx = getSelectionContext();
+        if (!ctx) {
             return;
         }
-        const panel = ChatPanel.createOrShow(context.extensionUri);
-        await panel.askQuestion('请解释这段代码的功能和关键逻辑，指出潜在问题。');
+        const panel = ChatPanel.createOrShow(context.extensionPath);
+        await panel.askQuestion(
+            `请解释 ${ctx.relPath} 第 ${ctx.lineRange} 行（当前选中）的代码：\n\n\`\`\`${ctx.languageId}\n${ctx.code}\n\`\`\`\n\n说明整体功能、关键逻辑与潜在问题。`
+        );
     });
 
     // ---- 重构选中代码 ----
     const refactorCode = vscode.commands.registerCommand('pi-assistant.refactorCode', async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor || editor.selection.isEmpty) {
-            vscode.window.showWarningMessage('请先选中要重构的代码');
+        const ctx = getSelectionContext();
+        if (!ctx) {
             return;
         }
-        const panel = ChatPanel.createOrShow(context.extensionUri);
-        await panel.askQuestion('请重构这段代码：提高可读性、修复潜在问题、保持对外行为不变，并简要说明改动理由。');
+        const panel = ChatPanel.createOrShow(context.extensionPath);
+        await panel.askQuestion(
+            `请重构 ${ctx.relPath} 第 ${ctx.lineRange} 行（当前选中）的代码：\n\n\`\`\`${ctx.languageId}\n${ctx.code}\n\`\`\`\n\n要求：提高可读性、修复潜在问题、保持对外行为不变。直接修改文件并说明改动理由。`
+        );
     });
 
     // ---- 生成代码 ----
@@ -41,24 +43,12 @@ export function activate(context: vscode.ExtensionContext) {
         if (!description) {
             return;
         }
-        const panel = ChatPanel.createOrShow(context.extensionUri);
-        await panel.askQuestion(`请实现以下功能：${description}`);
-    });
-
-    // ---- 设置 API Key ----
-    const setApiKey = vscode.commands.registerCommand('pi-assistant.setApiKey', async () => {
-        const config = vscode.workspace.getConfiguration('pi-assistant');
-        const current = config.get<string>('apiKey', '');
-        const key = await vscode.window.showInputBox({
-            prompt: current ? '当前已配置 API Key，输入新的以替换' : '请输入 Anthropic API Key',
-            placeHolder: 'sk-ant-...',
-            password: true,
-            ignoreFocusOut: true,
-        });
-        if (key) {
-            await config.update('apiKey', key, vscode.ConfigurationTarget.Global);
-            vscode.window.showInformationMessage('API Key 已保存');
-        }
+        const editor = vscode.window.activeTextEditor;
+        const locationHint = editor
+            ? `\n\n目标文件：${vscode.workspace.asRelativePath(editor.document.uri)}（语言：${editor.document.languageId}）`
+            : '';
+        const panel = ChatPanel.createOrShow(context.extensionPath);
+        await panel.askQuestion(`请实现以下功能：${description}${locationHint}`);
     });
 
     // ---- 清空对话 ----
@@ -73,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
     // 状态栏按钮
     const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     statusBar.text = '$(sparkle) Pi';
-    statusBar.tooltip = '打开 Pi Assistant 对话面板';
+    statusBar.tooltip = '打开 Pi Assistant（本地 pi agent）';
     statusBar.command = 'pi-assistant.openChat';
     statusBar.show();
 
@@ -82,10 +72,35 @@ export function activate(context: vscode.ExtensionContext) {
         explainCode,
         refactorCode,
         generateCode,
-        setApiKey,
         clearChat,
         statusBar
     );
+}
+
+/** 获取当前编辑器选区上下文（无选区时提示并返回 undefined） */
+function getSelectionContext(): {
+    relPath: string;
+    languageId: string;
+    code: string;
+    lineRange: string;
+} | undefined {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor || editor.selection.isEmpty) {
+        vscode.window.showWarningMessage('请先选中一段代码');
+        return undefined;
+    }
+    const sel = editor.selection;
+    const code = editor.document.getText(sel);
+    const relPath = vscode.workspace.asRelativePath(editor.document.uri);
+    const lineRange = sel.start.line === sel.end.line
+        ? `${sel.start.line + 1}`
+        : `${sel.start.line + 1}-${sel.end.line + 1}`;
+    return {
+        relPath,
+        languageId: editor.document.languageId,
+        code,
+        lineRange,
+    };
 }
 
 export function deactivate() {

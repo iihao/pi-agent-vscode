@@ -1,35 +1,35 @@
 import * as vscode from 'vscode';
-import * as https from 'https';
+import * as path from 'path';
+import * as fs from 'fs';
+import type { RpcClient, JsonAgentSessionEvent } from '@earendil-works/pi-coding-agent' with { 'resolution-mode': 'import' };
 
-// 对话消息记录
-interface ChatMessage {
-    role: 'user' | 'assistant';
-    content: string;
-    isError?: boolean;
+// pi SDK 是 ESM-only；本扩展编译为 CJS（node16 模式下动态 import 原样保留），
+// Node 支持在 CJS 中动态 import ESM 包
+type PiSdkModule = typeof import('@earendil-works/pi-coding-agent', { with: { 'resolution-mode': 'import' } });
+let sdkPromise: Promise<PiSdkModule> | undefined;
+function loadPiSdk(): Promise<PiSdkModule> {
+    if (!sdkPromise) {
+        sdkPromise = import('@earendil-works/pi-coding-agent');
+    }
+    return sdkPromise;
 }
-
-const SYSTEM_PROMPT = `你是 Pi，一个集成在 VSCode 中的专业 AI 编程助手。
-
-工作方式：
-- 用中文回复（代码、变量名和技术术语保持原样）
-- 解释代码：说明整体功能、关键逻辑、潜在问题与改进点
-- 重构代码：给出完整可运行的代码，并简要说明改动理由
-- 生成代码：直接给出完整实现，包含必要注释
-- 所有代码放在 markdown 代码块中并标注语言
-- 回答简洁专业，不要多余的客套和铺垫`;
 
 export class ChatPanel {
     public static currentPanel: ChatPanel | undefined;
     public static readonly viewType = 'pi-assistant.chatView';
 
     private readonly _panel: vscode.WebviewPanel;
+    private readonly _extensionPath: string;
     private _disposables: vscode.Disposable[] = [];
-    private _conversationHistory: ChatMessage[] = [];
-    private _streaming = false;
-    private _request: ReturnType<typeof https.request> | undefined;
+    private _client: RpcClient | undefined;
+    private _unsubscribe: (() => void) | undefined;
+    private _starting: Promise<void> | undefined;
+    private _busy = false;
+    private _turnHadText = false;
 
-    private constructor(panel: vscode.WebviewPanel) {
+    private constructor(panel: vscode.WebviewPanel, extensionPath: string) {
         this._panel = panel;
+        this._extensionPath = extensionPath;
         this._panel.webview.html = this._getHtmlForWebview();
 
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -42,13 +42,11 @@ export class ChatPanel {
                             void this._handleUserMessage(message.text);
                         }
                         break;
+                    case 'abort':
+                        void this._abort();
+                        break;
                     case 'clearChat':
                         this.clear();
-                        break;
-                    case 'applyCode':
-                        if (message.code) {
-                            void this._applyCode(message.code);
-                        }
                         break;
                     case 'copyCode':
                         if (message.code) {
@@ -64,7 +62,7 @@ export class ChatPanel {
         );
     }
 
-    public static createOrShow(extensionUri: vscode.Uri): ChatPanel {
+    public static createOrShow(extensionPath: string): ChatPanel {
         const column = vscode.ViewColumn.Beside;
 
         if (ChatPanel.currentPanel) {
@@ -79,268 +77,195 @@ export class ChatPanel {
             {
                 enableScripts: true,
                 retainContextWhenHidden: true,
-                localResourceRoots: [vscode.Uri.joinPath(extensionUri, 'media')],
             }
         );
 
-        ChatPanel.currentPanel = new ChatPanel(panel);
+        ChatPanel.currentPanel = new ChatPanel(panel, extensionPath);
         return ChatPanel.currentPanel;
     }
 
-    /** 清空对话（同步清理 UI 与历史） */
     public clear() {
-        this._conversationHistory = [];
         this._post({ type: 'clear' });
     }
 
-    /** 供命令调用的直接提问入口 */
+    /** 供命令调用的直接提问入口（如「解释代码」右键命令） */
     public async askQuestion(question: string) {
         await this._handleUserMessage(question);
     }
 
-    // ---------- 消息处理 ----------
+    // ---------- pi RpcClient 生命周期 ----------
 
-    private async _handleUserMessage(userText: string) {
-        if (this._streaming) {
-            vscode.window.showWarningMessage('Pi 正在生成回复，请稍候…');
-            return;
+    private async _ensureClient(): Promise<RpcClient> {
+        if (this._client) {
+            return this._client;
         }
-
-        const config = vscode.workspace.getConfiguration('pi-assistant');
-        const apiKey = config.get<string>('apiKey', '');
-        if (!apiKey) {
-            this._conversationHistory.push({ role: 'user', content: userText });
-            this._post({ type: 'addUserMessage', text: userText });
-            this._conversationHistory.push({
-                role: 'assistant',
-                content: '⚠️ 尚未配置 Anthropic API Key。\n\n请运行命令 **Pi: 设置 API Key**，或按 ⌘⇧P 输入 "Pi" 找到配置项。',
-                isError: true,
+        if (!this._starting) {
+            this._starting = this._startClient().catch((err) => {
+                this._starting = undefined; // 允许下次重试
+                throw err;
             });
-            this._post({
-                type: 'error',
-                text: '尚未配置 API Key，请在命令面板运行「Pi: 设置 API Key」。',
-            });
-            return;
         }
-
-        // 1. 记录并显示用户消息
-        this._conversationHistory.push({ role: 'user', content: userText });
-        this._post({ type: 'addUserMessage', text: userText });
-
-        // 2. 构建请求（附加编辑器上下文到本次请求）
-        const messages = this._buildRequestMessages();
-
-        // 3. 流式请求
-        this._streaming = true;
-        this._post({ type: 'assistantStart' });
-        this._post({ type: 'setBusy', busy: true });
-
-        const model = config.get<string>('model', 'claude-sonnet-4-20250514');
-        let accumulated = '';
-        try {
-            await this._streamClaude({
-                model,
-                apiKey,
-                messages,
-                onChunk: (chunk) => {
-                    accumulated += chunk;
-                    this._post({ type: 'assistantChunk', text: chunk });
-                },
-            });
-            this._conversationHistory.push({ role: 'assistant', content: accumulated });
-            this._post({ type: 'assistantEnd' });
-        } catch (err) {
-            const msg = (err as Error).message;
-            this._conversationHistory.push({
-                role: 'assistant',
-                content: `⚠️ 请求失败：${msg}`,
-                isError: true,
-            });
-            this._post({ type: 'error', text: msg });
-        } finally {
-            this._streaming = false;
-            this._request = undefined;
-            this._post({ type: 'setBusy', busy: false });
+        await this._starting;
+        if (!this._client) {
+            throw new Error('Pi 客户端未能启动');
         }
+        return this._client;
     }
 
-    /** 构建 API 请求消息：历史 + 当前编辑器上下文 */
-    private _buildRequestMessages(): Array<{ role: string; content: string }> {
-        // 最近 20 条（排除错误消息），保持顺序
-        const history = this._conversationHistory
-            .filter((m) => !m.isError)
-            .slice(-20)
-            .map((m) => ({ role: m.role as string, content: m.content }));
+    private async _startClient(): Promise<void> {
+        const sdk = await loadPiSdk();
+        const cliPath = path.join(
+            this._extensionPath,
+            'node_modules',
+            '@earendil-works',
+            'pi-coding-agent',
+            'dist',
+            'cli.js'
+        );
+        if (!fs.existsSync(cliPath)) {
+            throw new Error(`找不到 pi CLI（${cliPath}），请确认依赖已安装`);
+        }
 
-        const context = this._collectEditorContext();
-        if (context && history.length > 0) {
-            const last = history[history.length - 1];
-            if (last.role === 'user') {
-                last.content = `${last.content}\n\n---\n【编辑器上下文】\n${context}`;
+        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+        const client = new sdk.RpcClient({
+            cliPath,
+            cwd,
+            args: ['--no-session'],
+        });
+
+        this._unsubscribe = client.onEvent((event) => this._onAgentEvent(event));
+        await client.start();
+        this._client = client;
+        this._post({
+            type: 'notice',
+            text: `已连接 pi（工作目录：${vscode.workspace.asRelativePath(cwd, false) || cwd}）`,
+        });
+    }
+
+    private async _abort(): Promise<void> {
+        if (this._client) {
+            try {
+                await this._client.abort();
+            } catch {
+                /* 忽略中止异常 */
             }
         }
-        return history;
     }
 
-    /** 收集当前编辑器上下文（文件路径 + 选区代码） */
-    private _collectEditorContext(): string {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
+    // ---------- 事件桥接（pi → webview） ----------
+
+    private _onAgentEvent(event: JsonAgentSessionEvent): void {
+        switch (event.type) {
+            case 'agent_start':
+                this._busy = true;
+                this._turnHadText = false;
+                this._post({ type: 'setBusy', busy: true });
+                break;
+
+            case 'message_update': {
+                const ae = event.assistantMessageEvent;
+                if (ae.type === 'thinking_start') {
+                    this._post({ type: 'thinkingStart' });
+                } else if (ae.type === 'thinking_end') {
+                    this._post({ type: 'thinkingEnd' });
+                } else if (ae.type === 'text_delta' && ae.delta) {
+                    if (!this._turnHadText) {
+                        this._turnHadText = true;
+                        this._post({ type: 'assistantStart' });
+                    }
+                    this._post({ type: 'assistantChunk', text: ae.delta });
+                } else if (ae.type === 'text_end') {
+                    if (this._turnHadText) {
+                        this._turnHadText = false;
+                        this._post({ type: 'assistantEnd' });
+                    }
+                }
+                break;
+            }
+
+            case 'tool_execution_start':
+                this._turnHadText = false; // 工具之后的文本另起气泡
+                this._post({
+                    type: 'toolCall',
+                    tool: event.toolName,
+                    detail: this._summarizeToolArgs(event.args),
+                });
+                break;
+
+            case 'tool_execution_end':
+                this._post({
+                    type: 'toolEnd',
+                    tool: event.toolName,
+                    isError: Boolean(event.isError),
+                });
+                break;
+
+            case 'auto_retry_start':
+                this._post({
+                    type: 'notice',
+                    text: `自动重试（${event.attempt}/${event.maxAttempts}）：${event.errorMessage}`,
+                });
+                break;
+
+            case 'agent_settled':
+                this._busy = false;
+                this._turnHadText = false;
+                this._post({ type: 'thinkingEnd' });
+                this._post({ type: 'setBusy', busy: false });
+                break;
+
+            default:
+                // 其余事件（usage/turn 边界等）暂不展示
+                break;
+        }
+    }
+
+    private _summarizeToolArgs(args: unknown): string {
+        try {
+            const a = args as Record<string, unknown> | undefined;
+            if (!a) {
+                return '';
+            }
+            if (typeof a.path === 'string') {
+                return a.path;
+            }
+            if (typeof a.command === 'string') {
+                const cmd = String(a.command);
+                return cmd.length > 90 ? cmd.slice(0, 90) + '…' : cmd;
+            }
+            const json = JSON.stringify(a);
+            return json.length > 90 ? json.slice(0, 90) + '…' : json;
+        } catch {
             return '';
         }
-        const doc = editor.document;
-        const parts: string[] = [];
-        parts.push(`当前文件：${vscode.workspace.asRelativePath(doc.uri)}（${doc.languageId}）`);
-
-        const sel = editor.selection;
-        if (!sel.isEmpty) {
-            const selected = doc.getText(sel);
-            // 选区过大时截断，避免浪费 token
-            const clipped = selected.length > 6000 ? selected.slice(0, 6000) + '\n// …(内容过长已截断)' : selected;
-            parts.push(`用户选中代码：\n\`\`\`${doc.languageId}\n${clipped}\n\`\`\``);
-        }
-        return parts.join('\n\n');
     }
 
-    // ---------- Anthropic 流式 API ----------
+    // ---------- 用户消息 ----------
 
-    private _streamClaude(opts: {
-        model: string;
-        apiKey: string;
-        messages: Array<{ role: string; content: string }>;
-        onChunk: (text: string) => void;
-    }): Promise<void> {
-        const config = vscode.workspace.getConfiguration('pi-assistant');
-        const maxTokens = config.get<number>('maxTokens', 4096);
-        const temperature = config.get<number>('temperature', 0.7);
-
-        const payload = JSON.stringify({
-            model: opts.model,
-            max_tokens: maxTokens,
-            temperature,
-            system: SYSTEM_PROMPT,
-            messages: opts.messages,
-            stream: true,
-        });
-
-        return new Promise<void>((resolve, reject) => {
-            const req = https.request(
-                {
-                    hostname: 'api.anthropic.com',
-                    path: '/v1/messages',
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-api-key': opts.apiKey,
-                        'anthropic-version': '2023-06-01',
-                        'Content-Length': Buffer.byteLength(payload),
-                    },
-                },
-                (res) => {
-                    // 非 200：读取错误体并报错
-                    if (res.statusCode !== 200) {
-                        let body = '';
-                        res.setEncoding('utf8');
-                        res.on('data', (chunk: string) => (body += chunk));
-                        res.on('end', () => {
-                            let detail = body;
-                            try {
-                                const parsed = JSON.parse(body);
-                                detail = parsed.error?.message || body;
-                            } catch {
-                                /* 保留原文 */
-                            }
-                            reject(new Error(this._friendlyHttpError(res.statusCode || 0, detail)));
-                        });
-                        return;
-                    }
-
-                    let buffer = '';
-                    res.setEncoding('utf8');
-                    res.on('data', (chunk: string) => {
-                        buffer += chunk;
-                        const lines = buffer.split('\n');
-                        buffer = lines.pop() || '';
-                        for (const line of lines) {
-                            const trimmed = line.trim();
-                            if (!trimmed.startsWith('data:')) {
-                                continue;
-                            }
-                            const data = trimmed.slice(5).trim();
-                            if (!data) {
-                                continue;
-                            }
-                            try {
-                                const event = JSON.parse(data);
-                                if (
-                                    event.type === 'content_block_delta' &&
-                                    event.delta?.type === 'text_delta' &&
-                                    typeof event.delta.text === 'string'
-                                ) {
-                                    opts.onChunk(event.delta.text);
-                                } else if (event.type === 'error') {
-                                    reject(new Error(event.error?.message || 'API 流式响应错误'));
-                                }
-                            } catch {
-                                /* 忽略无法解析的片段 */
-                            }
-                        }
-                    });
-                    res.on('end', () => resolve());
-                    res.on('error', (err) => reject(err));
-                }
-            );
-
-            this._request = req;
-            req.on('error', (err) => reject(err));
-            req.setTimeout(120000, () => {
-                req.destroy(new Error('请求超时（120 秒），请检查网络后重试'));
-            });
-            req.write(payload);
-            req.end();
-        });
-    }
-
-    private _friendlyHttpError(status: number, detail: string): string {
-        switch (status) {
-            case 401:
-                return 'API Key 无效（401），请重新配置「Pi: 设置 API Key」';
-            case 403:
-                return 'API Key 没有访问权限（403）';
-            case 404:
-                return `模型不存在（404）：${detail}`;
-            case 429:
-                return '请求过于频繁或额度不足（429），请稍后重试';
-            case 500:
-            case 529:
-                return `Anthropic 服务暂时不可用（${status}），请稍后重试`;
-            default:
-                return `API 错误 ${status}：${detail.slice(0, 200)}`;
-        }
-    }
-
-    // ---------- 应用到编辑器 ----------
-
-    private async _applyCode(code: string) {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            await vscode.env.clipboard.writeText(code);
-            vscode.window.showWarningMessage('没有打开的编辑器，代码已复制到剪贴板');
+    private async _handleUserMessage(userText: string) {
+        if (this._busy) {
+            vscode.window.showWarningMessage('Pi 正在工作，请等待完成或点击「停止」');
             return;
         }
 
-        const sel = editor.selection;
-        const edit = new vscode.WorkspaceEdit();
-        if (!sel.isEmpty) {
-            edit.replace(editor.document.uri, sel, code);
-        } else {
-            edit.insert(editor.document.uri, sel.active, code);
-        }
-        const applied = await vscode.workspace.applyEdit(edit);
-        if (applied) {
-            vscode.window.showInformationMessage(
-                sel.isEmpty ? '代码已插入到光标处（⌘Z 可撤销）' : '代码已替换选中内容（⌘Z 可撤销）'
-            );
+        this._post({ type: 'addUserMessage', text: userText });
+        this._busy = true;
+        this._post({ type: 'setBusy', busy: true });
+
+        try {
+            const client = await this._ensureClient();
+            const disposition = await client.prompt(userText);
+            if (disposition === 'handled') {
+                // 被斜杠命令等直接处理，不会启动 agent 运行
+                this._busy = false;
+                this._post({ type: 'setBusy', busy: false });
+            }
+            // 其他情况等待事件流：agent_settled 会重置 busy 状态
+        } catch (err) {
+            this._busy = false;
+            this._post({ type: 'thinkingEnd' });
+            this._post({ type: 'setBusy', busy: false });
+            this._post({ type: 'error', text: (err as Error).message });
         }
     }
 
@@ -372,7 +297,7 @@ export class ChatPanel {
     .chat-container::-webkit-scrollbar { width: 8px; }
     .chat-container::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background); border-radius: 4px; }
 
-    .welcome { text-align: center; padding: 32px 12px; color: var(--vscode-descriptionForeground); }
+    .welcome { text-align: center; padding: 28px 12px; color: var(--vscode-descriptionForeground); }
     .welcome h3 { margin-bottom: 10px; color: var(--vscode-foreground); }
     .welcome p { margin-bottom: 6px; font-size: 12px; }
     .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 14px; }
@@ -384,9 +309,9 @@ export class ChatPanel {
     }
     .quick-action:hover { background: var(--vscode-button-secondaryHoverBackground); }
 
-    .message { margin-bottom: 16px; animation: fadeIn .2s ease; }
+    .message { margin-bottom: 14px; animation: fadeIn .2s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-    .message-header { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+    .message-header { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
     .avatar { font-size: 15px; }
     .name { font-weight: 600; font-size: 12px; color: var(--vscode-descriptionForeground); }
     .message-body {
@@ -395,9 +320,7 @@ export class ChatPanel {
         border: 1px solid var(--vscode-widget-border);
         overflow-wrap: anywhere;
     }
-    .message.user .message-body {
-        background: var(--vscode-input-background);
-    }
+    .message.user .message-body { background: var(--vscode-input-background); }
     .message.error .message-body {
         border-color: var(--vscode-inputValidation-errorBorder, #f44);
         color: var(--vscode-errorForeground, #f66);
@@ -432,6 +355,21 @@ export class ChatPanel {
     .stream-cursor::after { content: '▊'; animation: blink 1s steps(1) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
 
+    /* 状态行：思考 / 工具调用 / 通知 */
+    .status-line {
+        display: flex; align-items: center; gap: 6px;
+        font-size: 11.5px; color: var(--vscode-descriptionForeground);
+        padding: 3px 8px; margin: 6px 0; border-radius: 4px;
+        background: var(--vscode-textBlockQuote-background, rgba(127,127,127,.08));
+        overflow-wrap: anywhere;
+    }
+    .status-line.thinking { font-style: italic; animation: pulse 1.6s ease-in-out infinite; }
+    @keyframes pulse { 50% { opacity: .45; } }
+    .status-line.tool.running { animation: pulse 1.2s ease-in-out infinite; }
+    .status-line.tool.done { opacity: .85; }
+    .status-line.tool.failed { color: var(--vscode-errorForeground, #f66); }
+    .status-line.notice { font-size: 11px; opacity: .8; }
+
     .input-container { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--vscode-widget-border); margin-top: 8px; }
     .input-box {
         flex: 1; min-height: 34px; max-height: 120px; padding: 7px 10px;
@@ -443,30 +381,30 @@ export class ChatPanel {
     .send-button {
         padding: 7px 14px; background: var(--vscode-button-background);
         color: var(--vscode-button-foreground); border: none; border-radius: 4px;
-        cursor: pointer; font-weight: 500; align-self: flex-end;
+        cursor: pointer; font-weight: 500; align-self: flex-end; min-width: 58px;
     }
     .send-button:hover { background: var(--vscode-button-hoverBackground); }
-    .send-button:disabled { opacity: .5; cursor: not-allowed; }
+    .send-button.stopping { background: var(--vscode-inputValidation-errorBackground, #5a1d1d); }
 </style>
 </head>
 <body>
     <div class="chat-container" id="chat">
         <div class="welcome" id="welcome">
             <h3>👋 我是 Pi Assistant</h3>
+            <p>由本地 pi agent 驱动：可以读写文件、运行命令、多步完成任务</p>
             <p>选中代码后右键「Pi: 解释代码 / 重构代码」快速开始</p>
-            <p>对话时会自动附带当前文件与选中代码作为上下文</p>
             <div class="quick-actions">
-                <button class="quick-action" data-q="解释当前选中的代码">📖 解释代码</button>
-                <button class="quick-action" data-q="审查我选中的代码，指出潜在问题">🐛 代码审查</button>
-                <button class="quick-action" data-q="优化我选中的代码的性能">⚡ 性能优化</button>
-                <button class="quick-action" data-q="为选中的代码补充单元测试">🧪 写测试</button>
+                <button class="quick-action" data-q="解释我选中的代码">📖 解释代码</button>
+                <button class="quick-action" data-q="审查当前文件，指出潜在问题">🐛 代码审查</button>
+                <button class="quick-action" data-q="总结这个项目是做什么的">📋 项目总结</button>
+                <button class="quick-action" data-q="运行项目的测试并报告结果">🧪 跑测试</button>
             </div>
         </div>
     </div>
 
     <div class="input-container">
         <textarea id="input" class="input-box" rows="1"
-            placeholder="输入消息…（Enter 发送，Shift+Enter 换行）"></textarea>
+            placeholder="给 pi 一个任务…（Enter 发送，Shift+Enter 换行）"></textarea>
         <button id="send" class="send-button">发送</button>
     </div>
 
@@ -478,17 +416,15 @@ export class ChatPanel {
     const sendBtn = document.getElementById('send');
 
     let busy = false;
-    let currentBody = null;   // 正在流式的 assistant 消息体
-    let currentBuffer = '';   // 当前 assistant 的 markdown 原文
+    let currentBody = null;
+    let currentBuffer = '';
+    let thinkingLine = null;
 
-    // ---------- 工具 ----------
     function escapeHtml(s) {
         return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
-    function scrollToBottom() {
-        chat.scrollTop = chat.scrollHeight;
-    }
+    function scrollToBottom() { chat.scrollTop = chat.scrollHeight; }
 
     function renderMarkdown(src) {
         const parts = [];
@@ -515,7 +451,6 @@ export class ChatPanel {
             if (p.type === 'code') {
                 const actions = p.closed
                     ? '<div class="code-actions">' +
-                      '<button data-act="apply">应用</button>' +
                       '<button data-act="copy">复制</button>' +
                       '</div>'
                     : '';
@@ -550,14 +485,62 @@ export class ChatPanel {
         return body;
     }
 
-    // ---------- 控件状态 ----------
-    function setBusy(value) {
-        busy = value;
-        sendBtn.disabled = value;
-        sendBtn.textContent = value ? '生成中…' : '发送';
+    function showThinking() {
+        welcome.style.display = 'none';
+        if (!thinkingLine) {
+            thinkingLine = document.createElement('div');
+            thinkingLine.className = 'status-line thinking';
+            thinkingLine.textContent = '💭 思考中…';
+            chat.appendChild(thinkingLine);
+            scrollToBottom();
+        }
     }
 
-    // ---------- 发送 ----------
+    function hideThinking() {
+        if (thinkingLine) { thinkingLine.remove(); thinkingLine = null; }
+    }
+
+    function addToolLine(tool, detail) {
+        welcome.style.display = 'none';
+        hideThinking();
+        const el = document.createElement('div');
+        el.className = 'status-line tool running';
+        el.textContent = '🔧 ' + tool + (detail ? ' · ' + detail : '') + ' …';
+        chat.appendChild(el);
+        scrollToBottom();
+    }
+
+    function endToolLine(isError) {
+        const lines = chat.querySelectorAll('.status-line.tool.running');
+        const el = lines[lines.length - 1];
+        if (el) {
+            el.classList.remove('running');
+            el.classList.add(isError ? 'failed' : 'done');
+            el.textContent = el.textContent.replace(/ …$/, '') + (isError ? ' ✗' : ' ✓');
+        }
+    }
+
+    function addNotice(text) {
+        welcome.style.display = 'none';
+        const el = document.createElement('div');
+        el.className = 'status-line notice';
+        el.textContent = 'ℹ️ ' + text;
+        chat.appendChild(el);
+        scrollToBottom();
+    }
+
+    function setBusy(value) {
+        busy = value;
+        if (value) {
+            sendBtn.textContent = '停止';
+            sendBtn.classList.add('stopping');
+        } else {
+            sendBtn.textContent = '发送';
+            sendBtn.classList.remove('stopping');
+            hideThinking();
+        }
+    }
+
     function send() {
         const text = input.value.trim();
         if (!text || busy) return;
@@ -566,12 +549,18 @@ export class ChatPanel {
         input.style.height = 'auto';
     }
 
-    sendBtn.addEventListener('click', send);
+    sendBtn.addEventListener('click', function () {
+        if (busy) {
+            vscode.postMessage({ type: 'abort' });
+        } else {
+            send();
+        }
+    });
 
     input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            send();
+            if (!busy) send();
         }
     });
 
@@ -580,7 +569,6 @@ export class ChatPanel {
         input.style.height = Math.min(input.scrollHeight, 120) + 'px';
     });
 
-    // 快捷操作
     document.querySelectorAll('.quick-action').forEach(function (btn) {
         btn.addEventListener('click', function () {
             if (busy) return;
@@ -588,28 +576,36 @@ export class ChatPanel {
         });
     });
 
-    // 代码块按钮（事件委托）
     chat.addEventListener('click', function (e) {
         const btn = e.target.closest('button[data-act]');
         if (!btn) return;
         const codeEl = btn.closest('.code-block').querySelector('pre code');
         if (!codeEl) return;
-        const code = codeEl.textContent;
-        if (btn.dataset.act === 'apply') {
-            vscode.postMessage({ type: 'applyCode', code: code });
-        } else if (btn.dataset.act === 'copy') {
-            vscode.postMessage({ type: 'copyCode', code: code });
+        if (btn.dataset.act === 'copy') {
+            vscode.postMessage({ type: 'copyCode', code: codeEl.textContent });
         }
     });
 
-    // ---------- 插件消息 ----------
     window.addEventListener('message', function (e) {
         const m = e.data;
         switch (m.type) {
             case 'addUserMessage':
                 addMessage('user', m.text);
                 break;
+            case 'thinkingStart':
+                showThinking();
+                break;
+            case 'thinkingEnd':
+                hideThinking();
+                break;
+            case 'toolCall':
+                addToolLine(m.tool, m.detail);
+                break;
+            case 'toolEnd':
+                endToolLine(Boolean(m.isError));
+                break;
             case 'assistantStart':
+                hideThinking();
                 currentBuffer = '';
                 currentBody = addMessage('assistant', '');
                 currentBody.classList.add('stream-cursor');
@@ -629,7 +625,11 @@ export class ChatPanel {
                 }
                 scrollToBottom();
                 break;
+            case 'notice':
+                addNotice(m.text);
+                break;
             case 'error':
+                hideThinking();
                 if (currentBody) {
                     currentBody.classList.remove('stream-cursor');
                     currentBody = null;
@@ -641,10 +641,11 @@ export class ChatPanel {
                 setBusy(m.busy);
                 break;
             case 'clear':
-                chat.querySelectorAll('.message').forEach(function (el) { el.remove(); });
+                chat.querySelectorAll('.message, .status-line').forEach(function (el) { el.remove(); });
                 welcome.style.display = '';
                 currentBody = null;
                 currentBuffer = '';
+                thinkingLine = null;
                 scrollToBottom();
                 break;
         }
@@ -659,14 +660,14 @@ export class ChatPanel {
 
     public dispose() {
         ChatPanel.currentPanel = undefined;
-        // 中断进行中的请求
-        if (this._request) {
-            try {
-                this._request.destroy();
-            } catch {
-                /* 忽略 */
-            }
-            this._request = undefined;
+        if (this._unsubscribe) {
+            this._unsubscribe();
+            this._unsubscribe = undefined;
+        }
+        const client = this._client;
+        this._client = undefined;
+        if (client) {
+            void client.stop();
         }
         this._panel.dispose();
         while (this._disposables.length) {
