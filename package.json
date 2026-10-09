@@ -1,0 +1,151 @@
+{
+  "name": "pi-assistant",
+  "displayName": "Pi Assistant - AI 编程助手",
+  "description": "在 VSCode 中使用 AI 助手进行代码对话、解释、生成和重构",
+  "version": "0.1.0",
+  "publisher": "pi-assistant",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "AI",
+    "Chat",
+    "Programming Languages",
+    "Other"
+  ],
+  "keywords": [
+    "ai",
+    "assistant",
+    "claude",
+    "chat",
+    "code",
+    "copilot"
+  ],
+  "activationEvents": [
+    "onCommand:pi-assistant.openChat",
+    "onCommand:pi-assistant.explainCode",
+    "onCommand:pi-assistant.refactorCode",
+    "onCommand:pi-assistant.generateCode",
+    "onView:pi-assistant.chatView"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "pi-assistant.openChat",
+        "title": "Pi: 打开对话",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "pi-assistant.explainCode",
+        "title": "Pi: 解释代码"
+      },
+      {
+        "command": "pi-assistant.refactorCode",
+        "title": "Pi: 重构代码"
+      },
+      {
+        "command": "pi-assistant.generateCode",
+        "title": "Pi: 生成代码"
+      },
+      {
+        "command": "pi-assistant.setApiKey",
+        "title": "Pi: 设置 API Key"
+      },
+      {
+        "command": "pi-assistant.clearChat",
+        "title": "Pi: 清空对话"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "pi-assistant.explainCode",
+          "when": "editorHasSelection",
+          "group": "9_cutcopypaste@5"
+        },
+        {
+          "command": "pi-assistant.refactorCode",
+          "when": "editorHasSelection",
+          "group": "9_cutcopypaste@6"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "pi-assistant.explainCode",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "pi-assistant.refactorCode",
+          "when": "editorHasSelection"
+        }
+      ]
+    },
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "pi-assistant",
+          "title": "Pi Assistant",
+          "icon": "$(robot)"
+        }
+      ]
+    },
+    "views": {
+      "pi-assistant": [
+        {
+          "type": "webview",
+          "id": "pi-assistant.chatView",
+          "name": "对话",
+          "icon": "$(comment-discussion)"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Pi Assistant",
+      "properties": {
+        "pi-assistant.apiKey": {
+          "type": "string",
+          "default": "",
+          "description": "Anthropic API Key (sk-ant-...)"
+        },
+        "pi-assistant.model": {
+          "type": "string",
+          "default": "claude-sonnet-4-20250514",
+          "description": "Claude 模型名称（如 claude-sonnet-4-20250514、claude-opus-4-20250514）"
+        },
+        "pi-assistant.maxTokens": {
+          "type": "number",
+          "default": 4096,
+          "description": "最大响应 token 数"
+        },
+        "pi-assistant.temperature": {
+          "type": "number",
+          "default": 0.7,
+          "description": "生成温度 (0-1)"
+        }
+      }
+    },
+    "keybindings": [
+      {
+        "command": "pi-assistant.openChat",
+        "key": "ctrl+shift+i",
+        "mac": "cmd+shift+i"
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "eslint src --ext ts"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "^18.0.0",
+    "typescript": "^5.0.0",
+    "@typescript-eslint/eslint-plugin": "^5.0.0",
+    "@typescript-eslint/parser": "^5.0.0",
+    "eslint": "^8.0.0"
+  },
+  "dependencies": {}
+}
