@@ -4,9 +4,14 @@ import { ChatPanel } from './chatPanel';
 export function activate(context: vscode.ExtensionContext) {
     console.log('Pi Assistant 已激活（基于本地 pi agent）');
 
-    // ---- 打开对话面板 ----
+    // 注册侧边栏聊天视图（activitybar 图标 → 聊天面板）
+    ChatPanel.registerViewProvider(context, context.extensionPath);
+
+    // ---- 打开对话（聚焦侧边栏聊天视图）----
     const openChat = vscode.commands.registerCommand('pi-assistant.openChat', () => {
-        ChatPanel.createOrShow(context.extensionPath);
+        void ChatPanel.ensureView().catch((err: unknown) => {
+            void vscode.window.showErrorMessage(`Pi: ${(err as Error).message}`);
+        });
     });
 
     // ---- 解释选中代码 ----
@@ -15,7 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!ctx) {
             return;
         }
-        const panel = ChatPanel.createOrShow(context.extensionPath);
+        const panel = await ChatPanel.ensureView();
         await panel.askQuestion(
             `请解释 ${ctx.relPath} 第 ${ctx.lineRange} 行（当前选中）的代码：\n\n\`\`\`${ctx.languageId}\n${ctx.code}\n\`\`\`\n\n说明整体功能、关键逻辑与潜在问题。`
         );
@@ -27,7 +32,7 @@ export function activate(context: vscode.ExtensionContext) {
         if (!ctx) {
             return;
         }
-        const panel = ChatPanel.createOrShow(context.extensionPath);
+        const panel = await ChatPanel.ensureView();
         await panel.askQuestion(
             `请重构 ${ctx.relPath} 第 ${ctx.lineRange} 行（当前选中）的代码：\n\n\`\`\`${ctx.languageId}\n${ctx.code}\n\`\`\`\n\n要求：提高可读性、修复潜在问题、保持对外行为不变。直接修改文件并说明改动理由。`
         );
@@ -47,16 +52,16 @@ export function activate(context: vscode.ExtensionContext) {
         const locationHint = editor
             ? `\n\n目标文件：${vscode.workspace.asRelativePath(editor.document.uri)}（语言：${editor.document.languageId}）`
             : '';
-        const panel = ChatPanel.createOrShow(context.extensionPath);
+        const panel = await ChatPanel.ensureView();
         await panel.askQuestion(`请实现以下功能：${description}${locationHint}`);
     });
 
-    // ---- 清空对话 ----
+    // ---- 清空对话（同时开启全新 pi 会话）----
     const clearChat = vscode.commands.registerCommand('pi-assistant.clearChat', () => {
-        if (ChatPanel.currentPanel) {
-            ChatPanel.currentPanel.clear();
+        if (ChatPanel.currentView) {
+            ChatPanel.currentView.clear();
         } else {
-            vscode.window.showInformationMessage('Pi 对话面板尚未打开');
+            void ChatPanel.ensureView().then((panel) => panel.clear());
         }
     });
 
@@ -104,5 +109,5 @@ function getSelectionContext(): {
 }
 
 export function deactivate() {
-    // 面板由 VSCode 自动销毁
+    // 视图由 VSCode 自动销毁
 }

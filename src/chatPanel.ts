@@ -58,6 +58,7 @@ interface PiRpcClient {
     onEvent(listener: (event: PiAgentEvent) => void): () => void;
     prompt(message: string): Promise<string>;
     abort(): Promise<void>;
+    newSession(parentSession?: string): Promise<{ cancelled: boolean }>;
     getState(): Promise<PiSessionState>;
     getMessages(): Promise<PiRawMessage[]>;
     getStderr(): string;
@@ -75,7 +76,13 @@ let sdkPromise: Promise<PiSdkModule> | undefined;
 function loadPiSdk(): Promise<PiSdkModule> {
     if (!sdkPromise) {
         // 动态 import：node16 模式下原样保留，Node 支持在 CJS 中动态导入 ESM
-        sdkPromise = import('@earendil-works/pi-coding-agent') as unknown as Promise<PiSdkModule>;
+        // 加载失败时清除缓存，允许后续重试
+        sdkPromise = (
+            import('@earendil-works/pi-coding-agent') as unknown as Promise<PiSdkModule>
+        ).catch((err) => {
+            sdkPromise = undefined;
+            throw err;
+        });
     }
     return sdkPromise;
 }
@@ -108,10 +115,11 @@ function extractMessageText(m: PiRawMessage): string | null {
 const PI_INSTALL_HINT = 'npm install -g @earendil-works/pi-coding-agent';
 
 export class ChatPanel {
-    public static currentPanel: ChatPanel | undefined;
+    /** 侧边栏聊天视图实例 */
+    public static currentView: ChatPanel | undefined;
     public static readonly viewType = 'pi-assistant.chatView';
 
-    private readonly _panel: vscode.WebviewPanel;
+    private readonly _webview: vscode.Webview;
     private readonly _extensionPath: string;
     private _disposables: vscode.Disposable[] = [];
     private _client: PiRpcClient | undefined;
@@ -121,14 +129,14 @@ export class ChatPanel {
     private _turnHadText = false;
     private _lastUsage: PiUsage | undefined;
 
-    private constructor(panel: vscode.WebviewPanel, extensionPath: string) {
-        this._panel = panel;
+    private constructor(webview: vscode.Webview, extensionPath: string, disposeEvent: vscode.Event<void>) {
+        this._webview = webview;
         this._extensionPath = extensionPath;
-        this._panel.webview.html = this._getHtmlForWebview();
+        webview.html = this._getHtmlForWebview();
 
-        this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
+        disposeEvent(() => this.dispose(), null, this._disposables);
 
-        this._panel.webview.onDidReceiveMessage(
+        webview.onDidReceiveMessage(
             (message: { type: string; text?: string; code?: string }) => {
                 switch (message.type) {
                     case 'sendMessage':
@@ -161,30 +169,49 @@ export class ChatPanel {
         );
     }
 
-    public static createOrShow(extensionPath: string): ChatPanel {
-        const column = vscode.ViewColumn.Beside;
-
-        if (ChatPanel.currentPanel) {
-            ChatPanel.currentPanel._panel.reveal(column);
-            return ChatPanel.currentPanel;
-        }
-
-        const panel = vscode.window.createWebviewPanel(
-            ChatPanel.viewType,
-            'Pi Assistant',
-            column,
-            {
-                enableScripts: true,
-                retainContextWhenHidden: true,
-            }
+    /** 注册侧边栏聊天视图（activitybar 图标 → 聊天） */
+    public static registerViewProvider(context: vscode.ExtensionContext, extensionPath: string): void {
+        const provider: vscode.WebviewViewProvider = {
+            resolveWebviewView: (view) => {
+                view.webview.options = { enableScripts: true };
+                ChatPanel.currentView = new ChatPanel(view.webview, extensionPath, view.onDidDispose);
+            },
+        };
+        context.subscriptions.push(
+            vscode.window.registerWebviewViewProvider(ChatPanel.viewType, provider)
         );
+    }
 
-        ChatPanel.currentPanel = new ChatPanel(panel, extensionPath);
-        return ChatPanel.currentPanel;
+    /** 聚焦侧边栏聊天视图；等待视图实例就绪后返回 */
+    public static async ensureView(): Promise<ChatPanel> {
+        await vscode.commands.executeCommand(`${ChatPanel.viewType}.focus`);
+        // 视图首次显示时 resolveWebviewView 才会创建实例，短暂等待
+        for (let i = 0; i < 40; i++) {
+            if (ChatPanel.currentView) {
+                return ChatPanel.currentView;
+            }
+            await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+        throw new Error('Pi 聊天视图未能创建，请重试');
     }
 
     public clear() {
+        // 中断进行中的生成
+        if (this._busy && this._client) {
+            void this._client.abort().catch(() => {
+                /* 忽略 */
+            });
+        }
+        this._busy = false;
+        this._turnHadText = false;
         this._post({ type: 'clear' });
+        this._post({ type: 'setBusy', busy: false });
+        // 开启全新 pi 会话（否则 --continue 会携带旧上下文）
+        if (this._client) {
+            void this._client.newSession().catch(() => {
+                /* 忽略 */
+            });
+        }
     }
 
     /** 供命令调用的直接提问入口（如「解释代码」右键命令） */
@@ -235,7 +262,16 @@ export class ChatPanel {
         });
 
         this._unsubscribe = client.onEvent((event) => this._onAgentEvent(event));
-        await client.start();
+        try {
+            await client.start();
+        } catch (startErr) {
+            // 启动失败：附上 stderr 尾部信息，便于定位（权限/依赖损坏等）
+            const stderr = client.getStderr().trim();
+            const tail = stderr
+                ? `：${stderr.split('\n').slice(-2).join(' ').slice(0, 200)}`
+                : '';
+            throw new Error(`pi 进程启动失败${tail || `（${(startErr as Error).message}）`}`);
+        }
         this._client = client;
 
         // 恢复历史消息到界面
@@ -431,20 +467,20 @@ export class ChatPanel {
 
             const msg = (err as Error).message || String(err);
             // 进程可能已崩溃：重置以便下次自动重连
-            const wasRunning = Boolean(this._client);
             this._resetClient();
 
             this._post({ type: 'error', text: msg });
 
-            const hint = msg.includes('pi CLI') || msg.includes('找不到')
-                ? '复制安装命令'
-                : wasRunning ? '已重置连接，可直接重试' : '重试';
+            const isMissing = msg.includes('找不到 pi CLI') || msg.includes('请先安装 pi');
+            const hint = isMissing ? '复制安装命令' : '重试连接';
             void vscode.window.showErrorMessage(`Pi: ${msg}`, hint).then((action) => {
                 if (action === '复制安装命令') {
                     void vscode.env.clipboard.writeText(PI_INSTALL_HINT);
                     void vscode.window.showInformationMessage('安装命令已复制，在终端执行后重试');
-                } else if (action === '重试') {
-                    ChatPanel.currentPanel?._panel.reveal();
+                } else if (action === '重试连接') {
+                    void this._ensureClient().catch((e: unknown) => {
+                        void vscode.window.showErrorMessage(`Pi: ${(e as Error).message}`);
+                    });
                 }
             });
         }
@@ -478,7 +514,7 @@ export class ChatPanel {
     // ---------- Webview ----------
 
     private _post(message: Record<string, unknown>) {
-        void this._panel.webview.postMessage(message);
+        void this._webview.postMessage(message);
     }
 
     private _getHtmlForWebview(): string {
@@ -886,7 +922,9 @@ export class ChatPanel {
     }
 
     public dispose() {
-        ChatPanel.currentPanel = undefined;
+        if (ChatPanel.currentView === this) {
+            ChatPanel.currentView = undefined;
+        }
         if (this._unsubscribe) {
             this._unsubscribe();
             this._unsubscribe = undefined;
@@ -896,7 +934,7 @@ export class ChatPanel {
         if (client) {
             void client.stop();
         }
-        this._panel.dispose();
+        // 宿主（侧边栏视图）由 VSCode 管理生命周期，这里只清理自身资源
         while (this._disposables.length) {
             const d = this._disposables.pop();
             if (d) {
