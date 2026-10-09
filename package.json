@@ -99,8 +99,8 @@
     "keybindings": [
       {
         "command": "pi-assistant.openChat",
-        "key": "ctrl+shift+i",
-        "mac": "cmd+shift+i"
+        "key": "ctrl+alt+p",
+        "mac": "alt+cmd+p"
       }
     ]
   },
