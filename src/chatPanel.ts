@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
+import { pathToFileURL } from 'url';
 
 // ---------------------------------------------------------------------------
 // pi SDK 的最小类型接口
@@ -45,6 +47,14 @@ interface PiSessionState {
     messageCount?: number;
     sessionFile?: string;
     isStreaming?: boolean;
+    model?: { provider?: string; id?: string };
+}
+
+interface PiModelInfo {
+    provider: string;
+    id: string;
+    contextWindow?: number;
+    reasoning?: boolean;
 }
 
 interface PiRawMessage {
@@ -61,6 +71,8 @@ interface PiRpcClient {
     newSession(parentSession?: string): Promise<{ cancelled: boolean }>;
     getState(): Promise<PiSessionState>;
     getMessages(): Promise<PiRawMessage[]>;
+    getAvailableModels(): Promise<PiModelInfo[]>;
+    setModel(provider: string, modelId: string): Promise<{ provider: string; id: string }>;
     getStderr(): string;
 }
 
@@ -72,19 +84,88 @@ interface PiSdkModule {
     RpcClient: PiRpcClientCtor;
 }
 
-let sdkPromise: Promise<PiSdkModule> | undefined;
-function loadPiSdk(): Promise<PiSdkModule> {
-    if (!sdkPromise) {
-        // 动态 import：node16 模式下原样保留，Node 支持在 CJS 中动态导入 ESM
+// SDK 按入口路径缓存（支持从插件内置或全局安装位置加载）
+const sdkCache = new Map<string, Promise<PiSdkModule>>();
+function loadPiSdk(entryPath: string): Promise<PiSdkModule> {
+    let cached = sdkCache.get(entryPath);
+    if (!cached) {
+        // 动态 import 绝对路径（node16 模式下原样保留，Node 支持 CJS 动态导入 ESM）
         // 加载失败时清除缓存，允许后续重试
-        sdkPromise = (
-            import('@earendil-works/pi-coding-agent') as unknown as Promise<PiSdkModule>
-        ).catch((err) => {
-            sdkPromise = undefined;
-            throw err;
-        });
+        cached = (import(pathToFileURL(entryPath).href) as unknown as Promise<PiSdkModule>).catch(
+            (err) => {
+                sdkCache.delete(entryPath);
+                throw err;
+            }
+        );
+        sdkCache.set(entryPath, cached);
     }
-    return sdkPromise;
+    return cached;
+}
+
+interface ResolvedPi {
+    cliPath: string;
+    sdkEntry: string;
+}
+
+/** 探测 pi 安装位置：优先插件内置，其次全局安装（npm/homebrew/nvm/volta/pnpm 常见路径） */
+function resolvePi(extensionPath: string): ResolvedPi | null {
+    const tryPackageDir = (dir: string): ResolvedPi | null => {
+        const cliPath = path.join(dir, 'dist', 'cli.js');
+        const sdkEntry = path.join(dir, 'dist', 'index.js');
+        if (fs.existsSync(cliPath) && fs.existsSync(sdkEntry)) {
+            return { cliPath, sdkEntry };
+        }
+        return null;
+    };
+
+    // 1) 插件内置（如果打包时包含）
+    const bundled = tryPackageDir(
+        path.join(extensionPath, 'node_modules', '@earendil-works', 'pi-coding-agent')
+    );
+    if (bundled) {
+        return bundled;
+    }
+
+    // 2) 全局安装：从 bin 符号链接反查包目录
+    const home = os.homedir();
+    const binCandidates: string[] = [
+        path.join(home, '.local', 'opt', 'node', 'bin', 'pi'),
+        '/opt/homebrew/bin/pi',
+        '/usr/local/bin/pi',
+        path.join(home, '.volta', 'bin', 'pi'),
+        path.join(home, 'Library', 'pnpm', 'pi'),
+    ];
+    // nvm：扫描各版本目录（取最新）
+    try {
+        const nvmRoot = path.join(home, '.nvm', 'versions', 'node');
+        if (fs.existsSync(nvmRoot)) {
+            const versions = fs.readdirSync(nvmRoot).sort().reverse();
+            for (const v of versions) {
+                binCandidates.push(path.join(nvmRoot, v, 'bin', 'pi'));
+            }
+        }
+    } catch {
+        /* 忽略 */
+    }
+
+    for (const bin of binCandidates) {
+        try {
+            const real = fs.realpathSync(bin); // → …/pi-coding-agent/dist/…/cli.js
+            let dir = path.dirname(real);
+            // 上溯到包根（含 package.json）
+            while (dir !== '/' && !fs.existsSync(path.join(dir, 'package.json'))) {
+                dir = path.dirname(dir);
+            }
+            const found = tryPackageDir(dir);
+            if (found) {
+                return found;
+            }
+        } catch {
+            /* bin 不存在，继续 */
+        }
+    }
+
+    return null;
 }
 
 /** 从 pi 消息中提取可展示的文本（跳过工具结果等） */
@@ -137,7 +218,13 @@ export class ChatPanel {
         disposeEvent(() => this.dispose(), null, this._disposables);
 
         webview.onDidReceiveMessage(
-            (message: { type: string; text?: string; code?: string }) => {
+            (message: {
+                type: string;
+                text?: string;
+                code?: string;
+                provider?: string;
+                modelId?: string;
+            }) => {
                 switch (message.type) {
                     case 'sendMessage':
                         if (message.text) {
@@ -146,6 +233,11 @@ export class ChatPanel {
                         break;
                     case 'abort':
                         void this._abort();
+                        break;
+                    case 'setModel':
+                        if (message.provider && message.modelId) {
+                            void this._handleSetModel(message.provider, message.modelId);
+                        }
                         break;
                     case 'clearChat':
                         this.clear();
@@ -239,24 +331,15 @@ export class ChatPanel {
     }
 
     private async _startClient(): Promise<void> {
-        const sdk = await loadPiSdk();
-        const cliPath = path.join(
-            this._extensionPath,
-            'node_modules',
-            '@earendil-works',
-            'pi-coding-agent',
-            'dist',
-            'cli.js'
-        );
-        if (!fs.existsSync(cliPath)) {
-            throw new Error(
-                `找不到 pi CLI。请先安装 pi 后重试：${PI_INSTALL_HINT}`
-            );
+        const resolved = resolvePi(this._extensionPath);
+        if (!resolved) {
+            throw new Error(`未找到 pi，请先安装后重试：${PI_INSTALL_HINT}`);
         }
+        const sdk = await loadPiSdk(resolved.sdkEntry);
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
         const client = new sdk.RpcClient({
-            cliPath,
+            cliPath: resolved.cliPath,
             cwd,
             args: ['--continue'], // 续接该工作区的最近会话（无历史时自动新建）
         });
@@ -302,6 +385,40 @@ export class ChatPanel {
                 ? `已连接 pi · 工作区「${folder}」· 已恢复 ${restored} 条历史消息`
                 : `已连接 pi · 工作区「${folder}」`,
         });
+
+        // 加载可用模型列表
+        void this._postModels(client);
+    }
+
+    /** 拉取可用模型列表与当前模型，推送给界面 */
+    private async _postModels(client: PiRpcClient): Promise<void> {
+        try {
+            const [models, state] = await Promise.all([
+                client.getAvailableModels(),
+                client.getState(),
+            ]);
+            this._post({
+                type: 'models',
+                models: models.map((m) => ({ provider: m.provider, id: m.id })),
+                current: state.model
+                    ? { provider: state.model.provider ?? '', id: state.model.id ?? '' }
+                    : null,
+            });
+        } catch {
+            /* 模型列表加载失败不影响聊天 */
+        }
+    }
+
+    /** 切换模型 */
+    private async _handleSetModel(provider: string, modelId: string): Promise<void> {
+        try {
+            const client = await this._ensureClient();
+            await client.setModel(provider, modelId);
+            this._post({ type: 'notice', text: `已切换模型：${modelId}` });
+            await this._postModels(client);
+        } catch (err) {
+            this._post({ type: 'notice', text: `切换模型失败：${(err as Error).message}` });
+        }
     }
 
     /** 重置客户端（进程异常后允许自动重连） */
@@ -527,46 +644,65 @@ export class ChatPanel {
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
         font-family: var(--vscode-font-family);
-        font-size: var(--vscode-font-size);
+        font-size: 13px;
         color: var(--vscode-foreground);
         background: var(--vscode-sideBar-background);
         height: 100vh;
         display: flex;
         flex-direction: column;
-        padding: 12px;
     }
-    .chat-container { flex: 1; overflow-y: auto; padding-right: 6px; }
+
+    /* 顶部栏：标题 + 模型选择 */
+    .top-bar {
+        display: flex; align-items: center; justify-content: space-between;
+        gap: 8px; padding: 8px 12px; flex-shrink: 0;
+        border-bottom: 1px solid var(--vscode-widget-border, rgba(127,127,127,.25));
+    }
+    .app-title {
+        font-size: 11px; font-weight: 600; letter-spacing: .4px;
+        color: var(--vscode-descriptionForeground); text-transform: uppercase;
+    }
+    .model-select {
+        max-width: 62%;
+        background: var(--vscode-dropdown-background, var(--vscode-input-background));
+        color: var(--vscode-dropdown-foreground, var(--vscode-input-foreground));
+        border: 1px solid var(--vscode-dropdown-border, var(--vscode-input-border, rgba(127,127,127,.35)));
+        border-radius: 4px; font-size: 11px; padding: 2px 4px;
+        outline: none; cursor: pointer;
+    }
+    .model-select:focus { border-color: var(--vscode-focusBorder); }
+
+    /* 消息区 */
+    .chat-container { flex: 1; overflow-y: auto; padding: 10px 12px 4px; }
     .chat-container::-webkit-scrollbar { width: 8px; }
     .chat-container::-webkit-scrollbar-thumb { background: var(--vscode-scrollbarSlider-background); border-radius: 4px; }
 
-    .welcome { text-align: center; padding: 28px 12px; color: var(--vscode-descriptionForeground); }
-    .welcome h3 { margin-bottom: 10px; color: var(--vscode-foreground); }
-    .welcome p { margin-bottom: 6px; font-size: 12px; }
-    .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 14px; }
+    .welcome { padding: 22px 4px; }
+    .welcome-title { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+    .welcome-desc { font-size: 12px; color: var(--vscode-descriptionForeground); line-height: 1.65; margin-bottom: 14px; }
+    .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; }
     .quick-action {
-        padding: 5px 10px; background: var(--vscode-button-secondaryBackground);
-        color: var(--vscode-button-secondaryForeground);
-        border: 1px solid var(--vscode-widget-border); border-radius: 4px;
-        cursor: pointer; font-size: 12px;
+        padding: 4px 10px; font-size: 12px;
+        background: transparent; color: var(--vscode-foreground);
+        border: 1px solid var(--vscode-widget-border, rgba(127,127,127,.35));
+        border-radius: 4px; cursor: pointer;
     }
-    .quick-action:hover { background: var(--vscode-button-secondaryHoverBackground); }
+    .quick-action:hover { border-color: var(--vscode-focusBorder); background: var(--vscode-list-hoverBackground); }
 
-    .message { margin-bottom: 14px; animation: fadeIn .2s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
-    .message-header { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; }
-    .avatar { font-size: 15px; }
-    .name { font-weight: 600; font-size: 12px; color: var(--vscode-descriptionForeground); }
-    .message-body {
-        line-height: 1.6; padding: 10px 12px; border-radius: 8px;
-        background: var(--vscode-editor-background);
-        border: 1px solid var(--vscode-widget-border);
-        overflow-wrap: anywhere;
+    .message { margin-bottom: 14px; animation: fadeIn .15s ease; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .role-label {
+        font-size: 10.5px; font-weight: 600; letter-spacing: .5px;
+        color: var(--vscode-descriptionForeground);
+        margin-bottom: 4px; text-transform: uppercase;
     }
-    .message.user .message-body { background: var(--vscode-input-background); }
-    .message.error .message-body {
-        border-color: var(--vscode-inputValidation-errorBorder, #f44);
-        color: var(--vscode-errorForeground, #f66);
+    .message.user .message-body {
+        border-left: 2px solid var(--vscode-focusBorder, #58a6ff);
+        padding: 1px 0 1px 10px;
     }
+    .message.assistant .message-body { line-height: 1.65; }
+    .message.error .message-body { color: var(--vscode-errorForeground, #f66); }
+    .message-body { overflow-wrap: anywhere; }
     .message-body .text-block { margin-bottom: 6px; }
     .message-body .text-block:last-child { margin-bottom: 0; }
     .md-heading { font-weight: 700; margin: 6px 0 4px; }
@@ -574,84 +710,100 @@ export class ChatPanel {
     .inline-code {
         background: var(--vscode-textCodeBlock-background);
         padding: 1px 5px; border-radius: 3px;
-        font-family: var(--vscode-editor-font-family);
-        font-size: .92em;
+        font-family: var(--vscode-editor-font-family); font-size: .92em;
     }
-    .code-block { margin: 8px 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--vscode-widget-border); }
+    .code-block { margin: 8px 0; border-radius: 6px; overflow: hidden; border: 1px solid var(--vscode-widget-border, rgba(127,127,127,.3)); }
     .code-block-header {
         display: flex; justify-content: space-between; align-items: center;
-        padding: 4px 10px; background: var(--vscode-tab-inactiveBackground);
+        padding: 3px 10px; background: var(--vscode-tab-inactiveBackground, rgba(127,127,127,.1));
         font-size: 11px; color: var(--vscode-descriptionForeground);
     }
-    .code-actions { display: flex; gap: 6px; }
+    .code-actions { display: flex; gap: 4px; }
     .code-actions button {
         background: transparent; border: none; color: var(--vscode-foreground);
         cursor: pointer; padding: 2px 8px; border-radius: 3px; font-size: 11px;
     }
     .code-actions button:hover { background: var(--vscode-toolbar-hoverBackground); }
     .code-block pre { margin: 0; padding: 10px; background: var(--vscode-editor-background); overflow-x: auto; }
-    .code-block code {
-        font-family: var(--vscode-editor-font-family);
-        font-size: 12.5px; line-height: 1.5;
-    }
+    .code-block code { font-family: var(--vscode-editor-font-family); font-size: 12px; line-height: 1.55; }
     .stream-cursor::after { content: '▊'; animation: blink 1s steps(1) infinite; }
     @keyframes blink { 50% { opacity: 0; } }
 
+    /* 状态行：思考 / 工具 / 通知 */
     .status-line {
         display: flex; align-items: center; gap: 6px;
         font-size: 11.5px; color: var(--vscode-descriptionForeground);
-        padding: 3px 8px; margin: 6px 0; border-radius: 4px;
-        background: var(--vscode-textBlockQuote-background, rgba(127,127,127,.08));
-        overflow-wrap: anywhere;
+        padding: 2px 0; margin: 5px 0; overflow-wrap: anywhere;
     }
     .status-line.thinking { font-style: italic; animation: pulse 1.6s ease-in-out infinite; }
     @keyframes pulse { 50% { opacity: .45; } }
+    .status-line.tool .tool-name { font-weight: 600; }
     .status-line.tool.running { animation: pulse 1.2s ease-in-out infinite; }
-    .status-line.tool.done { opacity: .85; }
+    .status-line.tool.done { opacity: .75; }
     .status-line.tool.failed { color: var(--vscode-errorForeground, #f66); }
-    .status-line.notice { font-size: 11px; opacity: .8; }
+    .status-line.notice { font-size: 11px; opacity: .75; }
     .history-divider {
-        text-align: center; font-size: 10.5px; color: var(--vscode-descriptionForeground);
-        margin: 10px 0; opacity: .7;
+        display: flex; align-items: center; gap: 8px;
+        font-size: 10.5px; color: var(--vscode-descriptionForeground);
+        margin: 12px 0; opacity: .7;
     }
-    .history-divider::before, .history-divider::after { content: ' —— '; }
+    .history-divider::before, .history-divider::after {
+        content: ''; flex: 1; height: 1px;
+        background: var(--vscode-widget-border, rgba(127,127,127,.3));
+    }
 
-    .input-container { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--vscode-widget-border); margin-top: 8px; }
+    /* 输入区 */
+    .input-area {
+        flex-shrink: 0; padding: 8px 12px 10px;
+        border-top: 1px solid var(--vscode-widget-border, rgba(127,127,127,.25));
+    }
     .input-box {
-        flex: 1; min-height: 34px; max-height: 120px; padding: 7px 10px;
-        border: 1px solid var(--vscode-input-border, transparent); border-radius: 4px;
-        background: var(--vscode-input-background); color: var(--vscode-input-foreground);
-        font-family: inherit; font-size: inherit; resize: none; outline: none;
+        width: 100%; min-height: 72px; max-height: 200px;
+        padding: 9px 10px; font-family: inherit; font-size: 13px; line-height: 1.55;
+        color: var(--vscode-input-foreground);
+        background: var(--vscode-input-background);
+        border: 1px solid var(--vscode-input-border, rgba(127,127,127,.35));
+        border-radius: 6px; resize: none; outline: none;
     }
     .input-box:focus { border-color: var(--vscode-focusBorder); }
+    .input-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 6px; }
+    .input-hint { font-size: 10.5px; color: var(--vscode-descriptionForeground); opacity: .7; }
     .send-button {
-        padding: 7px 14px; background: var(--vscode-button-background);
-        color: var(--vscode-button-foreground); border: none; border-radius: 4px;
-        cursor: pointer; font-weight: 500; align-self: flex-end; min-width: 58px;
+        padding: 5px 18px; font-size: 12px; font-weight: 500;
+        background: var(--vscode-button-background); color: var(--vscode-button-foreground);
+        border: none; border-radius: 4px; cursor: pointer;
     }
     .send-button:hover { background: var(--vscode-button-hoverBackground); }
     .send-button.stopping { background: var(--vscode-inputValidation-errorBackground, #5a1d1d); }
 </style>
 </head>
 <body>
+    <div class="top-bar">
+        <span class="app-title">Pi Assistant</span>
+        <select id="modelSelect" class="model-select" title="选择模型">
+            <option value="">未连接</option>
+        </select>
+    </div>
+
     <div class="chat-container" id="chat">
         <div class="welcome" id="welcome">
-            <h3>👋 我是 Pi Assistant</h3>
-            <p>由本地 pi agent 驱动：可以读写文件、运行命令、多步完成任务</p>
-            <p>选中代码后右键「Pi: 解释代码 / 重构代码」快速开始</p>
+            <div class="welcome-title">Pi Assistant</div>
+            <div class="welcome-desc">由本地 pi agent 驱动，可以读写文件、运行命令完成任务。<br>选中代码后右键「Pi: 解释代码」快速开始。</div>
             <div class="quick-actions">
-                <button class="quick-action" data-q="解释我选中的代码">📖 解释代码</button>
-                <button class="quick-action" data-q="审查当前文件，指出潜在问题">🐛 代码审查</button>
-                <button class="quick-action" data-q="总结这个项目是做什么的">📋 项目总结</button>
-                <button class="quick-action" data-q="运行项目的测试并报告结果">🧪 跑测试</button>
+                <button class="quick-action" data-q="解释我选中的代码">解释代码</button>
+                <button class="quick-action" data-q="审查当前文件，指出潜在问题">代码审查</button>
+                <button class="quick-action" data-q="总结这个项目是做什么的">项目总结</button>
+                <button class="quick-action" data-q="运行项目的测试并报告结果">跑测试</button>
             </div>
         </div>
     </div>
 
-    <div class="input-container">
-        <textarea id="input" class="input-box" rows="1"
-            placeholder="给 pi 一个任务…（Enter 发送，Shift+Enter 换行）"></textarea>
-        <button id="send" class="send-button">发送</button>
+    <div class="input-area">
+        <textarea id="input" class="input-box" placeholder="向 pi 描述任务…"></textarea>
+        <div class="input-footer">
+            <span class="input-hint">Enter 发送 · Shift+Enter 换行</span>
+            <button id="send" class="send-button">发送</button>
+        </div>
     </div>
 
 <script>
@@ -660,6 +812,7 @@ export class ChatPanel {
     const welcome = document.getElementById('welcome');
     const input = document.getElementById('input');
     const sendBtn = document.getElementById('send');
+    const modelSelect = document.getElementById('modelSelect');
 
     let busy = false;
     let currentBody = null;
@@ -720,10 +873,9 @@ export class ChatPanel {
         welcome.style.display = 'none';
         const el = document.createElement('div');
         el.className = 'message ' + (isError ? 'error' : role);
-        const avatar = role === 'user' ? '👤' : '🤖';
-        const name = role === 'user' ? '你' : 'Pi';
+        const label = role === 'user' ? '你' : 'Pi';
         el.innerHTML =
-            '<div class="message-header"><span class="avatar">' + avatar + '</span><span class="name">' + name + '</span></div>' +
+            '<div class="role-label">' + label + '</div>' +
             '<div class="message-body"></div>';
         const body = el.querySelector('.message-body');
         body.innerHTML = renderMarkdown(markdown);
@@ -737,7 +889,7 @@ export class ChatPanel {
         if (!thinkingLine) {
             thinkingLine = document.createElement('div');
             thinkingLine.className = 'status-line thinking';
-            thinkingLine.textContent = '💭 思考中…';
+            thinkingLine.textContent = '思考中…';
             chat.appendChild(thinkingLine);
             scrollToBottom();
         }
@@ -747,12 +899,17 @@ export class ChatPanel {
         if (thinkingLine) { thinkingLine.remove(); thinkingLine = null; }
     }
 
+    function capitalize(s) {
+        return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
+    }
+
     function addToolLine(tool, detail) {
         welcome.style.display = 'none';
         hideThinking();
         const el = document.createElement('div');
         el.className = 'status-line tool running';
-        el.textContent = '🔧 ' + tool + (detail ? ' · ' + detail : '') + ' …';
+        el.innerHTML = '<span class="tool-name">' + escapeHtml(capitalize(tool)) + '</span>' +
+            (detail ? '<span> · ' + escapeHtml(detail) + '</span>' : '');
         chat.appendChild(el);
         scrollToBottom();
     }
@@ -763,7 +920,9 @@ export class ChatPanel {
         if (el) {
             el.classList.remove('running');
             el.classList.add(isError ? 'failed' : 'done');
-            el.textContent = el.textContent.replace(/ …$/, '') + (isError ? ' ✗' : ' ✓');
+            const mark = document.createElement('span');
+            mark.textContent = isError ? '✗' : '✓';
+            el.appendChild(mark);
         }
     }
 
@@ -771,7 +930,7 @@ export class ChatPanel {
         welcome.style.display = 'none';
         const el = document.createElement('div');
         el.className = 'status-line notice';
-        el.textContent = 'ℹ️ ' + text;
+        el.textContent = text;
         chat.appendChild(el);
         scrollToBottom();
     }
@@ -793,7 +952,6 @@ export class ChatPanel {
         if (!text || busy) return;
         vscode.postMessage({ type: 'sendMessage', text: text });
         input.value = '';
-        input.style.height = 'auto';
     }
 
     sendBtn.addEventListener('click', function () {
@@ -811,15 +969,22 @@ export class ChatPanel {
         }
     });
 
-    input.addEventListener('input', function () {
-        input.style.height = 'auto';
-        input.style.height = Math.min(input.scrollHeight, 120) + 'px';
-    });
-
     document.querySelectorAll('.quick-action').forEach(function (btn) {
         btn.addEventListener('click', function () {
             if (busy) return;
             vscode.postMessage({ type: 'sendMessage', text: btn.dataset.q });
+        });
+    });
+
+    modelSelect.addEventListener('change', function () {
+        const value = modelSelect.value;
+        if (!value) return;
+        const idx = value.indexOf('|');
+        if (idx <= 0) return;
+        vscode.postMessage({
+            type: 'setModel',
+            provider: value.slice(0, idx),
+            modelId: value.slice(idx + 1)
         });
     });
 
@@ -898,11 +1063,33 @@ export class ChatPanel {
                     currentBody = null;
                     currentBuffer = '';
                 }
-                addMessage('assistant', '⚠️ ' + m.text, true);
+                addMessage('assistant', m.text, true);
                 break;
             case 'setBusy':
                 setBusy(m.busy);
                 break;
+            case 'models': {
+                const models = m.models || [];
+                modelSelect.innerHTML = '';
+                if (models.length === 0) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.textContent = '未连接';
+                    modelSelect.appendChild(opt);
+                    break;
+                }
+                models.forEach(function (mo) {
+                    const opt = document.createElement('option');
+                    opt.value = mo.provider + '|' + mo.id;
+                    opt.textContent = mo.id;
+                    opt.title = mo.provider + ' / ' + mo.id;
+                    if (m.current && m.current.provider === mo.provider && m.current.id === mo.id) {
+                        opt.selected = true;
+                    }
+                    modelSelect.appendChild(opt);
+                });
+                break;
+            }
             case 'clear':
                 chat.querySelectorAll('.message, .status-line, .history-divider').forEach(function (el) { el.remove(); });
                 welcome.style.display = '';

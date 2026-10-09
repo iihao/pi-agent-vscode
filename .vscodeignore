@@ -6,3 +6,6 @@ scripts/**
 tsconfig.json
 **/*.map
 **/*.ts
+# 不打包 node_modules：运行时探测用户全局安装的 pi
+# （开发模式 F5 下会自动使用项目内的 node_modules）
+node_modules/**
