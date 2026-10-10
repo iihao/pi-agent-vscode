@@ -1,6 +1,6 @@
 # Pi Assistant - VSCode 插件
 
-[![CI](https://github.com/your-github-username/pi-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/your-github-username/pi-assistant/actions/workflows/ci.yml)
+[![CI](https://github.com/iihao/pi-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/iihao/pi-assistant/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.80%2B-007ACC.svg)](https://code.visualstudio.com/)
 

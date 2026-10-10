@@ -28,5 +28,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   language.
 - Trusted-workspace gating and a settings namespace (`pi-assistant.*`).
 
-[Unreleased]: https://github.com/your-github-username/pi-assistant/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/your-github-username/pi-assistant/releases/tag/v0.1.0
+[Unreleased]: https://github.com/iihao/pi-assistant/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/iihao/pi-assistant/releases/tag/v0.1.0

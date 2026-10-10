@@ -3,7 +3,7 @@
   "displayName": "%displayName%",
   "description": "%description%",
   "version": "0.1.0",
-  "publisher": "pi-assistant",
+  "publisher": "iihao",
   "license": "MIT",
   "author": {
     "name": "Pi Assistant contributors"
@@ -15,11 +15,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/your-github-username/pi-assistant.git"
+    "url": "https://github.com/iihao/pi-assistant.git"
   },
-  "homepage": "https://github.com/your-github-username/pi-assistant#readme",
+  "homepage": "https://github.com/iihao/pi-assistant#readme",
   "bugs": {
-    "url": "https://github.com/your-github-username/pi-assistant/issues"
+    "url": "https://github.com/iihao/pi-assistant/issues"
   },
   "engines": {
     "vscode": "^1.80.0"
