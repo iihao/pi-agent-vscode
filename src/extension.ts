@@ -106,6 +106,24 @@ export function activate(context: vscode.ExtensionContext) {
         await panel.compact();
     });
 
+    // ---- 生成 commit message ----
+    const generateCommitMessage = vscode.commands.registerCommand('pi-agent.generateCommitMessage', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        await panel.generateCommitMessage();
+    });
+
+    // ---- 生成 PR 描述 ----
+    const generatePullRequestDescription = vscode.commands.registerCommand('pi-agent.generatePullRequestDescription', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        await panel.generatePullRequestDescription();
+    });
+
+    // ---- 撤销本回合改动 ----
+    const revertLastTurn = vscode.commands.registerCommand('pi-agent.revertLastTurn', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        await panel.revertLastTurn();
+    });
+
     // ---- 附加编辑器上下文 ----
     const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', async () => {
         const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
@@ -168,6 +186,9 @@ export function activate(context: vscode.ExtensionContext) {
         cycleModel,
         cycleThinkingLevel,
         compact,
+        generateCommitMessage,
+        generatePullRequestDescription,
+        revertLastTurn,
         attachFile,
         attachSelection,
         restartSession,

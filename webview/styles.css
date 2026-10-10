@@ -534,6 +534,61 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .status-line.notice { font-size: 11px; opacity: .7; }
 
+    /* ---------- 本回合改动审阅 ---------- */
+    .turn-changes {
+        margin: 6px 0 18px;
+        border: 1px solid var(--cx-border);
+        border-radius: var(--cx-radius);
+        background: var(--cx-panel);
+        overflow: hidden;
+    }
+    .turn-changes-head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 7px 10px;
+        border-bottom: 1px solid var(--cx-border);
+    }
+    .turn-changes-title {
+        font-family: var(--cx-mono);
+        font-size: 10.5px;
+        letter-spacing: .4px;
+        text-transform: uppercase;
+        color: var(--cx-muted);
+    }
+    .turn-changes-revert {
+        margin-left: auto;
+        font-family: var(--cx-mono);
+        font-size: 10.5px;
+        padding: 2px 9px;
+        border-radius: 999px;
+        border: 1px solid var(--cx-border-strong);
+        background: transparent;
+        color: var(--cx-fg);
+        cursor: pointer;
+        transition: border-color .12s, color .12s, background .12s;
+    }
+    .turn-changes-revert:hover { border-color: var(--cx-accent); color: var(--cx-accent); background: var(--cx-accent-soft); }
+    .turn-changes-list { display: flex; flex-direction: column; }
+    .turn-file {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 4px 10px;
+        background: transparent;
+        border: none;
+        color: var(--cx-fg);
+        cursor: pointer;
+        text-align: left;
+        font-family: var(--cx-mono);
+        font-size: 11.5px;
+    }
+    .turn-file:hover { background: var(--cx-hover); }
+    .turn-file-badge { flex-shrink: 0; width: 14px; text-align: center; font-weight: 600; }
+    .turn-file-badge.mod { color: var(--vscode-charts-yellow, #d29922); }
+    .turn-file-badge.add { color: var(--vscode-charts-green, #3fb950); }
+    .turn-file-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     /* ---------- Collapsible ---------- */
     .collapsible {
         margin: 8px 0;

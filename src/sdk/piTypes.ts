@@ -160,6 +160,10 @@ export interface PiRpcClient {
     getAvailableThinkingLevels?(): Promise<string[]>;
     setThinkingLevel?(level: string): Promise<void>;
     getSessionStats?(): Promise<PiSessionStats>;
+    /** 等待 agent 空闲（收到 agent_settled） */
+    waitForIdle?(timeout?: number): Promise<void>;
+    /** 取最后一条助手消息的文本 */
+    getLastAssistantText?(): Promise<string | null>;
     getStderr(): string;
 }
 

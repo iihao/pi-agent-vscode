@@ -76,6 +76,42 @@ export class PiClientManager {
         await this._resetClient();
     }
 
+    /**
+     * 运行一次性生成任务（如生成 commit message）：启动独立、临时（--no-session）
+     * 的 pi 进程，prompt 后取助手文本并关闭。不进入聊天会话，不污染历史。
+     */
+    public async runOneShot(extensionPath: string, prompt: string, timeoutMs = 90000): Promise<string> {
+        const config = vscode.workspace.getConfiguration('pi-agent');
+        const executable = (config.get<string>('pi.executable') || '').trim();
+        const resolved = resolvePi(extensionPath, executable || undefined);
+        if (!resolved) {
+            throw new PiNotFoundError(vscode.l10n.t('pi not found; please install it and retry: {0}', PI_INSTALL_HINT));
+        }
+
+        let sdk: PiSdkModule;
+        try {
+            sdk = await loadPiSdk(resolved.sdkEntry);
+        } catch (sdkErr) {
+            throw new PiStartError(vscode.l10n.t('Failed to load pi SDK: {0}', (sdkErr as Error).message));
+        }
+
+        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+        const client = new sdk.RpcClient({ cliPath: resolved.cliPath, cwd, args: ['--no-session', '--no-tools'] });
+        try {
+            await client.start();
+            await client.prompt(prompt);
+            if (typeof client.waitForIdle === 'function') {
+                await client.waitForIdle(timeoutMs);
+            }
+            const text = typeof client.getLastAssistantText === 'function'
+                ? await client.getLastAssistantText()
+                : null;
+            return (text || '').trim();
+        } finally {
+            await client.stop().catch((err) => { logError(`one-shot stop failed: ${(err as Error).message}`); });
+        }
+    }
+
     private async _startClient(extensionPath: string): Promise<void> {
         const config = vscode.workspace.getConfiguration('pi-agent');
         const executable = (config.get<string>('pi.executable') || '').trim();

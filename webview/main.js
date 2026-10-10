@@ -364,6 +364,29 @@ const vscode = acquireVsCodeApi();
         renderRail();
     }
 
+    // ========== 本回合改动审阅 ==========
+
+    function renderTurnChanges(files) {
+        const existing = chat.querySelector('.turn-changes');
+        if (existing) { existing.remove(); }
+        if (!files || !files.length) { return; }
+        const el = document.createElement('div');
+        el.className = 'turn-changes';
+        let rows = '';
+        files.forEach(function (f) {
+            const isAdd = f.status === 'created';
+            rows += '<button class="turn-file" data-path="' + escapeHtml(f.path) + '" title="' + escapeHtml(f.path) + '">' +
+                '<span class="turn-file-badge ' + (isAdd ? 'add' : 'mod') + '">' + (isAdd ? 'A' : 'M') + '</span>' +
+                '<span class="turn-file-path">' + escapeHtml(f.path) + '</span></button>';
+        });
+        el.innerHTML = '<div class="turn-changes-head">' +
+            '<span class="turn-changes-title">' + S.changedFiles + ' (' + files.length + ')</span>' +
+            '<button class="turn-changes-revert" data-act="revert">' + S.revert + '</button>' +
+            '</div><div class="turn-changes-list">' + rows + '</div>';
+        chat.appendChild(el);
+        scrollToBottom();
+    }
+
     // ========== 问题导航（右侧刻度 + 头部列表） ==========
 
     function getUserMessageEls() {
@@ -1116,6 +1139,11 @@ const vscode = acquireVsCodeApi();
         }
     });
     chat.addEventListener('click', function (e) {
+        // 本回合改动：打开文件 / 撤销
+        var turnFile = e.target.closest('.turn-file');
+        if (turnFile) { vscode.postMessage({ type: 'openFile', path: turnFile.dataset.path }); return; }
+        var revertBtn = e.target.closest('.turn-changes-revert');
+        if (revertBtn) { vscode.postMessage({ type: 'revertTurn' }); return; }
         // 链接：交给扩展宿主用系统浏览器打开
         var link = e.target.closest('a[href]');
         if (link) {
@@ -1197,6 +1225,7 @@ const vscode = acquireVsCodeApi();
             }
             case 'queue': updateQueueBadges(m.steering, m.followUp); break;
             case 'bashResult': finishBash(m); break;
+            case 'turnChanges': renderTurnChanges(m.files); break;
             case 'commands': slashCommands = m.commands || []; if (suggestMode === 'slash') { updateSuggest(); } break;
             case 'files': filesList = m.files || []; if (suggestMode === 'file') { updateSuggest(); } break;
             case 'insertMentions': {
@@ -1266,7 +1295,7 @@ const vscode = acquireVsCodeApi();
                 break;
             }
             case 'clear':
-                chat.querySelectorAll('.message, .status-line, .activity, .history-divider, .collapsible').forEach(function (el) { el.remove(); });
+                chat.querySelectorAll('.message, .status-line, .activity, .history-divider, .collapsible, .turn-changes').forEach(function (el) { el.remove(); });
                 welcome.style.display = '';
                 currentBody = null;
                 currentBuffer = '';

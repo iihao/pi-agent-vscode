@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Git integration**: generate a commit message from the current diff
+  (button in the Source Control title bar) and a pull request description from
+  the branch's commits. Both run a one-shot, ephemeral pi process
+  (`--no-session`) so they don't pollute the chat session.
+- **Turn change review**: after each turn, a card lists the files changed by
+  `edit`/`write`; click to open a file, or **Revert** to restore them to their
+  pre-turn state (created files go to the trash; overwritten files are
+  reported as not auto-revertible).
 - **Slash commands & skills**: type `/` in the composer to autocomplete pi's
   commands, prompt templates, and skills (from `get_commands`); selecting one
   inserts it and pi expands it on send.

@@ -4,6 +4,7 @@
 
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { getWebviewHtml } from './views/webviewTemplate';
 import { getUiStrings } from './views/strings';
 import { PiClientManager, PiStartError, PiNotFoundError } from './sdk/clientManager';
@@ -37,6 +38,117 @@ function mediaRoot(extensionPath: string): vscode.Uri {
     return vscode.Uri.file(path.join(extensionPath, 'media'));
 }
 
+// ---- 最小化的 vscode.git API 类型（内建 Git 扩展） ----
+interface GitChange { uri: vscode.Uri; }
+interface GitRepository {
+    rootUri: vscode.Uri;
+    inputBox: { value: string };
+    state: {
+        HEAD?: { name?: string; commit?: string };
+        workingTreeChanges: GitChange[];
+        indexChanges: GitChange[];
+    };
+    diff(cached?: boolean): Promise<string>;
+    diffWithHEAD(): Promise<string>;
+    log(options?: { maxEntries?: number }): Promise<Array<{ hash: string; message: string }>>;
+}
+interface GitAPI {
+    repositories: GitRepository[];
+    getRepository(uri: vscode.Uri): GitRepository | null;
+}
+interface GitExtension { getAPI(version: 1): GitAPI; }
+
+async function getGitAPI(): Promise<GitAPI | undefined> {
+    const ext = vscode.extensions.getExtension<GitExtension>('vscode.git');
+    if (!ext) { return undefined; }
+    try {
+        const exports = ext.isActive ? ext.exports : await ext.activate();
+        return exports?.getAPI(1);
+    } catch (err) {
+        logError(`git extension activation failed: ${(err as Error).message}`);
+        return undefined;
+    }
+}
+
+function pickGitRepository(api: GitAPI): GitRepository | undefined {
+    const active = vscode.window.activeTextEditor?.document.uri;
+    if (active) {
+        const repo = api.getRepository(active);
+        if (repo) { return repo; }
+    }
+    return api.repositories[0];
+}
+
+function clipDiff(diff: string, max = 12000): string {
+    return diff.length > max ? diff.slice(0, max) + '\n… (truncated)' : diff;
+}
+
+function buildCommitPrompt(diff: string, branch: string): string {
+    return [
+        'Write a git commit message for the following changes.',
+        'Use Conventional Commits (e.g. "feat: …", "fix: …", "docs: …").',
+        'Keep the subject under 72 characters. Output ONLY the commit message.',
+        branch ? `Branch: ${branch}` : '',
+        '',
+        '```diff',
+        clipDiff(diff),
+        '```',
+    ].filter(Boolean).join('\n');
+}
+
+function buildPrPrompt(branch: string, log: string): string {
+    return [
+        'Write a pull request description in Markdown.',
+        'Include a short summary and a bullet list of notable changes.',
+        branch ? `Branch: ${branch}` : '',
+        '',
+        'Commits:',
+        log || '(no commits found)',
+    ].filter(Boolean).join('\n');
+}
+
+// ---- 本回合改动追踪与还原 ----
+
+interface TurnChange {
+    rel: string;
+    existed: boolean;
+    /** edit 的替换对；null 表示包含 write（覆盖写无法安全还原） */
+    edits: Array<{ oldText: string; newText: string }> | null;
+}
+
+function parseEdits(args: { edits?: unknown } | undefined): Array<{ oldText: string; newText: string }> {
+    const raw = args?.edits;
+    if (!Array.isArray(raw)) { return []; }
+    const out: Array<{ oldText: string; newText: string }> = [];
+    for (const e of raw) {
+        if (e && typeof e === 'object') {
+            const o = e as { oldText?: unknown; newText?: unknown };
+            if (typeof o.oldText === 'string' && typeof o.newText === 'string') {
+                out.push({ oldText: o.oldText, newText: o.newText });
+            }
+        }
+    }
+    return out;
+}
+
+function isRevertible(change: TurnChange): boolean {
+    if (!change.existed) { return true; }          // 本回合新建 -> 删除
+    if (!change.edits) { return false; }           // 覆盖写 -> 无法安全还原
+    return change.edits.every((e) => e.newText.length > 0);
+}
+
+/** 把 newText 反向替换回 oldText（倒序），失败返回 null */
+function revertEdits(content: string, edits: Array<{ oldText: string; newText: string }>): string | null {
+    let out = content;
+    for (let i = edits.length - 1; i >= 0; i--) {
+        const { oldText, newText } = edits[i];
+        const idx = out.indexOf(newText);
+        if (idx === -1) { return null; }
+        out = out.slice(0, idx) + oldText + out.slice(idx + newText.length);
+    }
+    return out;
+}
+
 // 消息类型定义
 interface WebviewMessage {
     type: string;
@@ -52,6 +164,7 @@ interface WebviewMessage {
     id?: string;
     mode?: string;
     paths?: string[];
+    path?: string;
 }
 
 // 发送给 webview 的消息类型
@@ -111,6 +224,8 @@ export class ChatPanel {
     private _commands: PiSlashCommand[] = [];
     private _fileList: string[] | undefined;
     private _fileListAt = 0;
+    /** 本回合被 edit/write 修改的文件（绝对路径 -> 可还原信息） */
+    private _turnChanges = new Map<string, TurnChange>();
     private _lastUsage: { input?: number; output?: number; cacheRead?: number } | undefined;
 
     private constructor(webview: vscode.Webview, extensionPath: string, disposeEvent: vscode.Event<void>) {
@@ -275,6 +390,7 @@ export class ChatPanel {
     public async newSession(): Promise<void> { await this._handleNewSession(); }
     public focusInput(): void { this._post({ type: 'focusInput' }); }
     public editLastMessage(): void { this._post({ type: 'editLast' }); }
+    public async revertLastTurn(): Promise<void> { await this._revertTurn(); }
 
     public async cycleModel(): Promise<void> {
         const client = this._clientManager.client;
@@ -336,6 +452,140 @@ export class ChatPanel {
         }
     }
 
+    // ---------- Git 集成 ----------
+
+    /** 用当前改动生成 commit message，写入 SCM 输入框 */
+    public async generateCommitMessage(): Promise<void> {
+        const api = await getGitAPI();
+        if (!api) { this._post({ type: 'notice', text: vscode.l10n.t('Git extension not available') }); return; }
+        const repo = pickGitRepository(api);
+        if (!repo) { this._post({ type: 'notice', text: vscode.l10n.t('No Git repository found') }); return; }
+        let diff = '';
+        try { diff = await repo.diff(true); } catch (err) { logError(`git diff --cached failed: ${(err as Error).message}`); }
+        if (!diff.trim()) { try { diff = await repo.diff(false); } catch (err) { logError(`git diff failed: ${(err as Error).message}`); } }
+        if (!diff.trim()) { this._post({ type: 'notice', text: vscode.l10n.t('No changes to summarize') }); return; }
+        const branch = repo.state.HEAD?.name || '';
+        this._post({ type: 'notice', text: vscode.l10n.t('Generating commit message…') });
+        try {
+            const text = await this._clientManager.runOneShot(this._extensionPath, buildCommitPrompt(diff, branch));
+            if (!text) { this._post({ type: 'notice', text: vscode.l10n.t('Generation returned nothing') }); return; }
+            repo.inputBox.value = text;
+            this._post({ type: 'notice', text: vscode.l10n.t('Commit message generated') });
+        } catch (err) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Generation failed: {0}', (err as Error).message) });
+        }
+    }
+
+    /** 用当前分支提交生成 PR 描述，打开为临时 Markdown 文档 */
+    public async generatePullRequestDescription(): Promise<void> {
+        const api = await getGitAPI();
+        if (!api) { this._post({ type: 'notice', text: vscode.l10n.t('Git extension not available') }); return; }
+        const repo = pickGitRepository(api);
+        if (!repo) { this._post({ type: 'notice', text: vscode.l10n.t('No Git repository found') }); return; }
+        const branch = repo.state.HEAD?.name || '';
+        let log = '';
+        try {
+            const commits = await repo.log({ maxEntries: 30 });
+            log = commits.map((c) => '- ' + c.message.split('\n')[0]).join('\n');
+        } catch (err) { logError(`git log failed: ${(err as Error).message}`); }
+        this._post({ type: 'notice', text: vscode.l10n.t('Generating pull request description…') });
+        try {
+            const text = await this._clientManager.runOneShot(this._extensionPath, buildPrPrompt(branch, log));
+            if (!text) { this._post({ type: 'notice', text: vscode.l10n.t('Generation returned nothing') }); return; }
+            const doc = await vscode.workspace.openTextDocument({ content: text, language: 'markdown' });
+            await vscode.window.showTextDocument(doc, { preview: false });
+        } catch (err) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Generation failed: {0}', (err as Error).message) });
+        }
+    }
+
+    // ---------- 本回合改动审阅 / 撤销 ----------
+
+    /** tool_execution_start 时记录 edit/write 目标（不读文件内容，避免读到半写入状态） */
+    private _trackToolTarget(event: PiAgentEvent): void {
+        const tool = (event.toolName || '').toLowerCase();
+        if (tool !== 'edit' && tool !== 'write') { return; }
+        const args = event.args as { path?: unknown; edits?: unknown } | undefined;
+        const p = args && typeof args.path === 'string' ? args.path : '';
+        if (!p) { return; }
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const abs = path.isAbsolute(p) ? p : path.join(root || process.cwd(), p);
+        const rel = root ? path.relative(root, abs).split(path.sep).join('/') : p;
+        const prev = this._turnChanges.get(abs);
+        const existed = prev ? prev.existed : fs.existsSync(abs);
+        let edits = prev ? prev.edits : [];
+        if (tool === 'write') {
+            edits = null;
+        } else if (edits) {
+            edits = edits.concat(parseEdits(args));
+        }
+        this._turnChanges.set(abs, { rel, existed, edits });
+    }
+
+    private _postTurnChanges(): void {
+        const files = [...this._turnChanges.values()].map((v) => ({
+            path: v.rel,
+            status: v.existed ? 'modified' : 'created',
+            revertible: isRevertible(v),
+        }));
+        this._post({ type: 'turnChanges', files });
+    }
+
+    /** 把本回合改动的文件恢复到改动前状态（新建的文件移到回收站） */
+    private async _revertTurn(): Promise<void> {
+        if (this._turnChanges.size === 0) {
+            this._post({ type: 'notice', text: vscode.l10n.t('No changes to revert') });
+            return;
+        }
+        const ok = await vscode.window.showWarningMessage(
+            vscode.l10n.t('Revert {0} file(s) to their state before this turn?', this._turnChanges.size),
+            { modal: true },
+            vscode.l10n.t('Revert')
+        );
+        if (ok !== vscode.l10n.t('Revert')) { return; }
+        let done = 0;
+        let skipped = 0;
+        for (const [abs, change] of this._turnChanges) {
+            try {
+                if (!change.existed) {
+                    await vscode.workspace.fs.delete(vscode.Uri.file(abs), { useTrash: true });
+                    done++;
+                } else if (change.edits) {
+                    const uri = vscode.Uri.file(abs);
+                    const current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+                    const reverted = revertEdits(current, change.edits);
+                    if (reverted === null) { skipped++; continue; }
+                    await vscode.workspace.fs.writeFile(uri, Buffer.from(reverted, 'utf8'));
+                    done++;
+                } else {
+                    skipped++;
+                }
+            } catch (err) {
+                logError(`revert ${abs} failed: ${(err as Error).message}`);
+                skipped++;
+            }
+        }
+        this._turnChanges.clear();
+        this._post({ type: 'turnChanges', files: [] });
+        this._post({
+            type: 'notice',
+            text: skipped
+                ? vscode.l10n.t('Reverted {0} file(s); {1} could not be reverted automatically', done, skipped)
+                : vscode.l10n.t('Reverted {0} file(s)', done),
+        });
+    }
+
+    private async _openWorkspaceFile(rel: string): Promise<void> {
+        const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+        if (!root) { return; }
+        try {
+            const doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, rel));
+            await vscode.window.showTextDocument(doc, { preview: true });
+        } catch (err) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Cannot open {0}: {1}', rel, (err as Error).message) });
+        }
+    }
+
     // ---------- Webview 消息处理 ----------
 
     private async _handleWebviewMessage(message: WebviewMessage): Promise<void> {
@@ -361,6 +611,12 @@ export class ChatPanel {
                     const rel = this._resolveDroppedPaths(message.paths);
                     if (rel.length) { this._post({ type: 'insertMentions', paths: rel }); }
                 }
+                break;
+            case 'openFile':
+                if (message.path) { await this._openWorkspaceFile(message.path); }
+                break;
+            case 'revertTurn':
+                await this._revertTurn();
                 break;
             case 'abort':
                 await this._clientManager.abort();
@@ -807,6 +1063,8 @@ export class ChatPanel {
                 this._busy = true;
                 this._turnHadText = false;
                 this._lastUsage = undefined;
+                this._turnChanges.clear();
+                this._post({ type: 'turnChanges', files: [] });
                 this._post({ type: 'setBusy', busy: true });
                 break;
 
@@ -838,6 +1096,7 @@ export class ChatPanel {
 
             case 'tool_execution_start':
                 this._turnHadText = false;
+                this._trackToolTarget(event);
                 this._post({
                     type: 'toolCall',
                     tool: event.toolName ?? 'tool',
@@ -894,6 +1153,7 @@ export class ChatPanel {
                 }
                 this._post({ type: 'setBusy', busy: false });
                 if (!event.aborted) { this._notifySettled(); }
+                this._postTurnChanges();
                 // 统计刷新与是否 abort 无关，刷新后反映最新会话状态
                 const settledClient = this._clientManager.client;
                 if (settledClient) { void this._loadStats(settledClient); }

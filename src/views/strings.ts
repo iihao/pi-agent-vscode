@@ -73,6 +73,8 @@ export interface UiStrings {
     noThinking: string;
     noResults: string;
     messages: string;
+    changedFiles: string;
+    revert: string;
     you: string;
     context: string;
     cumulative: string;
@@ -149,6 +151,8 @@ export function getUiStrings(): UiStrings {
         noThinking: t('This model does not support thinking levels'),
         noResults: t('No results'),
         messages: t('messages'),
+        changedFiles: t('Changed files'),
+        revert: t('Revert'),
         you: t('You'),
         context: t('Context'),
         cumulative: t('Cumulative'),
