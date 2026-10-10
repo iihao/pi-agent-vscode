@@ -133,6 +133,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
         <div class="popover hidden" id="modelPanel"></div>
         <div class="popover hidden" id="thinkingPanel"></div>
         <div class="popover hidden" id="permPanel"></div>
+        <div class="suggest hidden" id="suggest"></div>
         <div class="composer">
             <div class="chip-row hidden" id="chipRow"></div>
             <textarea id="input" class="input-box" placeholder="${S.inputPlaceholder}"></textarea>

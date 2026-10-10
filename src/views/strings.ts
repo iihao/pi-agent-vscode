@@ -117,7 +117,7 @@ export function getUiStrings(): UiStrings {
         kbdSearch: t('search'),
         kbdHistory: t('history'),
         kbdJump: t('jump questions'),
-        inputPlaceholder: t('Describe a task for pi… (! for a shell command)'),
+        inputPlaceholder: t('Describe a task for pi… (@ file, / command, ! shell)'),
         inputBusyPlaceholder: t('Pi is working — Enter to queue, Ctrl/Cmd+Enter to steer'),
         queued: t('Queued'),
         steering: t('Steering'),

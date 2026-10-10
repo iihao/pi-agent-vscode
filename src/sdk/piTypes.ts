@@ -110,6 +110,12 @@ export interface PiSessionStats {
     };
 }
 
+export interface PiSlashCommand {
+    name: string;
+    description?: string;
+    source?: string;
+}
+
 export interface PiModelInfo {
     provider: string;
     id: string;
@@ -148,6 +154,8 @@ export interface PiRpcClient {
     getState(): Promise<PiSessionState>;
     getMessages(): Promise<PiRawMessage[]>;
     getAvailableModels(): Promise<PiModelInfo[]>;
+    /** 可用的斜杠命令 / 提示模板 / 技能 */
+    getCommands?(): Promise<PiSlashCommand[]>;
     setModel(provider: string, modelId: string): Promise<{ provider: string; id: string }>;
     getAvailableThinkingLevels?(): Promise<string[]>;
     setThinkingLevel?(level: string): Promise<void>;

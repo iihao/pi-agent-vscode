@@ -91,7 +91,7 @@
   "search": "搜索",
   "jump questions": "跳转提问",
   "history": "历史",
-  "Describe a task for pi… (! for a shell command)": "向 pi 描述任务…（! 开头执行 shell 命令）",
+  "Describe a task for pi… (@ file, / command, ! shell)": "向 pi 描述任务…（@ 提及文件，/ 命令，! 执行 shell）",
   "Pi is working — Enter to queue, Ctrl/Cmd+Enter to steer": "pi 正在工作 — Enter 排队，Ctrl/⌘+Enter 立即插入",
   "Queued": "排队中",
   "Steering": "插入中",

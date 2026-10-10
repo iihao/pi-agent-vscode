@@ -11,6 +11,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Slash commands & skills**: type `/` in the composer to autocomplete pi's
+  commands, prompt templates, and skills (from `get_commands`); selecting one
+  inserts it and pi expands it on send.
+- **`@` file mentions**: type `@` to autocomplete workspace files, or drop files
+  from the editor/explorer onto the composer; mentions are inserted as
+  `@path` references.
 - **Question navigator**: a right-edge rail with one tick per user question
   (hover for a preview, click to jump), a header button that opens a jump list,
   and `Alt+↑/↓` to step between questions. The active tick tracks scroll.

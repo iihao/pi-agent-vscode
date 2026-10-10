@@ -91,7 +91,7 @@
   "search": "search",
   "jump questions": "jump questions",
   "history": "history",
-  "Describe a task for pi… (! for a shell command)": "Describe a task for pi… (! for a shell command)",
+  "Describe a task for pi… (@ file, / command, ! shell)": "Describe a task for pi… (@ file, / command, ! shell)",
   "Pi is working — Enter to queue, Ctrl/Cmd+Enter to steer": "Pi is working — Enter to queue, Ctrl/Cmd+Enter to steer",
   "Queued": "Queued",
   "Steering": "Steering",

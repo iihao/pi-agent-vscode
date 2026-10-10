@@ -57,6 +57,7 @@ const vscode = acquireVsCodeApi();
     const sendBtn = document.getElementById('send');
     const attachBtn = document.getElementById('attachBtn');
     const chipRow = document.getElementById('chipRow');
+    const suggest = document.getElementById('suggest');
     const modelBtn = document.getElementById('modelBtn');
     const modelLabel = document.getElementById('modelLabel');
     const modelPanel = document.getElementById('modelPanel');
@@ -711,6 +712,92 @@ const vscode = acquireVsCodeApi();
         });
     }
 
+    // ========== 斜杠命令 / @ 文件提及 ==========
+
+    let slashCommands = [];
+    let filesList = null;
+    let suggestItems = [];
+    let suggestIndex = 0;
+    let suggestMode = null;
+    let suggestStart = 0;
+    let suggestEnd = 0;
+
+    function detectSuggestToken() {
+        const pos = input.selectionStart;
+        const before = input.value.slice(0, pos);
+        const slash = /^\/([^\s]*)$/.exec(before);
+        if (slash) { return { mode: 'slash', start: 0, end: pos, filter: slash[1] }; }
+        const at = /(^|\s)@([^\s@]*)$/.exec(before);
+        if (at) { return { mode: 'file', start: pos - at[2].length - 1, end: pos, filter: at[2] }; }
+        return null;
+    }
+
+    function updateSuggest() {
+        const token = detectSuggestToken();
+        if (!token) { closeSuggest(); return; }
+        suggestMode = token.mode;
+        suggestStart = token.start;
+        suggestEnd = token.end;
+        const f = token.filter.toLowerCase();
+        if (token.mode === 'slash') {
+            suggestItems = slashCommands.filter(function (c) {
+                return c.name.toLowerCase().indexOf(f) !== -1 || (c.description || '').toLowerCase().indexOf(f) !== -1;
+            }).slice(0, 50).map(function (c) {
+                return { label: '/' + c.name, detail: c.description || '', source: c.source || '', insert: '/' + c.name + ' ' };
+            });
+        } else {
+            if (filesList === null) { vscode.postMessage({ type: 'requestFiles' }); }
+            const list = filesList || [];
+            const matched = [];
+            for (let i = 0; i < list.length && matched.length < 50; i++) {
+                if (list[i].toLowerCase().indexOf(f) !== -1) { matched.push(list[i]); }
+            }
+            suggestItems = matched.map(function (p) {
+                return { label: '@' + p, detail: '', source: '', insert: '@' + p + ' ' };
+            });
+        }
+        suggestIndex = 0;
+        renderSuggest();
+    }
+
+    function renderSuggest() {
+        if (!suggestItems.length) { closeSuggest(); return; }
+        if (suggestIndex >= suggestItems.length) { suggestIndex = 0; }
+        let html = '';
+        suggestItems.forEach(function (it, i) {
+            html += '<div class="suggest-item' + (i === suggestIndex ? ' active' : '') + '" data-i="' + i + '">' +
+                '<span class="suggest-label">' + escapeHtml(it.label) + '</span>' +
+                (it.detail ? '<span class="suggest-detail">' + escapeHtml(it.detail) + '</span>' : '') +
+                (it.source ? '<span class="suggest-source">' + escapeHtml(it.source) + '</span>' : '') +
+                '</div>';
+        });
+        suggest.innerHTML = html;
+        suggest.classList.remove('hidden');
+    }
+
+    function closeSuggest() {
+        suggestMode = null;
+        suggestItems = [];
+        suggestIndex = 0;
+        suggest.classList.add('hidden');
+        suggest.innerHTML = '';
+    }
+
+    function acceptSuggest() {
+        if (!suggestMode || !suggestItems.length) { return; }
+        const item = suggestItems[suggestIndex];
+        input.value = input.value.slice(0, suggestStart) + item.insert + input.value.slice(suggestEnd);
+        const caret = suggestStart + item.insert.length;
+        input.selectionStart = input.selectionEnd = caret;
+        closeSuggest();
+        input.focus();
+        autoResizeInput();
+    }
+
+    function suggestOpen() {
+        return !suggest.classList.contains('hidden') && suggestItems.length > 0;
+    }
+
     // ========== 搜索功能 ==========
     
     // 提取纯净文本：克隆后剔除代码行号，避免复制/导出/搜索混入行号
@@ -921,10 +1008,40 @@ const vscode = acquireVsCodeApi();
     });
     
     sendBtn.addEventListener('click', function () { if (busy) { vscode.postMessage({ type: 'abort' }); } else { send(); } });
-    input.addEventListener('input', autoResizeInput);
+    input.addEventListener('input', function () { autoResizeInput(); updateSuggest(); });
+    input.addEventListener('click', function () { updateSuggest(); });
+    input.addEventListener('keyup', function (e) {
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') { updateSuggest(); }
+    });
+    ['dragenter', 'dragover'].forEach(function (ev) {
+        input.addEventListener(ev, function (e) { e.preventDefault(); });
+    });
+    input.addEventListener('drop', function (e) {
+        e.preventDefault();
+        const dt = e.dataTransfer;
+        if (!dt) { return; }
+        let raw = '';
+        try { raw = dt.getData('text/uri-list') || dt.getData('text/plain') || ''; } catch (err) { raw = ''; }
+        const paths = raw.split(/\r?\n/).map(function (s) { return s.trim(); }).filter(function (s) { return s && s.charAt(0) !== '#'; });
+        if (paths.length) { vscode.postMessage({ type: 'dropFiles', paths: paths }); }
+    });
+    suggest.addEventListener('mousedown', function (e) {
+        const it = e.target.closest('.suggest-item');
+        if (!it) { return; }
+        e.preventDefault();
+        suggestIndex = Number(it.dataset.i);
+        acceptSuggest();
+    });
     input.addEventListener('keydown', function (e) {
         // Alt+↑/↓ 交给文档级处理器做问题跳转，不当作输入历史
         if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { return; }
+        // 补全菜单优先响应方向键 / 回车 / Tab / Esc
+        if (suggestOpen()) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); suggestIndex = (suggestIndex + 1) % suggestItems.length; renderSuggest(); return; }
+            if (e.key === 'ArrowUp') { e.preventDefault(); suggestIndex = (suggestIndex - 1 + suggestItems.length) % suggestItems.length; renderSuggest(); return; }
+            if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); acceptSuggest(); return; }
+            if (e.key === 'Escape') { e.preventDefault(); closeSuggest(); return; }
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             send(e.ctrlKey || e.metaKey ? 'steer' : undefined);
@@ -1080,6 +1197,19 @@ const vscode = acquireVsCodeApi();
             }
             case 'queue': updateQueueBadges(m.steering, m.followUp); break;
             case 'bashResult': finishBash(m); break;
+            case 'commands': slashCommands = m.commands || []; if (suggestMode === 'slash') { updateSuggest(); } break;
+            case 'files': filesList = m.files || []; if (suggestMode === 'file') { updateSuggest(); } break;
+            case 'insertMentions': {
+                const insert = (m.paths || []).map(function (p) { return '@' + p + ' '; }).join('');
+                if (insert) {
+                    const pos = input.selectionStart;
+                    input.value = input.value.slice(0, pos) + insert + input.value.slice(input.selectionEnd);
+                    input.selectionStart = input.selectionEnd = pos + insert.length;
+                    input.focus();
+                    autoResizeInput();
+                }
+                break;
+            }
             case 'error':
                 hideThinking();
                 if (currentBody) { currentBody.classList.remove('stream-cursor'); currentBody = null; currentBuffer = ''; }
@@ -1147,6 +1277,7 @@ const vscode = acquireVsCodeApi();
                 renderChips();
                 ctxStats.classList.add('hidden');
                 clearSearch();
+                closeSuggest();
                 updateMessageCount();
                 renderRail();
                 scrollToBottom();

@@ -10,7 +10,7 @@ import { PiClientManager, PiStartError, PiNotFoundError } from './sdk/clientMana
 import { SessionManager } from './sdk/sessionManager';
 import { summarizeToolArgs, formatUsage, validateMessage, extractToolOutput } from './utils/formatters';
 import { buildContextBlock, stripContextBlock } from './utils/context';
-import { PI_INSTALL_HINT, extractMessageText, PiAgentEvent, PiRpcClient, PiModelInfo, PiSessionStats, respondExtensionUI } from './sdk/piTypes';
+import { PI_INSTALL_HINT, extractMessageText, PiAgentEvent, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, respondExtensionUI } from './sdk/piTypes';
 import { logInfo, logError } from './utils/logger';
 
 /** 判断错误是否为「pi 进程/连接」类问题（用类型/code 判断，不依赖本地化文案） */
@@ -51,6 +51,7 @@ interface WebviewMessage {
     currentName?: string;
     id?: string;
     mode?: string;
+    paths?: string[];
 }
 
 // 发送给 webview 的消息类型
@@ -107,6 +108,9 @@ export class ChatPanel {
     private _turnHadText = false;
     private _contexts: ContextItem[] = [];
     private _contextWarned = false;
+    private _commands: PiSlashCommand[] = [];
+    private _fileList: string[] | undefined;
+    private _fileListAt = 0;
     private _lastUsage: { input?: number; output?: number; cacheRead?: number } | undefined;
 
     private constructor(webview: vscode.Webview, extensionPath: string, disposeEvent: vscode.Event<void>) {
@@ -253,6 +257,8 @@ export class ChatPanel {
 
     /** 把附加的上下文以「引用」形式拼到 prompt 前（只给路径/行号，内容由 pi 读取） */
     private _withContext(text: string): string {
+        // 斜杠命令必须位于消息开头，不能前置 context 块
+        if (text.startsWith('/')) { return text; }
         return buildContextBlock(this._contexts, text);
     }
 
@@ -346,6 +352,15 @@ export class ChatPanel {
                 break;
             case 'runBash':
                 if (message.text) { await this._runBash(message.text, message.id); }
+                break;
+            case 'requestFiles':
+                void this._getWorkspaceFiles().then((files) => this._post({ type: 'files', files }));
+                break;
+            case 'dropFiles':
+                if (message.paths && message.paths.length) {
+                    const rel = this._resolveDroppedPaths(message.paths);
+                    if (rel.length) { this._post({ type: 'insertMentions', paths: rel }); }
+                }
                 break;
             case 'abort':
                 await this._clientManager.abort();
@@ -459,8 +474,9 @@ export class ChatPanel {
                 text: vscode.l10n.t('Connected to pi · workspace "{0}"', folderName)
             });
 
-            // 加载模型列表
+            // 加载模型列表与斜杠命令
             await this._loadModels(client);
+            await this._loadCommands(client);
             await this._loadStats(client);
 
             // 加载会话列表
@@ -530,6 +546,18 @@ export class ChatPanel {
             });
         } else if (percent < threshold - 10) {
             this._contextWarned = false;
+        }
+    }
+
+    /** 加载 pi 的斜杠命令 / 提示模板 / 技能，供输入框补全 */
+    private async _loadCommands(client: PiRpcClient): Promise<void> {
+        if (typeof client.getCommands !== 'function') { return; }
+        try {
+            const commands = await client.getCommands();
+            this._commands = commands.map((c) => ({ name: c.name, description: c.description, source: c.source }));
+            this._post({ type: 'commands', commands: this._commands });
+        } catch (err) {
+            logError(`_loadCommands failed: ${(err as Error).message}`);
         }
     }
 
@@ -890,6 +918,48 @@ export class ChatPanel {
         const client = this._clientManager.client;
         if (!client || typeof client.clearQueue !== 'function') { return; }
         try { await client.clearQueue(); } catch (err) { logError(`clearQueue failed: ${(err as Error).message}`); }
+    }
+
+    /** 工作区文件列表（供 `@` 提及补全），带 30s 缓存 */
+    private async _getWorkspaceFiles(): Promise<string[]> {
+        const now = Date.now();
+        if (this._fileList && now - this._fileListAt < 30000) { return this._fileList; }
+        try {
+            const exclude = '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**,**/.vscode-test/**,**/media/**,**/.next/**,**/build/**,**/target/**}';
+            const uris = await vscode.workspace.findFiles('**/*', exclude, 5000);
+            this._fileList = uris
+                .map((u) => vscode.workspace.asRelativePath(u, false))
+                .sort((a, b) => a.localeCompare(b));
+            this._fileListAt = now;
+        } catch (err) {
+            logError(`findFiles failed: ${(err as Error).message}`);
+            this._fileList = [];
+        }
+        return this._fileList;
+    }
+
+    /** 把拖入的路径解析为工作区相对路径（丢弃工作区外的路径） */
+    private _resolveDroppedPaths(paths: string[]): string[] {
+        const out: string[] = [];
+        const seen = new Set<string>();
+        for (const raw of paths) {
+            const p = raw.trim();
+            if (!p || p.startsWith('#')) { continue; }
+            let rel: string | undefined;
+            if (p.startsWith('file://')) {
+                try {
+                    const uri = vscode.Uri.parse(p);
+                    if (vscode.workspace.getWorkspaceFolder(uri)) { rel = vscode.workspace.asRelativePath(uri, false); }
+                } catch { rel = undefined; }
+            } else if (path.isAbsolute(p)) {
+                const uri = vscode.Uri.file(p);
+                if (vscode.workspace.getWorkspaceFolder(uri)) { rel = vscode.workspace.asRelativePath(uri, false); }
+            } else {
+                rel = p.replace(/\\/g, '/');
+            }
+            if (rel && !seen.has(rel)) { seen.add(rel); out.push(rel); }
+        }
+        return out;
     }
 
     /** 直接执行 shell 命令（`!` 前缀），不经过模型回合 */
