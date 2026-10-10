@@ -19,18 +19,19 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run compile
+      # Fixed asset name so `/releases/latest/download/pi-agent-vscode.vsix` is stable.
       - name: Package VSIX
-        run: npx --yes @vscode/vsce package --out pi-agent-${{ github.ref_name }}.vsix
+        run: npx --yes @vscode/vsce package --out pi-agent-vscode.vsix
       - name: Attach to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: pi-agent-*.vsix
+          files: pi-agent-vscode.vsix
           generate_release_notes: true
 
       # Optional: publish to the VS Code Marketplace.
       # Set the VSCE_PAT repository secret (a Marketplace Personal Access Token),
       # then uncomment the step below.
       # - name: Publish to Marketplace
-      #   run: npx --yes @vscode/vsce publish --packagePath pi-agent-${{ github.ref_name }}.vsix
+      #   run: npx --yes @vscode/vsce publish --packagePath pi-agent-vscode.vsix
       #   env:
       #     VSCE_PAT: ${{ secrets.VSCE_PAT }}
