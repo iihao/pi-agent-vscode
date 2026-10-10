@@ -1,0 +1,63 @@
+name: Bug report
+description: Report a problem with Pi Assistant
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug! Please fill in the details below.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open ...
+        2. Ask pi ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: extension-version
+    attributes:
+      label: Pi Assistant version
+      placeholder: e.g. 0.1.0
+    validations:
+      required: true
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+      placeholder: e.g. 1.90.0
+    validations:
+      required: true
+  - type: input
+    id: pi-version
+    attributes:
+      label: pi CLI version
+      description: Output of `pi --version`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: OS
+      options: [macOS, Linux, Windows, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / diagnostics
+      description: |
+        Run **Pi: Export Diagnostics** and paste the relevant lines, or copy
+        errors from the **Pi Assistant** output channel / Webview DevTools
+        console.
+    validations:
+      required: false

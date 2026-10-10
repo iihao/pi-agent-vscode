@@ -1,0 +1,23 @@
+{
+  "displayName": "Pi Assistant - AI Coding Assistant",
+  "description": "AI coding assistant in VS Code, powered by the local pi agent",
+  "capabilities.untrusted": "Pi reads/writes workspace files and runs commands; enabled only in trusted workspaces.",
+  "cmd.openChat": "Pi: Open Chat",
+  "cmd.explainCode": "Pi: Explain Code",
+  "cmd.refactorCode": "Pi: Refactor Code",
+  "cmd.generateCode": "Pi: Generate Code",
+  "cmd.clearChat": "Pi: Clear Chat",
+  "cmd.attachFile": "Pi: Attach Current File to Chat",
+  "cmd.attachSelection": "Pi: Attach Selection to Chat",
+  "cmd.restartSession": "Pi: Restart Session",
+  "cmd.exportDiagnostics": "Pi: Export Diagnostics",
+  "view.chat.name": "Chat",
+  "config.pi.executable": "Custom pi CLI path (leave empty to auto-detect)",
+  "config.pi.arguments": "Extra arguments passed to pi",
+  "config.permissionMode": "Pi permission mode (restart session to apply)",
+  "config.permissionMode.ask": "Normal (default)",
+  "config.permissionMode.autoConfirm": "Auto-trust project-local files (--approve)",
+  "config.permissionMode.restricted": "Read-only: disable bash / edit / write tools",
+  "config.notifications": "Notify on task completion/failure while the window is unfocused",
+  "config.diagnostics.level": "Output channel log level"
+}

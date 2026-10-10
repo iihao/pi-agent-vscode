@@ -8,10 +8,12 @@
     "rootDir": "src",
     "sourceMap": true,
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true
   },
-  "exclude": ["node_modules", ".vscode-test", "scripts"]
+  "exclude": ["node_modules", ".vscode-test", "scripts", "test", "src/**/*.test.ts", "vitest.config.ts"]
 }

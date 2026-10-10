@@ -1,7 +1,9 @@
 .vscode/**
 .vscode-test/**
 src/**
+webview/**
 scripts/**
+esbuild.webview.mjs
 .gitignore
 tsconfig.json
 **/*.map
@@ -9,3 +11,6 @@ tsconfig.json
 # 不打包 node_modules：运行时探测用户全局安装的 pi
 # （开发模式 F5 下会自动使用项目内的 node_modules）
 node_modules/**
+# media/ 是 webview 构建产物，需要打包
+test/**
+vitest.config.ts

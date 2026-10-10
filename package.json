@@ -1,11 +1,35 @@
 {
   "name": "pi-assistant",
-  "displayName": "Pi Assistant - AI 编程助手",
-  "description": "在 VSCode 中使用 AI 助手进行代码对话、解释、生成和重构",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "0.1.0",
   "publisher": "pi-assistant",
+  "license": "MIT",
+  "author": {
+    "name": "Pi Assistant contributors"
+  },
+  "icon": "assets/icon.png",
+  "galleryBanner": {
+    "color": "#1C1C1E",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-github-username/pi-assistant.git"
+  },
+  "homepage": "https://github.com/your-github-username/pi-assistant#readme",
+  "bugs": {
+    "url": "https://github.com/your-github-username/pi-assistant/issues"
+  },
   "engines": {
     "vscode": "^1.80.0"
+  },
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "%capabilities.untrusted%"
+    },
+    "virtualWorkspaces": false
   },
   "categories": [
     "AI",
@@ -26,31 +50,55 @@
     "onCommand:pi-assistant.explainCode",
     "onCommand:pi-assistant.refactorCode",
     "onCommand:pi-assistant.generateCode",
+    "onCommand:pi-assistant.restartSession",
+    "onCommand:pi-assistant.exportDiagnostics",
+    "onCommand:pi-assistant.attachFile",
+    "onCommand:pi-assistant.attachSelection",
     "onView:pi-assistant.chatView"
   ],
   "main": "./out/extension.js",
+  "l10n": "./l10n",
   "contributes": {
     "commands": [
       {
         "command": "pi-assistant.openChat",
-        "title": "Pi: 打开对话",
+        "title": "%cmd.openChat%",
         "icon": "$(comment-discussion)"
       },
       {
         "command": "pi-assistant.explainCode",
-        "title": "Pi: 解释代码"
+        "title": "%cmd.explainCode%"
       },
       {
         "command": "pi-assistant.refactorCode",
-        "title": "Pi: 重构代码"
+        "title": "%cmd.refactorCode%"
       },
       {
         "command": "pi-assistant.generateCode",
-        "title": "Pi: 生成代码"
+        "title": "%cmd.generateCode%"
       },
       {
         "command": "pi-assistant.clearChat",
-        "title": "Pi: 清空对话"
+        "title": "%cmd.clearChat%"
+      },
+      {
+        "command": "pi-assistant.attachFile",
+        "title": "%cmd.attachFile%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pi-assistant.attachSelection",
+        "title": "%cmd.attachSelection%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pi-assistant.restartSession",
+        "title": "%cmd.restartSession%",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "pi-assistant.exportDiagnostics",
+        "title": "%cmd.exportDiagnostics%"
       }
     ],
     "menus": {
@@ -64,6 +112,15 @@
           "command": "pi-assistant.refactorCode",
           "when": "editorHasSelection",
           "group": "9_cutcopypaste@6"
+        },
+        {
+          "command": "pi-assistant.attachSelection",
+          "when": "editorHasSelection",
+          "group": "9_cutcopypaste@7"
+        },
+        {
+          "command": "pi-assistant.attachFile",
+          "group": "9_cutcopypaste@8"
         }
       ],
       "commandPalette": [
@@ -74,6 +131,13 @@
         {
           "command": "pi-assistant.refactorCode",
           "when": "editorHasSelection"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "pi-assistant.restartSession",
+          "when": "view == pi-assistant.chatView",
+          "group": "navigation@1"
         }
       ]
     },
@@ -91,7 +155,7 @@
         {
           "type": "webview",
           "id": "pi-assistant.chatView",
-          "name": "对话",
+          "name": "%view.chat.name%",
           "icon": "$(comment-discussion)"
         }
       ]
@@ -102,12 +166,69 @@
         "key": "ctrl+alt+p",
         "mac": "alt+cmd+p"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "Pi Assistant",
+      "properties": {
+        "pi-assistant.pi.executable": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "%config.pi.executable%"
+        },
+        "pi-assistant.pi.arguments": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "resource",
+          "description": "%config.pi.arguments%"
+        },
+        "pi-assistant.agent.permissionMode": {
+          "type": "string",
+          "enum": [
+            "ask",
+            "autoConfirm",
+            "restricted"
+          ],
+          "enumDescriptions": [
+            "%config.permissionMode.ask%",
+            "%config.permissionMode.autoConfirm%",
+            "%config.permissionMode.restricted%"
+          ],
+          "default": "ask",
+          "scope": "resource",
+          "description": "%config.permissionMode%"
+        },
+        "pi-assistant.notifications.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "%config.notifications%"
+        },
+        "pi-assistant.diagnostics.level": {
+          "type": "string",
+          "enum": [
+            "error",
+            "info",
+            "debug"
+          ],
+          "default": "info",
+          "scope": "window",
+          "description": "%config.diagnostics.level%"
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./",
+    "compile": "tsc -p ./ && npm run build:webview",
     "watch": "tsc -watch -p ./",
+    "build:webview": "node esbuild.webview.mjs",
+    "watch:webview": "node esbuild.webview.mjs --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
@@ -115,8 +236,15 @@
     "@types/vscode": "^1.80.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
+    "@vscode/markdown-it-katex": "^1.1.2",
+    "esbuild": "^0.24.0",
     "eslint": "^8.0.0",
-    "typescript": "^5.0.0"
+    "highlight.js": "^11.10.0",
+    "katex": "^0.19.0",
+    "markdown-it": "^14.1.0",
+    "mermaid": "^12.1.0",
+    "typescript": "^5.0.0",
+    "vitest": "^2.1.9"
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "^1.1.0"

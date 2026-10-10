@@ -1,0 +1,23 @@
+{
+  "displayName": "Pi Assistant - AI 编程助手",
+  "description": "在 VSCode 中使用 AI 助手进行代码对话、解释、生成和重构",
+  "capabilities.untrusted": "Pi 会读写工作区文件并执行命令，仅在受信任工作区启用。",
+  "cmd.openChat": "Pi: 打开对话",
+  "cmd.explainCode": "Pi: 解释代码",
+  "cmd.refactorCode": "Pi: 重构代码",
+  "cmd.generateCode": "Pi: 生成代码",
+  "cmd.clearChat": "Pi: 清空对话",
+  "cmd.attachFile": "Pi: 附加当前文件到对话",
+  "cmd.attachSelection": "Pi: 附加选中代码到对话",
+  "cmd.restartSession": "Pi: 重启会话",
+  "cmd.exportDiagnostics": "Pi: 导出诊断信息",
+  "view.chat.name": "对话",
+  "config.pi.executable": "自定义 pi CLI 路径（留空则自动探测）",
+  "config.pi.arguments": "附加到 pi 启动参数",
+  "config.permissionMode": "Pi 权限模式（修改后需重启会话生效）",
+  "config.permissionMode.ask": "正常（默认）",
+  "config.permissionMode.autoConfirm": "自动信任项目本地文件（--approve）",
+  "config.permissionMode.restricted": "只读：禁用 bash / edit / write 工具",
+  "config.notifications": "窗口失焦时，任务完成/失败弹出通知",
+  "config.diagnostics.level": "输出通道日志级别"
+}

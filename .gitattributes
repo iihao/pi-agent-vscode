@@ -1,0 +1,9 @@
+* text=auto eol=lf
+
+# Generated webview bundle — collapse diffs in reviews
+media/** linguist-generated=true
+
+# Lockfile noise
+package-lock.json -diff linguist-generated=true
+
+*.vsix binary
