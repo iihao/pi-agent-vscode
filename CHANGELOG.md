@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-10
+
+### Changed
+
+- Richer empty state for new conversations: a proper Pi logo mark, a
+  "Getting started" guide (ask a task / add context / control permissions),
+  and a short tagline instead of the bare `›_` placeholder.
+- Renamed the Marketplace extension to `pi-agent-assistant`
+  (`pi-agent-vscode` was already taken; extension id is now
+  `iihao.pi-agent-assistant`).
+
+### Fixed
+
+- Dropped dev/CI files (`.github/`, `.nvmrc`, `.editorconfig`, `RELEASING.md`,
+  `.DS_Store`) from the packaged VSIX.
+
 ## [0.1.0] - 2026-10-10
 
 ### Added
@@ -28,5 +44,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   language.
 - Trusted-workspace gating and a settings namespace (`pi-agent.*`).
 
-[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/iihao/pi-agent-vscode/releases/tag/v0.1.0

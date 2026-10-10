@@ -19,6 +19,13 @@ export interface UiStrings {
     next: string;
     close: string;
     welcomeDesc: string;
+    guideTitle: string;
+    guideAsk: string;
+    guideAskDesc: string;
+    guideAttach: string;
+    guideAttachDesc: string;
+    guidePerm: string;
+    guidePermDesc: string;
     quickExplain: string;
     quickExplainQ: string;
     quickReview: string;
@@ -80,7 +87,14 @@ export function getUiStrings(): UiStrings {
         prev: t('Previous'),
         next: t('Next'),
         close: t('Close'),
-        welcomeDesc: t('Driven by the local pi agent — it can read/write files and run commands.<br>Right-click "Pi: Explain Code" on a selection to start.'),
+        welcomeDesc: t('Your local pi coding agent, right in the VS Code sidebar.'),
+        guideTitle: t('Getting started'),
+        guideAsk: t('Ask a task'),
+        guideAskDesc: t('Type below, or pick a quick action above.'),
+        guideAttach: t('Add context'),
+        guideAttachDesc: t('Attach the current file or a selection with the paperclip.'),
+        guidePerm: t('Stay in control'),
+        guidePermDesc: t('Choose Manual, Auto, or Read-only for edits and commands.'),
         quickExplain: t('Explain code'),
         quickExplainQ: t('Explain my selected code'),
         quickReview: t('Review code'),
