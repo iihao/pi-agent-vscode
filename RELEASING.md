@@ -34,7 +34,7 @@ built from source by CI — **never commit a `.vsix`**.
    git push origin main --tags
    ```
 5. **CI takes over**: `.github/workflows/release.yml` triggers on `v*` tags,
-   builds the extension, packages `pi-assistant-vX.Y.Z.vsix`, and attaches it to
+   builds the extension, packages `pi-agent-vX.Y.Z.vsix`, and attaches it to
    the GitHub Release with auto-generated notes.
 
 ## Publishing to the VS Code Marketplace
@@ -67,7 +67,7 @@ git push origin main --tags
 Before tagging, make sure:
 
 - `package.json` `publisher` matches your Marketplace publisher id (`iihao`);
-- the GitHub repository `iihao/pi-assistant` exists and `main` is pushed;
+- the GitHub repository `iihao/pi-agent-vscode` exists and `main` is pushed;
 - `package.json` `repository` / `homepage` / `bugs` point at it.
 
 ## Manual fallback

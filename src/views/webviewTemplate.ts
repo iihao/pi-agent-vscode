@@ -78,7 +78,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
     <div class="chat-container" id="chat">
         <div class="welcome" id="welcome">
             <div class="welcome-icon">›_</div>
-            <div class="welcome-title">Pi Assistant</div>
+            <div class="welcome-title">Pi Agent</div>
             <div class="welcome-desc">${S.welcomeDesc}</div>
             <div class="quick-actions">
                 <button class="quick-action" data-q="${S.quickExplainQ}">${S.quickExplain}</button>

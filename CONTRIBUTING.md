@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for your interest in Pi Assistant! This is a VS Code extension that puts
+Thanks for your interest in Pi Agent! This is a VS Code extension that puts
 the local [pi](https://github.com/earendil-works/pi) coding agent into the
 editor sidebar.
 

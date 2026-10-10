@@ -13,7 +13,7 @@ const MAX_LINES = 2000;
 
 export function initLogger(): vscode.OutputChannel {
     if (!channel) {
-        channel = vscode.window.createOutputChannel('Pi Assistant');
+        channel = vscode.window.createOutputChannel('Pi Agent');
     }
     return channel;
 }
@@ -44,7 +44,7 @@ export function logError(msg: string): void {
 /** 导出诊断文本（日志 + 基本环境信息） */
 export function buildDiagnostics(extensionPath: string): string {
     const header = [
-        vscode.l10n.t('# Pi Assistant diagnostics'),
+        vscode.l10n.t('# Pi Agent diagnostics'),
         vscode.l10n.t('Time: {0}', new Date().toISOString()),
         vscode.l10n.t('VSCode: {0}', vscode.version),
         vscode.l10n.t('Platform: {0} {1}', process.platform, process.arch),

@@ -77,7 +77,7 @@ export class PiClientManager {
     }
 
     private async _startClient(extensionPath: string): Promise<void> {
-        const config = vscode.workspace.getConfiguration('pi-assistant');
+        const config = vscode.workspace.getConfiguration('pi-agent');
         const executable = (config.get<string>('pi.executable') || '').trim();
         const resolved = resolvePi(extensionPath, executable || undefined);
         if (!resolved) {

@@ -1,12 +1,12 @@
 {
-  "name": "pi-assistant",
+  "name": "pi-agent-vscode",
   "displayName": "%displayName%",
   "description": "%description%",
   "version": "0.1.0",
   "publisher": "iihao",
   "license": "MIT",
   "author": {
-    "name": "Pi Assistant contributors"
+    "name": "Pi Agent contributors"
   },
   "icon": "assets/icon.png",
   "galleryBanner": {
@@ -15,11 +15,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/iihao/pi-assistant.git"
+    "url": "https://github.com/iihao/pi-agent-vscode.git"
   },
-  "homepage": "https://github.com/iihao/pi-assistant#readme",
+  "homepage": "https://github.com/iihao/pi-agent-vscode#readme",
   "bugs": {
-    "url": "https://github.com/iihao/pi-assistant/issues"
+    "url": "https://github.com/iihao/pi-agent-vscode/issues"
   },
   "engines": {
     "vscode": "^1.80.0"
@@ -46,97 +46,97 @@
     "copilot"
   ],
   "activationEvents": [
-    "onCommand:pi-assistant.openChat",
-    "onCommand:pi-assistant.explainCode",
-    "onCommand:pi-assistant.refactorCode",
-    "onCommand:pi-assistant.generateCode",
-    "onCommand:pi-assistant.restartSession",
-    "onCommand:pi-assistant.exportDiagnostics",
-    "onCommand:pi-assistant.attachFile",
-    "onCommand:pi-assistant.attachSelection",
-    "onView:pi-assistant.chatView"
+    "onCommand:pi-agent.openChat",
+    "onCommand:pi-agent.explainCode",
+    "onCommand:pi-agent.refactorCode",
+    "onCommand:pi-agent.generateCode",
+    "onCommand:pi-agent.restartSession",
+    "onCommand:pi-agent.exportDiagnostics",
+    "onCommand:pi-agent.attachFile",
+    "onCommand:pi-agent.attachSelection",
+    "onView:pi-agent.chatView"
   ],
   "main": "./out/extension.js",
   "l10n": "./l10n",
   "contributes": {
     "commands": [
       {
-        "command": "pi-assistant.openChat",
+        "command": "pi-agent.openChat",
         "title": "%cmd.openChat%",
         "icon": "$(comment-discussion)"
       },
       {
-        "command": "pi-assistant.explainCode",
+        "command": "pi-agent.explainCode",
         "title": "%cmd.explainCode%"
       },
       {
-        "command": "pi-assistant.refactorCode",
+        "command": "pi-agent.refactorCode",
         "title": "%cmd.refactorCode%"
       },
       {
-        "command": "pi-assistant.generateCode",
+        "command": "pi-agent.generateCode",
         "title": "%cmd.generateCode%"
       },
       {
-        "command": "pi-assistant.clearChat",
+        "command": "pi-agent.clearChat",
         "title": "%cmd.clearChat%"
       },
       {
-        "command": "pi-assistant.attachFile",
+        "command": "pi-agent.attachFile",
         "title": "%cmd.attachFile%",
         "icon": "$(add)"
       },
       {
-        "command": "pi-assistant.attachSelection",
+        "command": "pi-agent.attachSelection",
         "title": "%cmd.attachSelection%",
         "icon": "$(add)"
       },
       {
-        "command": "pi-assistant.restartSession",
+        "command": "pi-agent.restartSession",
         "title": "%cmd.restartSession%",
         "icon": "$(debug-restart)"
       },
       {
-        "command": "pi-assistant.exportDiagnostics",
+        "command": "pi-agent.exportDiagnostics",
         "title": "%cmd.exportDiagnostics%"
       }
     ],
     "menus": {
       "editor/context": [
         {
-          "command": "pi-assistant.explainCode",
+          "command": "pi-agent.explainCode",
           "when": "editorHasSelection",
           "group": "9_cutcopypaste@5"
         },
         {
-          "command": "pi-assistant.refactorCode",
+          "command": "pi-agent.refactorCode",
           "when": "editorHasSelection",
           "group": "9_cutcopypaste@6"
         },
         {
-          "command": "pi-assistant.attachSelection",
+          "command": "pi-agent.attachSelection",
           "when": "editorHasSelection",
           "group": "9_cutcopypaste@7"
         },
         {
-          "command": "pi-assistant.attachFile",
+          "command": "pi-agent.attachFile",
           "group": "9_cutcopypaste@8"
         }
       ],
       "commandPalette": [
         {
-          "command": "pi-assistant.explainCode",
+          "command": "pi-agent.explainCode",
           "when": "editorHasSelection"
         },
         {
-          "command": "pi-assistant.refactorCode",
+          "command": "pi-agent.refactorCode",
           "when": "editorHasSelection"
         }
       ],
       "view/title": [
         {
-          "command": "pi-assistant.restartSession",
-          "when": "view == pi-assistant.chatView",
+          "command": "pi-agent.restartSession",
+          "when": "view == pi-agent.chatView",
           "group": "navigation@1"
         }
       ]
@@ -144,17 +144,17 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "pi-assistant",
-          "title": "Pi Assistant",
+          "id": "pi-agent",
+          "title": "Pi Agent",
           "icon": "$(robot)"
         }
       ]
     },
     "views": {
-      "pi-assistant": [
+      "pi-agent": [
         {
           "type": "webview",
-          "id": "pi-assistant.chatView",
+          "id": "pi-agent.chatView",
           "name": "%view.chat.name%",
           "icon": "$(comment-discussion)"
         }
@@ -162,21 +162,21 @@
     },
     "keybindings": [
       {
-        "command": "pi-assistant.openChat",
+        "command": "pi-agent.openChat",
         "key": "ctrl+alt+p",
         "mac": "alt+cmd+p"
       }
     ],
     "configuration": {
-      "title": "Pi Assistant",
+      "title": "Pi Agent",
       "properties": {
-        "pi-assistant.pi.executable": {
+        "pi-agent.pi.executable": {
           "type": "string",
           "default": "",
           "scope": "machine-overridable",
           "description": "%config.pi.executable%"
         },
-        "pi-assistant.pi.arguments": {
+        "pi-agent.pi.arguments": {
           "type": "array",
           "items": {
             "type": "string"
@@ -185,7 +185,7 @@
           "scope": "resource",
           "description": "%config.pi.arguments%"
         },
-        "pi-assistant.agent.permissionMode": {
+        "pi-agent.agent.permissionMode": {
           "type": "string",
           "enum": [
             "ask",
@@ -201,13 +201,13 @@
           "scope": "resource",
           "description": "%config.permissionMode%"
         },
-        "pi-assistant.notifications.enabled": {
+        "pi-agent.notifications.enabled": {
           "type": "boolean",
           "default": true,
           "scope": "window",
           "description": "%config.notifications%"
         },
-        "pi-assistant.diagnostics.level": {
+        "pi-agent.diagnostics.level": {
           "type": "string",
           "enum": [
             "error",

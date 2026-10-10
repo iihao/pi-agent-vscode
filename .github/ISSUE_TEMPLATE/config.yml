@@ -4,5 +4,5 @@ contact_links:
     url: https://github.com/earendil-works/pi
     about: Issues with the pi CLI itself, models, or credentials belong upstream.
   - name: Security report
-    url: https://github.com/iihao/pi-assistant/security/advisories/new
+    url: https://github.com/iihao/pi-agent-vscode/security/advisories/new
     about: Please report security issues privately.

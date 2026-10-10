@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem with Pi Assistant
+description: Report a problem with Pi Agent
 labels: [bug]
 body:
   - type: markdown
@@ -26,7 +26,7 @@ body:
   - type: input
     id: extension-version
     attributes:
-      label: Pi Assistant version
+      label: Pi Agent version
       placeholder: e.g. 0.1.0
     validations:
       required: true
@@ -57,7 +57,7 @@ body:
       label: Logs / diagnostics
       description: |
         Run **Pi: Export Diagnostics** and paste the relevant lines, or copy
-        errors from the **Pi Assistant** output channel / Webview DevTools
+        errors from the **Pi Agent** output channel / Webview DevTools
         console.
     validations:
       required: false

@@ -17,7 +17,7 @@ We aim to acknowledge reports within a few days.
 
 ## Scope and threat model
 
-Pi Assistant is a **front-end** for the local `pi` coding agent. Important
+Pi Agent is a **front-end** for the local `pi` coding agent. Important
 considerations:
 
 - The extension **executes the locally installed `pi` CLI**, which can read and

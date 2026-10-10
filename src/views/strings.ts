@@ -106,7 +106,7 @@ export function getUiStrings(): UiStrings {
         sendTitle: t('Send'),
         stopTitle: t('Stop'),
         historyDivider: t('History above'),
-        exportHeader: t('# Pi Assistant Conversation'),
+        exportHeader: t('# Pi Agent Conversation'),
         exportTime: t('Exported: '),
         exportEmpty: t('No messages to export'),
         remove: t('Remove'),

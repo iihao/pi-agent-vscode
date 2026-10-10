@@ -5,20 +5,20 @@ import { initLogger, setLogLevel, buildDiagnostics, logInfo, LogLevel } from './
 export function activate(context: vscode.ExtensionContext) {
     const output = initLogger();
     applyLogLevel();
-    logInfo('Pi Assistant activated');
+    logInfo('Pi Agent activated');
 
     // 注册侧边栏聊天视图（activitybar 图标 → 聊天面板）
     ChatPanel.registerViewProvider(context, context.extensionPath);
 
     // ---- 打开对话（聚焦侧边栏聊天视图）----
-    const openChat = vscode.commands.registerCommand('pi-assistant.openChat', () => {
+    const openChat = vscode.commands.registerCommand('pi-agent.openChat', () => {
         void ChatPanel.ensureView().catch((err: unknown) => {
             void vscode.window.showErrorMessage(`Pi: ${(err as Error).message}`);
         });
     });
 
     // ---- 解释选中代码 ----
-    const explainCode = vscode.commands.registerCommand('pi-assistant.explainCode', async () => {
+    const explainCode = vscode.commands.registerCommand('pi-agent.explainCode', async () => {
         const ctx = getSelectionContext();
         if (!ctx) {
             return;
@@ -31,7 +31,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // ---- 重构选中代码 ----
-    const refactorCode = vscode.commands.registerCommand('pi-assistant.refactorCode', async () => {
+    const refactorCode = vscode.commands.registerCommand('pi-agent.refactorCode', async () => {
         const ctx = getSelectionContext();
         if (!ctx) {
             return;
@@ -44,7 +44,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // ---- 生成代码 ----
-    const generateCode = vscode.commands.registerCommand('pi-assistant.generateCode', async () => {
+    const generateCode = vscode.commands.registerCommand('pi-agent.generateCode', async () => {
         const description = await vscode.window.showInputBox({
             prompt: vscode.l10n.t('Describe the code you want to generate'),
             placeHolder: vscode.l10n.t('e.g. an HTTP request function with retry'),
@@ -62,7 +62,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // ---- 清空对话（同时开启全新 pi 会话）----
-    const clearChat = vscode.commands.registerCommand('pi-assistant.clearChat', () => {
+    const clearChat = vscode.commands.registerCommand('pi-agent.clearChat', () => {
         if (ChatPanel.currentView) {
             ChatPanel.currentView.clear();
         } else {
@@ -71,26 +71,26 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // ---- 附加编辑器上下文 ----
-    const attachFile = vscode.commands.registerCommand('pi-assistant.attachFile', async () => {
+    const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', async () => {
         const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
         panel.attachFile();
     });
-    const attachSelection = vscode.commands.registerCommand('pi-assistant.attachSelection', async () => {
+    const attachSelection = vscode.commands.registerCommand('pi-agent.attachSelection', async () => {
         const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
         panel.attachSelection();
     });
 
     // ---- 重启会话（权限模式 / 可执行路径变更后生效）----
-    const restartSession = vscode.commands.registerCommand('pi-assistant.restartSession', async () => {
+    const restartSession = vscode.commands.registerCommand('pi-agent.restartSession', async () => {
         const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
         await panel.restartClient();
     });
 
     // ---- 导出诊断信息 ----
-    const exportDiagnostics = vscode.commands.registerCommand('pi-assistant.exportDiagnostics', async () => {
+    const exportDiagnostics = vscode.commands.registerCommand('pi-agent.exportDiagnostics', async () => {
         const text = buildDiagnostics(context.extensionPath);
         const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
-        const name = 'pi-assistant-diagnostics-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt';
+        const name = 'pi-agent-diagnostics-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.txt';
         const uri = await vscode.window.showSaveDialog({
             defaultUri: folder ? vscode.Uri.joinPath(folder, name) : vscode.Uri.file(name),
             filters: { 'Text': ['txt', 'log'] },
@@ -103,12 +103,12 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 配置变更：日志级别 / 可执行路径 / 权限模式
     const configWatcher = vscode.workspace.onDidChangeConfiguration((e) => {
-        if (e.affectsConfiguration('pi-assistant.diagnostics.level')) {
+        if (e.affectsConfiguration('pi-agent.diagnostics.level')) {
             applyLogLevel();
         }
-        if (e.affectsConfiguration('pi-assistant.pi.executable') ||
-            e.affectsConfiguration('pi-assistant.pi.arguments') ||
-            e.affectsConfiguration('pi-assistant.agent.permissionMode')) {
+        if (e.affectsConfiguration('pi-agent.pi.executable') ||
+            e.affectsConfiguration('pi-agent.pi.arguments') ||
+            e.affectsConfiguration('pi-agent.agent.permissionMode')) {
             void ChatPanel.currentView?.restartClient();
         }
     });
@@ -116,8 +116,8 @@ export function activate(context: vscode.ExtensionContext) {
     // 状态栏按钮
     const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     statusBar.text = '$(sparkle) Pi';
-    statusBar.tooltip = vscode.l10n.t('Open Pi Assistant (local pi agent)');
-    statusBar.command = 'pi-assistant.openChat';
+    statusBar.tooltip = vscode.l10n.t('Open Pi Agent (local pi agent)');
+    statusBar.command = 'pi-agent.openChat';
     statusBar.show();
 
     context.subscriptions.push(
@@ -137,7 +137,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 function applyLogLevel(): void {
-    const level = vscode.workspace.getConfiguration('pi-assistant').get<LogLevel>('diagnostics.level', 'info');
+    const level = vscode.workspace.getConfiguration('pi-agent').get<LogLevel>('diagnostics.level', 'info');
     setLogLevel(level);
 }
 

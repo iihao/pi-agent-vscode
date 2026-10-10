@@ -97,7 +97,7 @@ interface ContextItem {
 
 export class ChatPanel {
     public static currentView: ChatPanel | undefined;
-    public static readonly viewType = 'pi-assistant.chatView';
+    public static readonly viewType = 'pi-agent.chatView';
 
     private readonly _webview: vscode.Webview;
     private readonly _extensionPath: string;
@@ -489,7 +489,7 @@ export class ChatPanel {
     }
 
     private _permissionMode(): string {
-        return vscode.workspace.getConfiguration('pi-assistant').get<string>('agent.permissionMode', 'ask');
+        return vscode.workspace.getConfiguration('pi-agent').get<string>('agent.permissionMode', 'ask');
     }
 
     private async _handleSetPermission(mode: string): Promise<void> {
@@ -497,7 +497,7 @@ export class ChatPanel {
             ? vscode.ConfigurationTarget.Workspace
             : vscode.ConfigurationTarget.Global;
         try {
-            await vscode.workspace.getConfiguration('pi-assistant').update('agent.permissionMode', mode, target);
+            await vscode.workspace.getConfiguration('pi-agent').update('agent.permissionMode', mode, target);
             // 配置变更监听会重启会话使权限模式生效
             this._post({ type: 'permission', permissionMode: mode });
             this._post({ type: 'notice', text: vscode.l10n.t('Permission mode: {0} (restarting session…)', permissionLabel(mode)) });
@@ -772,7 +772,7 @@ export class ChatPanel {
     /** 窗口失焦时，任务完成后弹通知 */
     private _notifySettled(): void {
         if (vscode.window.state.focused) { return; }
-        const enabled = vscode.workspace.getConfiguration('pi-assistant').get<boolean>('notifications.enabled', true);
+        const enabled = vscode.workspace.getConfiguration('pi-agent').get<boolean>('notifications.enabled', true);
         if (!enabled) { return; }
         void vscode.window.showInformationMessage(vscode.l10n.t('Pi finished the current turn'));
     }

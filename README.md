@@ -1,6 +1,6 @@
-# Pi Assistant - VSCode 插件
+# Pi Agent for VS Code
 
-[![CI](https://github.com/iihao/pi-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/iihao/pi-assistant/actions/workflows/ci.yml)
+[![CI](https://github.com/iihao/pi-agent-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/iihao/pi-agent-vscode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.80%2B-007ACC.svg)](https://code.visualstudio.com/)
 
@@ -95,15 +95,15 @@ npm run watch:webview  # esbuild --watch（webview）
 - ⏹️ **中止支持** - 生成中可随时停止
 - 🔐 **零配置凭证** - 复用 pi 的模型与登录状态
 
-## 设置（`pi-assistant.*`）
+## 设置（`pi-agent.*`）
 
 | 设置 | 默认 | 说明 |
 |------|------|------|
-| `pi-assistant.pi.executable` | 空 | 自定义 pi CLI 路径（留空自动探测） |
-| `pi-assistant.pi.arguments` | `[]` | 附加到 pi 的启动参数 |
-| `pi-assistant.agent.permissionMode` | `ask` | `ask` / `autoConfirm`（`--approve`）/ `restricted`（`--exclude-tools bash,edit,write`） |
-| `pi-assistant.notifications.enabled` | `true` | 窗口失焦时的完成通知 |
-| `pi-assistant.diagnostics.level` | `info` | 输出通道日志级别（`error`/`info`/`debug`） |
+| `pi-agent.pi.executable` | 空 | 自定义 pi CLI 路径（留空自动探测） |
+| `pi-agent.pi.arguments` | `[]` | 附加到 pi 的启动参数 |
+| `pi-agent.agent.permissionMode` | `ask` | `ask` / `autoConfirm`（`--approve`）/ `restricted`（`--exclude-tools bash,edit,write`） |
+| `pi-agent.notifications.enabled` | `true` | 窗口失焦时的完成通知 |
+| `pi-agent.diagnostics.level` | `info` | 输出通道日志级别（`error`/`info`/`debug`） |
 
 `agent.permissionMode` 也可在输入框左侧的锁图标 pill 里直接切换（切换会自动重启会话）。
 修改 `pi.executable` / `pi.arguments` 后会自动重启会话生效；也可手动执行命令 **Pi: 重启会话**。
@@ -127,7 +127,7 @@ npm run watch:webview  # esbuild --watch（webview）
 ```bash
 npm install -g @vscode/vsce
 vsce package
-code --install-extension pi-assistant-0.1.0.vsix
+code --install-extension pi-agent-0.1.0.vsix
 ```
 
 ## 贡献
@@ -141,6 +141,6 @@ code --install-extension pi-assistant-0.1.0.vsix
 
 ## 许可证
 
-[MIT](./LICENSE) © Pi Assistant contributors
+[MIT](./LICENSE) © Pi Agent contributors
 
 > 本项目为独立实现，未复制任何 AGPL 项目代码。注意：[yesho/pi-coding-agent-vscode](https://github.com/YeSho-cpp/pi-coding-agent) 等同类插件为 **AGPL-3.0**，请勿从其复制代码。

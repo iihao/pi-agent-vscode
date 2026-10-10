@@ -19,9 +19,9 @@ jobs:
       - run: npm test
       - run: npm run compile
       - name: Package (smoke check)
-        run: npx --yes @vscode/vsce package --out pi-assistant.vsix
+        run: npx --yes @vscode/vsce package --out pi-agent.vsix
       - uses: actions/upload-artifact@v4
         with:
           name: vsix
-          path: pi-assistant.vsix
+          path: pi-agent.vsix
           if-no-files-found: error

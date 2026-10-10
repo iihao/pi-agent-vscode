@@ -1,6 +1,6 @@
 # Third-Party Notices
 
-Pi Assistant bundles or depends on the following third-party software. All are
+Pi Agent bundles or depends on the following third-party software. All are
 distributed under permissive licenses.
 
 ## Bundled into the webview (`media/`)

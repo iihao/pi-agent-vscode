@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Completion notifications and diagnostics export.
 - Localization (English / Simplified Chinese) following the VS Code display
   language.
-- Trusted-workspace gating and a settings namespace (`pi-assistant.*`).
+- Trusted-workspace gating and a settings namespace (`pi-agent.*`).
 
-[Unreleased]: https://github.com/iihao/pi-assistant/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/iihao/pi-assistant/releases/tag/v0.1.0
+[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/iihao/pi-agent-vscode/releases/tag/v0.1.0
