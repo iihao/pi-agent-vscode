@@ -136,6 +136,7 @@ code --install-extension pi-assistant-0.1.0.vsix
 - 安全问题的私密上报方式见 [SECURITY.md](./SECURITY.md)
 - 社区行为准则见 [CODE_OF_CONDUCT.md](./CODE_OF_CONDUCT.md)
 - 变更记录见 [CHANGELOG.md](./CHANGELOG.md)
+- 发版流程见 [RELEASING.md](./RELEASING.md)
 - 第三方依赖许可见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)
 
 ## 许可证
