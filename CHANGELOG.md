@@ -9,6 +9,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [0.1.1] - 2026-10-10
 
+### Added
+
+- **Queue & steer**: send while pi is working — Enter queues the message
+  (follow-up), Ctrl/Cmd+Enter steers the running turn. Queued messages show a
+  badge that clears as the queue drains.
+- **`!` shell commands**: start a message with `!` to run a shell command
+  directly, without an agent turn; the output is shown in chat and recorded in
+  the session. Disabled in read-only mode.
+- New commands: **New Chat** (`Ctrl/Cmd+Shift+N` in the sidebar), **Focus
+  Input**, **Edit Last Message**, **Cycle Model**, **Cycle Thinking Level**,
+  **Compact Session**.
+- Context meter warning when the window is nearly full, with a one-click
+  **Compact** action.
+
 ### Changed
 
 - Richer empty state for new conversations: a proper Pi logo mark, a
@@ -21,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   loading whole session files (up to 8 MB each) into memory, avoiding
   extension-host stalls on large sessions.
 - `ensureView` waits up to ~5s for the webview to be created (was 2s).
+- Attached files/selections are sent as **references** (`@path:12-30`) instead
+  of copied text, so pi reads the current file itself. Context blocks are
+  stripped from displayed history.
 
 ### Fixed
 

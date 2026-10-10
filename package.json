@@ -51,6 +51,12 @@
     "onCommand:pi-agent.refactorCode",
     "onCommand:pi-agent.generateCode",
     "onCommand:pi-agent.clearChat",
+    "onCommand:pi-agent.newChat",
+    "onCommand:pi-agent.focusInput",
+    "onCommand:pi-agent.editLastMessage",
+    "onCommand:pi-agent.cycleModel",
+    "onCommand:pi-agent.cycleThinkingLevel",
+    "onCommand:pi-agent.compact",
     "onCommand:pi-agent.restartSession",
     "onCommand:pi-agent.exportDiagnostics",
     "onCommand:pi-agent.attachFile",
@@ -81,6 +87,31 @@
       {
         "command": "pi-agent.clearChat",
         "title": "%cmd.clearChat%"
+      },
+      {
+        "command": "pi-agent.newChat",
+        "title": "%cmd.newChat%",
+        "icon": "$(add)"
+      },
+      {
+        "command": "pi-agent.focusInput",
+        "title": "%cmd.focusInput%"
+      },
+      {
+        "command": "pi-agent.editLastMessage",
+        "title": "%cmd.editLastMessage%"
+      },
+      {
+        "command": "pi-agent.cycleModel",
+        "title": "%cmd.cycleModel%"
+      },
+      {
+        "command": "pi-agent.cycleThinkingLevel",
+        "title": "%cmd.cycleThinkingLevel%"
+      },
+      {
+        "command": "pi-agent.compact",
+        "title": "%cmd.compact%"
       },
       {
         "command": "pi-agent.attachFile",
@@ -166,6 +197,12 @@
         "command": "pi-agent.openChat",
         "key": "ctrl+alt+p",
         "mac": "alt+cmd+p"
+      },
+      {
+        "command": "pi-agent.newChat",
+        "key": "ctrl+shift+n",
+        "mac": "cmd+shift+n",
+        "when": "sideBarFocus && activeViewlet == pi-agent"
       }
     ],
     "configuration": {

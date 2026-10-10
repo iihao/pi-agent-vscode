@@ -50,6 +50,9 @@ export interface PiAgentEvent {
     maxAttempts?: number;
     errorMessage?: string;
     aborted?: boolean;
+    // queue_update
+    steering?: string[];
+    followUp?: string[];
     // extension_ui_request 字段
     id?: string;
     method?: string;
@@ -123,7 +126,21 @@ export interface PiRpcClient {
     start(): Promise<void>;
     stop(): Promise<void>;
     onEvent(listener: (event: PiAgentEvent) => void): () => void;
-    prompt(message: string): Promise<string>;
+    prompt(message: string, images?: unknown[], streamingBehavior?: 'steer' | 'followUp'): Promise<string>;
+    /** 向运行中的回合插入消息（打断当前回合） */
+    steer?(message: string, images?: unknown[]): Promise<string>;
+    /** 排队一条消息，当前回合结束后处理 */
+    followUp?(message: string, images?: unknown[]): Promise<string>;
+    /** 清空排队的 steer / follow-up 消息 */
+    clearQueue?(): Promise<{ steering: string[]; followUp: string[] }>;
+    /** 切换到下一个模型 */
+    cycleModel?(): Promise<{ model?: { provider?: string; id?: string } } | null>;
+    /** 切换到下一个思考档位 */
+    cycleThinkingLevel?(): Promise<{ level?: string } | null>;
+    /** 压缩会话上下文 */
+    compact?(customInstructions?: string): Promise<{ summary?: string; tokensBefore?: number; estimatedTokensAfter?: number }>;
+    /** 直接执行 shell 命令（不经过模型回合） */
+    bash?(command: string): Promise<{ output: string; exitCode?: number; cancelled: boolean; truncated: boolean; fullOutputPath?: string }>;
     abort(): Promise<void>;
     newSession(parentSession?: string): Promise<{ cancelled: boolean }>;
     switchSession(sessionPath: string): Promise<{ cancelled: boolean }>;

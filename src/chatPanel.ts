@@ -9,6 +9,7 @@ import { getUiStrings } from './views/strings';
 import { PiClientManager, PiStartError, PiNotFoundError } from './sdk/clientManager';
 import { SessionManager } from './sdk/sessionManager';
 import { summarizeToolArgs, formatUsage, validateMessage, extractToolOutput } from './utils/formatters';
+import { buildContextBlock, stripContextBlock } from './utils/context';
 import { PI_INSTALL_HINT, extractMessageText, PiAgentEvent, PiRpcClient, PiModelInfo, PiSessionStats, respondExtensionUI } from './sdk/piTypes';
 import { logInfo, logError } from './utils/logger';
 
@@ -90,8 +91,6 @@ interface ContextItem {
     id: string;
     type: 'file' | 'selection';
     path: string;
-    languageId?: string;
-    code?: string;
     lineRange?: string;
 }
 
@@ -107,6 +106,7 @@ export class ChatPanel {
     private _busy = false;
     private _turnHadText = false;
     private _contexts: ContextItem[] = [];
+    private _contextWarned = false;
     private _lastUsage: { input?: number; output?: number; cacheRead?: number } | undefined;
 
     private constructor(webview: vscode.Webview, extensionPath: string, disposeEvent: vscode.Event<void>) {
@@ -167,6 +167,7 @@ export class ChatPanel {
         this._busy = false;
         this._turnHadText = false;
         this._contexts = [];
+        this._contextWarned = false;
         this._post({ type: 'clear' });
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
@@ -223,13 +224,8 @@ export class ChatPanel {
         const lineRange = sel.start.line === sel.end.line
             ? `${sel.start.line + 1}`
             : `${sel.start.line + 1}-${sel.end.line + 1}`;
-        this._addContext({
-            type: 'selection',
-            path: rel,
-            languageId: editor.document.languageId,
-            code: editor.document.getText(sel),
-            lineRange,
-        });
+        // 只记录引用（路径 + 行号），不复制选区内容；由 pi 自行读取当前内容
+        this._addContext({ type: 'selection', path: rel, lineRange });
     }
 
     private _addContext(item: Omit<ContextItem, 'id'>): void {
@@ -255,22 +251,83 @@ export class ChatPanel {
         });
     }
 
-    /** 把附加的上下文拼接到 prompt 前面 */
+    /** 把附加的上下文以「引用」形式拼到 prompt 前（只给路径/行号，内容由 pi 读取） */
     private _withContext(text: string): string {
-        if (this._contexts.length === 0) { return text; }
-        const parts: string[] = [vscode.l10n.t('[Attached context]')];
-        for (const c of this._contexts) {
-            if (c.type === 'file') {
-                parts.push(vscode.l10n.t('File: {0}', c.path));
-            } else {
-                parts.push(vscode.l10n.t('Selection: {0} line {1}\n\n```{2}\n{3}\n```', c.path, c.lineRange || '', c.languageId || '', c.code || ''));
-            }
-        }
-        return parts.join('\n') + '\n\n' + text;
+        return buildContextBlock(this._contexts, text);
+    }
+
+    private _clearContexts(): void {
+        if (this._contexts.length) { this._contexts = []; this._postContexts(); }
     }
 
     public async askQuestion(question: string) {
         await this._handleUserMessage(question);
+    }
+
+    // ---------- 命令入口（供 VS Code 命令调用） ----------
+
+    public async newSession(): Promise<void> { await this._handleNewSession(); }
+    public focusInput(): void { this._post({ type: 'focusInput' }); }
+    public editLastMessage(): void { this._post({ type: 'editLast' }); }
+
+    public async cycleModel(): Promise<void> {
+        const client = this._clientManager.client;
+        if (!client || typeof client.cycleModel !== 'function') {
+            this._post({ type: 'notice', text: vscode.l10n.t('Not connected') });
+            return;
+        }
+        try {
+            const res = await client.cycleModel();
+            if (res && res.model) { this._post({ type: 'notice', text: vscode.l10n.t('Model switched: {0}', res.model.id || '') }); }
+            await this._loadModels(client);
+        } catch (err) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Failed to switch model: {0}', (err as Error).message) });
+        }
+    }
+
+    public async cycleThinkingLevel(): Promise<void> {
+        const client = this._clientManager.client;
+        if (!client || typeof client.cycleThinkingLevel !== 'function') {
+            this._post({ type: 'notice', text: vscode.l10n.t('Not connected') });
+            return;
+        }
+        try {
+            const res = await client.cycleThinkingLevel();
+            if (res && res.level) { this._post({ type: 'notice', text: vscode.l10n.t('Thinking level: {0}', res.level) }); }
+            await this._loadModels(client);
+        } catch (err) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Failed to change thinking level: {0}', (err as Error).message) });
+        }
+    }
+
+    public async compact(): Promise<void> {
+        const client = this._clientManager.client;
+        if (!client || typeof client.compact !== 'function') {
+            this._post({ type: 'notice', text: vscode.l10n.t('Not connected') });
+            return;
+        }
+        if (this._busy) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Pi is working; wait for it to finish before compacting') });
+            return;
+        }
+        const confirmed = await vscode.window.showWarningMessage(
+            vscode.l10n.t('Compact this session? Older turns are summarized and cannot be undone.'),
+            { modal: true },
+            vscode.l10n.t('Compact')
+        );
+        if (confirmed !== vscode.l10n.t('Compact')) { return; }
+        try {
+            this._post({ type: 'notice', text: vscode.l10n.t('Compacting session…') });
+            const res = await client.compact();
+            this._contextWarned = false;
+            this._post({
+                type: 'notice',
+                text: vscode.l10n.t('Session compacted ({0} → {1} tokens)', res.tokensBefore ?? '?', res.estimatedTokensAfter ?? '?'),
+            });
+            await this._loadStats(client);
+        } catch (err) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Compaction failed: {0}', (err as Error).message) });
+        }
     }
 
     // ---------- Webview 消息处理 ----------
@@ -284,11 +341,16 @@ export class ChatPanel {
                         this._post({ type: 'notice', text: validation.error || vscode.l10n.t('Invalid message') });
                         return;
                     }
-                    await this._handleUserMessage(message.text);
+                    await this._handleUserMessage(message.text, message.mode);
                 }
+                break;
+            case 'runBash':
+                if (message.text) { await this._runBash(message.text, message.id); }
                 break;
             case 'abort':
                 await this._clientManager.abort();
+                // 停止后丢弃等待中的 steer / follow-up，避免它们意外继续
+                await this._clearQueue();
                 break;
             case 'setModel':
                 if (message.provider && message.modelId) {
@@ -419,7 +481,8 @@ export class ChatPanel {
             const items: Array<{ role: string; text: string }> = [];
             for (const m of messages) {
                 const text = extractMessageText(m);
-                if (text) { items.push({ role: m.role ?? 'assistant', text }); }
+                // 历史里用户消息带 context 块，展示时剥离
+                if (text) { items.push({ role: m.role ?? 'assistant', text: stripContextBlock(text) }); }
             }
             const recent = items.slice(-30);
             if (recent.length > 0) {
@@ -449,7 +512,25 @@ export class ChatPanel {
                     autoCompact: Boolean(state.autoCompactionEnabled),
                 },
             });
+            this._maybeWarnContext(stats.contextUsage?.percent ?? null);
         } catch (err) { logError(`_loadStats failed: ${(err as Error).message}`); }
+    }
+
+    /** 上下文接近满时提示压缩（阈值 85%，回落到 75% 以下后重置） */
+    private _maybeWarnContext(percent: number | null | undefined): void {
+        const threshold = 85;
+        if (percent === null || percent === undefined) { return; }
+        if (percent >= threshold && !this._contextWarned) {
+            this._contextWarned = true;
+            void vscode.window.showWarningMessage(
+                vscode.l10n.t('Context is {0}% full. Compact the session to free space.', Math.round(percent)),
+                vscode.l10n.t('Compact')
+            ).then((action) => {
+                if (action === vscode.l10n.t('Compact')) { void this.compact(); }
+            });
+        } else if (percent < threshold - 10) {
+            this._contextWarned = false;
+        }
     }
 
     private async _loadModels(client: PiRpcClient): Promise<void> {
@@ -623,6 +704,7 @@ export class ChatPanel {
             this._post({ type: 'clear' });
             this._busy = false;
             this._turnHadText = false;
+            this._contextWarned = false;
             this._post({ type: 'setBusy', busy: false });
             this._postContexts();
             this._postSessionList();
@@ -674,6 +756,7 @@ export class ChatPanel {
             this._post({ type: 'clear' });
             this._busy = false;
             this._turnHadText = false;
+            this._contextWarned = false;
             this._post({ type: 'setBusy', busy: false });
             // 恢复该会话的历史记录
             await this._restoreHistory(client);
@@ -765,6 +848,14 @@ export class ChatPanel {
                 });
                 break;
 
+            case 'queue_update':
+                this._post({
+                    type: 'queue',
+                    steering: event.steering ? [...event.steering] : [],
+                    followUp: event.followUp ? [...event.followUp] : [],
+                });
+                break;
+
             case 'agent_settled': {
                 this._busy = false;
                 this._turnHadText = false;
@@ -794,11 +885,48 @@ export class ChatPanel {
         void vscode.window.showInformationMessage(vscode.l10n.t('Pi finished the current turn'));
     }
 
+    /** 清空等待中的 steer / follow-up 队列 */
+    private async _clearQueue(): Promise<void> {
+        const client = this._clientManager.client;
+        if (!client || typeof client.clearQueue !== 'function') { return; }
+        try { await client.clearQueue(); } catch (err) { logError(`clearQueue failed: ${(err as Error).message}`); }
+    }
+
+    /** 直接执行 shell 命令（`!` 前缀），不经过模型回合 */
+    private async _runBash(command: string, id?: string): Promise<void> {
+        if (this._permissionMode() === 'restricted') {
+            this._post({ type: 'bashResult', id, command, isError: true, output: vscode.l10n.t('Read-only mode: shell commands are disabled') });
+            return;
+        }
+        const client = this._clientManager.client;
+        if (!client || typeof client.bash !== 'function') {
+            this._post({ type: 'bashResult', id, command, isError: true, output: vscode.l10n.t('Not connected') });
+            return;
+        }
+        try {
+            const res = await client.bash(command);
+            this._post({
+                type: 'bashResult',
+                id,
+                command,
+                output: res.output,
+                exitCode: res.exitCode,
+                cancelled: res.cancelled,
+                truncated: res.truncated,
+                isError: !res.cancelled && res.exitCode !== undefined && res.exitCode !== 0,
+            });
+            const c2 = this._clientManager.client;
+            if (c2) { void this._loadStats(c2); }
+        } catch (err) {
+            this._post({ type: 'bashResult', id, command, isError: true, output: (err as Error).message });
+        }
+    }
+
     // ---------- 用户消息 ----------
 
-    private async _handleUserMessage(userText: string) {
+    private async _handleUserMessage(userText: string, mode?: string) {
         if (this._busy) {
-            vscode.window.showWarningMessage(vscode.l10n.t('Pi is working; wait for it to finish or click Stop'));
+            await this._enqueueWhileBusy(userText, mode);
             return;
         }
 
@@ -809,7 +937,7 @@ export class ChatPanel {
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
             const disposition = await client.prompt(this._withContext(userText));
-            if (this._contexts.length) { this._contexts = []; this._postContexts(); }
+            this._clearContexts();
             if (disposition === 'handled') {
                 // pi 未启动新一轮（如扩展命令已处理），立即结束 busy
                 this._busy = false;
@@ -845,6 +973,27 @@ export class ChatPanel {
                     });
                 }
             });
+        }
+    }
+
+    /** 忙碌时：steer 立刻插入当前回合；否则排队为 follow-up */
+    private async _enqueueWhileBusy(userText: string, mode?: string): Promise<void> {
+        try {
+            const client = await this._clientManager.ensureConnected(this._extensionPath);
+            const message = this._withContext(userText);
+            const steering = mode === 'steer';
+            if (steering && typeof client.steer === 'function') {
+                await client.steer(message);
+            } else if (typeof client.followUp === 'function') {
+                await client.followUp(message);
+            } else {
+                // 客户端不支持 steer/followUp 时回退到带 streamingBehavior 的 prompt
+                await client.prompt(message, undefined, steering ? 'steer' : 'followUp');
+            }
+            this._clearContexts();
+            this._post({ type: 'addUserMessage', text: userText, pending: steering ? 'steering' : 'queued' });
+        } catch (err) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Failed to queue message: {0}', (err as Error).message) });
         }
     }
 

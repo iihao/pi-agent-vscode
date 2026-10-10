@@ -358,12 +358,19 @@ const vscode = acquireVsCodeApi();
         updateMessageCount();
     }
 
-    function addMessage(role, markdown, isError) {
+    function addMessage(role, markdown, isError, pending) {
         welcome.style.display = 'none';
         const el = document.createElement('div');
         el.className = 'message ' + (isError ? 'error' : role);
+        if (pending) {
+            el.dataset.pending = pending;
+            el.dataset.pendingText = markdown || '';
+        }
         const label = role === 'user' ? S.you : 'Pi';
         const time = formatTime();
+        const badge = pending
+            ? '<span class="pending-badge ' + pending + '">' + (pending === 'steering' ? S.steering : S.queued) + '</span>'
+            : '';
         var actions = '';
         if (!isError) {
             actions = '<div class="message-actions">' +
@@ -379,7 +386,7 @@ const vscode = acquireVsCodeApi();
                 '</button>' +
                 '</div>';
         }
-        el.innerHTML = '<div class="message-header"><span class="role-label">' + label + '</span><span class="message-time">' + time + '</span>' + actions + '</div><div class="message-body"></div>';
+        el.innerHTML = '<div class="message-header"><span class="role-label">' + label + '</span>' + badge + '<span class="message-time">' + time + '</span>' + actions + '</div><div class="message-body"></div>';
         const body = el.querySelector('.message-body');
         body.innerHTML = renderMarkdown(markdown);
         chat.appendChild(el);
@@ -538,6 +545,7 @@ const vscode = acquireVsCodeApi();
 
     function setBusy(value) {
         busy = value;
+        input.placeholder = value ? S.inputBusyPlaceholder : S.inputPlaceholder;
         if (value) {
             sendBtn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>';
             sendBtn.classList.add('stopping');
@@ -548,6 +556,77 @@ const vscode = acquireVsCodeApi();
             sendBtn.title = S.sendTitle;
             hideThinking();
         }
+    }
+
+    // ========== `!` shell 命令 ==========
+
+    function bashId() {
+        return 'bash-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
+    }
+
+    function addBashRunning(id, command) {
+        welcome.style.display = 'none';
+        const el = document.createElement('div');
+        el.className = 'activity bash running collapsed';
+        el.dataset.bashId = id;
+        const head = document.createElement('div');
+        head.className = 'activity-head';
+        head.innerHTML =
+            '<span class="activity-caret">▾</span>' +
+            '<span class="activity-name">$</span>' +
+            '<span class="activity-detail">' + escapeHtml(command) + '</span>' +
+            '<span class="activity-status"><span class="activity-spinner"></span></span>';
+        const body = document.createElement('div');
+        body.className = 'activity-body';
+        head.addEventListener('click', function () { el.classList.toggle('collapsed'); });
+        el.appendChild(head);
+        el.appendChild(body);
+        chat.appendChild(el);
+        scrollToBottom();
+    }
+
+    function finishBash(m) {
+        const el = chat.querySelector('.activity.bash[data-bash-id="' + m.id + '"]');
+        if (!el) { return; }
+        el.classList.remove('running');
+        el.classList.add(m.isError ? 'failed' : 'done');
+        const status = el.querySelector('.activity-status');
+        if (status) {
+            const mark = m.cancelled ? '⏹' : (m.isError ? '✗' : '✓');
+            const code = (m.exitCode !== undefined && !m.cancelled) ? '  exit ' + m.exitCode : '';
+            status.textContent = mark + code;
+        }
+        const body = el.querySelector('.activity-body');
+        const pre = document.createElement('pre');
+        pre.className = 'activity-output' + (m.isError ? ' error' : '');
+        pre.textContent = m.output || '';
+        body.appendChild(pre);
+        if (m.truncated) {
+            const note = document.createElement('div');
+            note.className = 'status-line notice';
+            note.textContent = S.bashTruncated;
+            body.appendChild(note);
+        }
+        scrollToBottom();
+    }
+
+    // ========== 排队 / steer 状态 ==========
+
+    function clearPending(el) {
+        el.removeAttribute('data-pending');
+        el.removeAttribute('data-pending-text');
+        const badge = el.querySelector('.pending-badge');
+        if (badge) { badge.remove(); }
+    }
+
+    function updateQueueBadges(steering, followUp) {
+        const all = (steering || []).concat(followUp || []);
+        chat.querySelectorAll('.message.user[data-pending]').forEach(function (el) {
+            const raw = el.dataset.pendingText || '';
+            // 队列里的文本带 context 块，用包含匹配
+            const stillQueued = all.some(function (q) { return q === raw || q.indexOf(raw) !== -1; });
+            if (!stillQueued) { clearPending(el); }
+        });
     }
 
     // ========== 搜索功能 ==========
@@ -658,16 +737,29 @@ const vscode = acquireVsCodeApi();
         input.style.height = newHeight + 'px';
     }
 
-    function send() {
+    function send(mode) {
         const text = input.value.trim();
-        if (!text || busy) return;
+        if (!text) return;
         // 保存到历史
         if (messageHistory.length === 0 || messageHistory[messageHistory.length - 1] !== text) {
             messageHistory.push(text);
             if (messageHistory.length > 50) messageHistory.shift();
         }
         historyIndex = -1;
-        vscode.postMessage({ type: 'sendMessage', text: text });
+        // `!` 前缀：直接执行 shell 命令，不经过模型回合
+        if (text.charAt(0) === '!') {
+            const command = text.slice(1).trim();
+            if (command) {
+                const id = bashId();
+                addBashRunning(id, command);
+                vscode.postMessage({ type: 'runBash', text: command, id: id });
+            }
+            input.value = '';
+            autoResizeInput();
+            return;
+        }
+        // 忙碌时：默认排队（follow-up），带修饰键则 steer 插入当前回合
+        vscode.postMessage({ type: 'sendMessage', text: text, mode: busy ? (mode || 'queue') : undefined });
         input.value = '';
         autoResizeInput();
     }
@@ -728,7 +820,7 @@ const vscode = acquireVsCodeApi();
     input.addEventListener('keydown', function (e) {
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            if (!busy) send();
+            send(e.ctrlKey || e.metaKey ? 'steer' : undefined);
         } else if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             searchBar.classList.add('visible');
@@ -742,7 +834,9 @@ const vscode = acquireVsCodeApi();
         }
     });
     document.querySelectorAll('.quick-action').forEach(function (btn) {
-        btn.addEventListener('click', function () { if (!busy) vscode.postMessage({ type: 'sendMessage', text: btn.dataset.q }); });
+        btn.addEventListener('click', function () {
+            vscode.postMessage({ type: 'sendMessage', text: btn.dataset.q, mode: busy ? 'queue' : undefined });
+        });
     });
     modelBtn.addEventListener('click', function (e) { e.stopPropagation(); togglePopover(modelPanel); });
     thinkingBtn.addEventListener('click', function (e) { e.stopPropagation(); togglePopover(thinkingPanel); });
@@ -826,7 +920,7 @@ const vscode = acquireVsCodeApi();
     window.addEventListener('message', function (e) {
         const m = e.data;
         switch (m.type) {
-            case 'addUserMessage': addMessage('user', m.text); break;
+            case 'addUserMessage': addMessage('user', m.text, false, m.pending); break;
             case 'history':
                 // 空会话保留欢迎/引导页，只有真的有历史消息时才隐藏
                 if (m.messages && m.messages.length) {
@@ -863,6 +957,15 @@ const vscode = acquireVsCodeApi();
                 scrollToBottom();
                 break;
             case 'notice': addNotice(m.text); break;
+            case 'focusInput': input.focus(); break;
+            case 'editLast': {
+                const users = chat.querySelectorAll('.message.user');
+                const last = users[users.length - 1];
+                if (last) { editMessage(getMessageText(last.querySelector('.message-body'))); }
+                break;
+            }
+            case 'queue': updateQueueBadges(m.steering, m.followUp); break;
+            case 'bashResult': finishBash(m); break;
             case 'error':
                 hideThinking();
                 if (currentBody) { currentBody.classList.remove('stream-cursor'); currentBody = null; currentBuffer = ''; }

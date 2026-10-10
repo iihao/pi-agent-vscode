@@ -39,6 +39,10 @@ export interface UiStrings {
     kbdSearch: string;
     kbdHistory: string;
     inputPlaceholder: string;
+    inputBusyPlaceholder: string;
+    queued: string;
+    steering: string;
+    bashTruncated: string;
     attachTitle: string;
     modelTitle: string;
     notConnected: string;
@@ -107,7 +111,11 @@ export function getUiStrings(): UiStrings {
         kbdNewline: t('newline'),
         kbdSearch: t('search'),
         kbdHistory: t('history'),
-        inputPlaceholder: t('Describe a task for pi…'),
+        inputPlaceholder: t('Describe a task for pi… (! for a shell command)'),
+        inputBusyPlaceholder: t('Pi is working — Enter to queue, Ctrl/Cmd+Enter to steer'),
+        queued: t('Queued'),
+        steering: t('Steering'),
+        bashTruncated: t('Output truncated'),
         attachTitle: t('Attach current file/selection'),
         modelTitle: t('Select model'),
         notConnected: t('Not connected'),

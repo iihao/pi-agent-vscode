@@ -70,6 +70,42 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
+    // ---- 新建对话 ----
+    const newChat = vscode.commands.registerCommand('pi-agent.newChat', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        await panel.newSession();
+    });
+
+    // ---- 聚焦输入框 ----
+    const focusInput = vscode.commands.registerCommand('pi-agent.focusInput', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        panel.focusInput();
+    });
+
+    // ---- 编辑上一条消息 ----
+    const editLastMessage = vscode.commands.registerCommand('pi-agent.editLastMessage', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        panel.editLastMessage();
+    });
+
+    // ---- 切换模型 ----
+    const cycleModel = vscode.commands.registerCommand('pi-agent.cycleModel', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        await panel.cycleModel();
+    });
+
+    // ---- 切换思考档位 ----
+    const cycleThinkingLevel = vscode.commands.registerCommand('pi-agent.cycleThinkingLevel', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        await panel.cycleThinkingLevel();
+    });
+
+    // ---- 压缩上下文 ----
+    const compact = vscode.commands.registerCommand('pi-agent.compact', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        await panel.compact();
+    });
+
     // ---- 附加编辑器上下文 ----
     const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', async () => {
         const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
@@ -126,6 +162,12 @@ export function activate(context: vscode.ExtensionContext) {
         refactorCode,
         generateCode,
         clearChat,
+        newChat,
+        focusInput,
+        editLastMessage,
+        cycleModel,
+        cycleThinkingLevel,
+        compact,
         attachFile,
         attachSelection,
         restartSession,

@@ -346,6 +346,18 @@
     }
     .message.user .role-label { color: var(--cx-accent); }
     .message-time { font-family: var(--cx-mono); font-size: 10px; color: var(--cx-muted); opacity: .6; }
+    .pending-badge {
+        font-family: var(--cx-mono);
+        font-size: 9.5px;
+        letter-spacing: .5px;
+        text-transform: uppercase;
+        padding: 1px 6px;
+        border-radius: 999px;
+        color: var(--cx-muted);
+        border: 1px solid var(--cx-border-strong);
+        background: var(--cx-panel);
+    }
+    .pending-badge.steering { color: var(--cx-accent); border-color: var(--cx-accent); background: var(--cx-accent-soft); }
     .message-actions { display: flex; gap: 2px; margin-left: auto; opacity: 0; transition: opacity .15s; }
     .message:hover .message-actions { opacity: 1; }
     .msg-action-btn {

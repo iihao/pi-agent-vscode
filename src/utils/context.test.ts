@@ -1,0 +1,43 @@
+import { describe, it, expect } from 'vitest';
+import { buildContextBlock, contextRef, stripContextBlock } from './context';
+
+describe('contextRef', () => {
+    it('renders a file as @path', () => {
+        expect(contextRef({ type: 'file', path: 'src/cart.ts' })).toBe('@src/cart.ts');
+    });
+
+    it('renders a selection with its line range', () => {
+        expect(contextRef({ type: 'selection', path: 'src/cart.ts', lineRange: '12-30' })).toBe('@src/cart.ts:12-30');
+    });
+
+    it('falls back to a plain path when a selection has no range', () => {
+        expect(contextRef({ type: 'selection', path: 'src/cart.ts' })).toBe('@src/cart.ts');
+    });
+});
+
+describe('buildContextBlock', () => {
+    it('returns the text unchanged when there is no context', () => {
+        expect(buildContextBlock([], 'hello')).toBe('hello');
+    });
+
+    it('wraps references in a marked block before the text', () => {
+        const out = buildContextBlock(
+            [{ type: 'file', path: 'src/a.ts' }, { type: 'selection', path: 'src/b.ts', lineRange: '3-9' }],
+            'Why?'
+        );
+        expect(out).toContain('--- pi-extension-context:start ---');
+        expect(out).toContain('<file-context>\n@src/a.ts\n@src/b.ts:3-9\n</file-context>');
+        expect(out.endsWith('--- pi-extension-context:end ---\n\nWhy?')).toBe(true);
+    });
+});
+
+describe('stripContextBlock', () => {
+    it('removes the context block and keeps the user text', () => {
+        const wrapped = buildContextBlock([{ type: 'file', path: 'src/a.ts' }], 'Why does it fail?');
+        expect(stripContextBlock(wrapped)).toBe('Why does it fail?');
+    });
+
+    it('leaves plain text untouched', () => {
+        expect(stripContextBlock('plain')).toBe('plain');
+    });
+});
