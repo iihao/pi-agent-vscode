@@ -9,6 +9,8 @@ const t = vscode.l10n.t;
 export interface UiStrings {
     [key: string]: unknown;
     connStatus: string;
+    outlineTitle: string;
+    noMessages: string;
     searchTitle: string;
     exportTitle: string;
     newChatTitle: string;
@@ -38,6 +40,7 @@ export interface UiStrings {
     kbdNewline: string;
     kbdSearch: string;
     kbdHistory: string;
+    kbdJump: string;
     inputPlaceholder: string;
     inputBusyPlaceholder: string;
     queued: string;
@@ -82,6 +85,8 @@ export interface UiStrings {
 export function getUiStrings(): UiStrings {
     return {
         connStatus: t('Connection status'),
+        outlineTitle: t('Jump to a question'),
+        noMessages: t('No questions yet'),
         searchTitle: t('Search messages (Ctrl+F)'),
         exportTitle: t('Export conversation as Markdown'),
         newChatTitle: t('New chat'),
@@ -111,6 +116,7 @@ export function getUiStrings(): UiStrings {
         kbdNewline: t('newline'),
         kbdSearch: t('search'),
         kbdHistory: t('history'),
+        kbdJump: t('jump questions'),
         inputPlaceholder: t('Describe a task for pi… (! for a shell command)'),
         inputBusyPlaceholder: t('Pi is working — Enter to queue, Ctrl/Cmd+Enter to steer'),
         queued: t('Queued'),

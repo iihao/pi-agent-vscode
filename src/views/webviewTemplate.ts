@@ -44,6 +44,9 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
             <span class="ctx-stats hidden" id="ctxStats"></span>
         </div>
         <div class="header-actions">
+            <button id="outlineBtn" class="icon-btn" title="${S.outlineTitle}" aria-label="${S.outlineTitle}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+            </button>
             <button id="searchBtn" class="icon-btn" title="${S.searchTitle}" aria-label="${S.searchTitle}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
             </button>
@@ -54,6 +57,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"></path><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
             </button>
         </div>
+        <div class="popover outline-panel hidden" id="outlinePanel"></div>
     </header>
 
     <div class="session-bar" id="sessionBar">
@@ -75,6 +79,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
         <button id="searchClose" class="search-btn" title="${S.close}">✕</button>
     </div>
 
+    <div class="chat-wrap">
     <div class="chat-container" id="chat">
         <div class="welcome" id="welcome">
             <div class="welcome-logo" aria-hidden="true">
@@ -117,8 +122,11 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                 <div class="shortcut-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> ${S.kbdNewline}</div>
                 <div class="shortcut-hint"><kbd>Ctrl</kbd>+<kbd>F</kbd> ${S.kbdSearch}</div>
                 <div class="shortcut-hint"><kbd>↑</kbd><kbd>↓</kbd> ${S.kbdHistory}</div>
+                <div class="shortcut-hint"><kbd>Alt</kbd><kbd>↑</kbd><kbd>↓</kbd> ${S.kbdJump}</div>
             </div>
         </div>
+        </div>
+        <div class="msg-rail hidden" id="msgRail"></div>
     </div>
 
     <div class="input-area">

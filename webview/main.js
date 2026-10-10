@@ -79,6 +79,9 @@ const vscode = acquireVsCodeApi();
     const searchBtn = document.getElementById('searchBtn');
     const exportBtn = document.getElementById('exportBtn');
     const newChatBtn = document.getElementById('newChatBtn');
+    const outlineBtn = document.getElementById('outlineBtn');
+    const outlinePanel = document.getElementById('outlinePanel');
+    const msgRail = document.getElementById('msgRail');
     const searchBar = document.getElementById('searchBar');
     const searchInput = document.getElementById('searchInput');
     const searchResults = document.getElementById('searchResults');
@@ -124,6 +127,7 @@ const vscode = acquireVsCodeApi();
         thinkingPanel.classList.add('hidden');
         sessionPanel.classList.add('hidden');
         permPanel.classList.add('hidden');
+        outlinePanel.classList.add('hidden');
     }
 
     function togglePopover(panel) {
@@ -356,6 +360,83 @@ const vscode = acquireVsCodeApi();
     function deleteMessage(msgEl) {
         msgEl.remove();
         updateMessageCount();
+        renderRail();
+    }
+
+    // ========== 问题导航（右侧刻度 + 头部列表） ==========
+
+    function getUserMessageEls() {
+        return Array.prototype.slice.call(chat.querySelectorAll('.message.user'));
+    }
+
+    function messagePreview(el) {
+        const body = el.querySelector('.message-body');
+        return (getMessageText(body) || '').replace(/\s+/g, ' ').trim();
+    }
+
+    function renderRail() {
+        const users = getUserMessageEls();
+        if (users.length < 2) { msgRail.classList.add('hidden'); msgRail.innerHTML = ''; return; }
+        msgRail.classList.remove('hidden');
+        let html = '';
+        users.forEach(function (el, i) {
+            const preview = escapeHtml(messagePreview(el).slice(0, 140));
+            html += '<button class="rail-dot" data-i="' + i + '" title="' + preview + '" aria-label="' + preview + '"></button>';
+        });
+        msgRail.innerHTML = html;
+        updateRailActive();
+    }
+
+    function currentActiveIndex() {
+        const users = getUserMessageEls();
+        if (!users.length) { return -1; }
+        const anchor = chat.getBoundingClientRect().top + 40;
+        let active = 0;
+        for (let i = 0; i < users.length; i++) {
+            if (users[i].getBoundingClientRect().top <= anchor) { active = i; }
+            else { break; }
+        }
+        return active;
+    }
+
+    function updateRailActive() {
+        const active = currentActiveIndex();
+        msgRail.querySelectorAll('.rail-dot').forEach(function (d, i) {
+            d.classList.toggle('active', i === active);
+        });
+    }
+
+    function jumpToUserMessage(i) {
+        const users = getUserMessageEls();
+        if (i < 0 || i >= users.length) { return; }
+        const el = users[i];
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        el.classList.add('flash');
+        setTimeout(function () { el.classList.remove('flash'); }, 1200);
+    }
+
+    function navigateUserMessage(dir) {
+        const users = getUserMessageEls();
+        if (!users.length) { return; }
+        const cur = currentActiveIndex();
+        const next = Math.min(users.length - 1, Math.max(0, cur + dir));
+        if (next !== cur) { jumpToUserMessage(next); }
+    }
+
+    function renderOutline() {
+        const users = getUserMessageEls();
+        if (!users.length) {
+            outlinePanel.innerHTML = '<div class="popover-empty">' + S.noMessages + '</div>';
+            return;
+        }
+        let html = '';
+        users.forEach(function (el, i) {
+            const p = escapeHtml(messagePreview(el).slice(0, 200));
+            html += '<button class="popover-item outline-item" data-i="' + i + '">' +
+                '<span class="outline-index">' + (i + 1) + '</span>' +
+                '<span class="outline-text">' + p + '</span></button>';
+        });
+        outlinePanel.innerHTML = html;
     }
 
     function addMessage(role, markdown, isError, pending) {
@@ -392,6 +473,7 @@ const vscode = acquireVsCodeApi();
         chat.appendChild(el);
         scrollToBottom();
         updateMessageCount();
+        renderRail();
         return body;
     }
 
@@ -781,6 +863,29 @@ const vscode = acquireVsCodeApi();
         input.selectionStart = input.selectionEnd = input.value.length;
     }
 
+    // 问题导航事件
+    outlineBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const willShow = outlinePanel.classList.contains('hidden');
+        closePopovers();
+        if (willShow) { renderOutline(); outlinePanel.classList.remove('hidden'); }
+    });
+    outlinePanel.addEventListener('click', function (e) {
+        const it = e.target.closest('.outline-item');
+        if (!it) { return; }
+        jumpToUserMessage(Number(it.dataset.i));
+        outlinePanel.classList.add('hidden');
+    });
+    msgRail.addEventListener('click', function (e) {
+        const dot = e.target.closest('.rail-dot');
+        if (dot) { jumpToUserMessage(Number(dot.dataset.i)); }
+    });
+    let railRaf = 0;
+    chat.addEventListener('scroll', function () {
+        if (railRaf) { return; }
+        railRaf = requestAnimationFrame(function () { railRaf = 0; updateRailActive(); });
+    });
+
     // 工具栏事件
     searchBtn.addEventListener('click', function () {
         searchBar.classList.toggle('visible');
@@ -818,6 +923,8 @@ const vscode = acquireVsCodeApi();
     sendBtn.addEventListener('click', function () { if (busy) { vscode.postMessage({ type: 'abort' }); } else { send(); } });
     input.addEventListener('input', autoResizeInput);
     input.addEventListener('keydown', function (e) {
+        // Alt+↑/↓ 交给文档级处理器做问题跳转，不当作输入历史
+        if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { return; }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             send(e.ctrlKey || e.metaKey ? 'steer' : undefined);
@@ -860,7 +967,14 @@ const vscode = acquireVsCodeApi();
         closePopovers();
     });
     document.addEventListener('click', function () { closePopovers(); });
-    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { closePopovers(); } });
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') { closePopovers(); return; }
+        // Alt+↑/↓：在用户提问之间快速跳转
+        if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+            e.preventDefault();
+            navigateUserMessage(e.key === 'ArrowDown' ? 1 : -1);
+        }
+    });
     attachBtn.addEventListener('click', function (e) { e.stopPropagation(); vscode.postMessage({ type: 'attachActive' }); });
     chipRow.addEventListener('click', function (e) {
         const btn = e.target.closest('.chip-remove');
@@ -1034,6 +1148,7 @@ const vscode = acquireVsCodeApi();
                 ctxStats.classList.add('hidden');
                 clearSearch();
                 updateMessageCount();
+                renderRail();
                 scrollToBottom();
                 break;
         }
