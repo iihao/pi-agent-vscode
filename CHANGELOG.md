@@ -17,9 +17,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Renamed the Marketplace extension to `pi-agent-assistant`
   (`pi-agent-vscode` was already taken; extension id is now
   `iihao.pi-agent-assistant`).
+- Session metadata is now read with a bounded head/tail scan instead of
+  loading whole session files (up to 8 MB each) into memory, avoiding
+  extension-host stalls on large sessions.
+- `ensureView` waits up to ~5s for the webview to be created (was 2s).
 
 ### Fixed
 
+- Keep the welcome/guide screen visible after creating a new session or
+  switching to an empty one — the "New session created" notice no longer
+  hides it, leaving a blank panel.
+- Notices in general no longer dismiss the empty state.
+- Report when applying generated code fails (`applyEdit` returned false).
+- Log when a response to a pi `extension_ui_request` could not be written,
+  so a stalled prompt is diagnosable.
+- The model picker no longer stays on "Connecting…" when the model list
+  fails to load.
+- Show a notice when a prompt is queued behind the current turn.
+- Added `pi-agent.clearChat` to `activationEvents` for consistency.
 - Dropped dev/CI files (`.github/`, `.nvmrc`, `.editorconfig`, `RELEASING.md`,
   `.DS_Store`) from the packaged VSIX.
 

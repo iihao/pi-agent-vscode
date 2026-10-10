@@ -50,6 +50,7 @@
     "onCommand:pi-agent.explainCode",
     "onCommand:pi-agent.refactorCode",
     "onCommand:pi-agent.generateCode",
+    "onCommand:pi-agent.clearChat",
     "onCommand:pi-agent.restartSession",
     "onCommand:pi-agent.exportDiagnostics",
     "onCommand:pi-agent.attachFile",

@@ -7,6 +7,7 @@ import type { PiRpcClient } from './piTypes';
 
 const ID_A = '01a0f11c-aaaa-72ae-bab0-000000000001';
 const ID_B = '01a0f11c-bbbb-72ae-bab0-000000000002';
+const ID_C = '01a0f11c-cccc-72ae-bab0-000000000003';
 
 let dir: string;
 let fileA: string;
@@ -60,6 +61,27 @@ describe('SessionManager.loadSessions', () => {
         expect(ids).toEqual([ID_A, ID_B].sort());
         expect(sm.sessions.find((s) => s.id === ID_B)?.name).toBe('My Session');
         expect(sm.currentSessionId).toBe(ID_A);
+    });
+
+    it('reads the header id and last name from a large session file (bounded read)', async () => {
+        // ~1MB of filler, then session_info, then ~400KB more filler:
+        // the name sits beyond the first 256KB tail chunk, so the backward scan must widen.
+        const big = path.join(dir, `2026-10-10T03-00-00-000Z_${ID_C}.jsonl`);
+        const header = JSON.stringify({ type: 'session', version: 3, id: ID_C });
+        const filler = JSON.stringify({ type: 'message', role: 'user', content: 'x'.repeat(500) });
+        const lines: string[] = [header];
+        for (let i = 0; i < 2000; i++) { lines.push(filler); }
+        lines.push(JSON.stringify({ type: 'session_info', name: 'Deep Name' }));
+        for (let i = 0; i < 800; i++) { lines.push(filler); }
+        fs.writeFileSync(big, lines.join('\n') + '\n');
+
+        const { client } = makeClient(fileA, ID_A);
+        const sm = new SessionManager();
+        await sm.loadSessions(client);
+
+        const s = sm.sessions.find((x) => x.id === ID_C);
+        expect(s).toBeDefined();
+        expect(s?.name).toBe('Deep Name');
     });
 });
 

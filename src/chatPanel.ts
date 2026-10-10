@@ -152,7 +152,8 @@ export class ChatPanel {
 
     public static async ensureView(): Promise<ChatPanel> {
         await vscode.commands.executeCommand(`${ChatPanel.viewType}.focus`);
-        for (let i = 0; i < 40; i++) {
+        // 最多等待约 5s：webview 在慢机器/高负载下创建可能超过 2s
+        for (let i = 0; i < 100; i++) {
             if (ChatPanel.currentView) { return ChatPanel.currentView; }
             await new Promise((resolve) => setTimeout(resolve, 50));
         }
@@ -470,7 +471,13 @@ export class ChatPanel {
             }
             this._post({ type: 'thinking', levels, currentThinking: state.thinkingLevel ?? null });
             this._post({ type: 'permission', permissionMode: this._permissionMode() });
-        } catch (err) { logError(`_loadModels failed: ${(err as Error).message}`); }
+        } catch (err) {
+            const msg = (err as Error).message;
+            logError(`_loadModels failed: ${msg}`);
+            // 避免模型选择器一直停留在「连接中…」
+            this._post({ type: 'modelsError' });
+            this._post({ type: 'notice', text: vscode.l10n.t('Failed to load models: {0}', msg) });
+        }
     }
 
     private _postSessionList(): void {
@@ -514,7 +521,7 @@ export class ChatPanel {
         switch (req.method) {
             case 'confirm': {
                 if (autoConfirm) {
-                    respondExtensionUI(client, req.id, { confirmed: true });
+                    this._respondUI(client, req.id, { confirmed: true });
                     this._post({ type: 'notice', text: vscode.l10n.t('Auto-confirmed: {0}', req.title || '') });
                     return;
                 }
@@ -523,7 +530,7 @@ export class ChatPanel {
                     { modal: true },
                     vscode.l10n.t('Allow'), vscode.l10n.t('Deny')
                 );
-                respondExtensionUI(client, req.id, { confirmed: choice === vscode.l10n.t('Allow') });
+                this._respondUI(client, req.id, { confirmed: choice === vscode.l10n.t('Allow') });
                 break;
             }
             case 'select': {
@@ -531,8 +538,8 @@ export class ChatPanel {
                     title: req.title,
                     ignoreFocusOut: true,
                 });
-                if (pick === undefined) { respondExtensionUI(client, req.id, { cancelled: true }); }
-                else { respondExtensionUI(client, req.id, { value: pick }); }
+                if (pick === undefined) { this._respondUI(client, req.id, { cancelled: true }); }
+                else { this._respondUI(client, req.id, { value: pick }); }
                 break;
             }
             case 'input': {
@@ -541,8 +548,8 @@ export class ChatPanel {
                     placeHolder: req.placeholder,
                     ignoreFocusOut: true,
                 });
-                if (value === undefined) { respondExtensionUI(client, req.id, { cancelled: true }); }
-                else { respondExtensionUI(client, req.id, { value }); }
+                if (value === undefined) { this._respondUI(client, req.id, { cancelled: true }); }
+                else { this._respondUI(client, req.id, { value }); }
                 break;
             }
             case 'editor': {
@@ -551,8 +558,8 @@ export class ChatPanel {
                     value: req.prefill || '',
                     ignoreFocusOut: true,
                 });
-                if (value === undefined) { respondExtensionUI(client, req.id, { cancelled: true }); }
-                else { respondExtensionUI(client, req.id, { value }); }
+                if (value === undefined) { this._respondUI(client, req.id, { cancelled: true }); }
+                else { this._respondUI(client, req.id, { value }); }
                 break;
             }
             case 'notify': {
@@ -564,8 +571,15 @@ export class ChatPanel {
             }
             default:
                 // 其他请求若在等待响应，回 cancelled 避免 pi 挂起
-                respondExtensionUI(client, req.id, { cancelled: true });
+                this._respondUI(client, req.id, { cancelled: true });
                 break;
+        }
+    }
+
+    /** 回复 extension_ui_request；写入 stdin 失败时记日志，避免 pi 静默等待响应 */
+    private _respondUI(client: PiRpcClient, id: string, response: { value?: string; confirmed?: boolean; cancelled?: boolean }): void {
+        if (!respondExtensionUI(client, id, response)) {
+            logError(`respondExtensionUI failed for request ${id}; pi may be waiting for a response`);
         }
     }
 
@@ -610,8 +624,9 @@ export class ChatPanel {
             this._busy = false;
             this._turnHadText = false;
             this._post({ type: 'setBusy', busy: false });
+            this._postContexts();
             this._postSessionList();
-            this._post({ type: 'notice', text: vscode.l10n.t('New session created') });
+            // 不再发送 "New session created" 通知：清空后的欢迎页本身就是反馈
         } else {
             this._post({ type: 'notice', text: vscode.l10n.t('Failed to create session') });
         }
@@ -760,7 +775,9 @@ export class ChatPanel {
                 }
                 this._post({ type: 'setBusy', busy: false });
                 if (!event.aborted) { this._notifySettled(); }
-                { const client = this._clientManager.client; if (client) { void this._loadStats(client); } }
+                // 统计刷新与是否 abort 无关，刷新后反映最新会话状态
+                const settledClient = this._clientManager.client;
+                if (settledClient) { void this._loadStats(settledClient); }
                 break;
             }
 
@@ -794,8 +811,12 @@ export class ChatPanel {
             const disposition = await client.prompt(this._withContext(userText));
             if (this._contexts.length) { this._contexts = []; this._postContexts(); }
             if (disposition === 'handled') {
+                // pi 未启动新一轮（如扩展命令已处理），立即结束 busy
                 this._busy = false;
                 this._post({ type: 'setBusy', busy: false });
+            } else if (disposition === 'queued') {
+                // 已排队：当前回合结束后 pi 会自动处理，busy 保持到 agent_settled
+                this._post({ type: 'notice', text: vscode.l10n.t('Message queued; pi will handle it after the current turn') });
             }
         } catch (err) {
             this._busy = false;
@@ -850,6 +871,8 @@ export class ChatPanel {
                     ? vscode.l10n.t('Code inserted at cursor (Cmd+Z to undo)')
                     : vscode.l10n.t('Selection replaced with code (Cmd+Z to undo)')
             );
+        } else {
+            vscode.window.showWarningMessage(vscode.l10n.t('Failed to apply code to the editor'));
         }
     }
 

@@ -15,7 +15,10 @@ export interface SessionInfo {
     name?: string;
 }
 
-const MAX_PARSE_BYTES = 8 * 1024 * 1024;
+/** 读取会话元数据时的读取上限，避免把大文件整体读入内存 */
+const HEAD_BYTES = 64 * 1024;
+const TAIL_CHUNK_BYTES = 256 * 1024;
+const MAX_TAIL_SCAN_BYTES = 8 * 1024 * 1024;
 
 export class SessionManager {
     private _sessions: SessionInfo[] = [];
@@ -134,7 +137,8 @@ export class SessionManager {
         }
     }
 
-    /** 读取会话文件元数据：真实 id（首行 header）与名称（最后一个 session_info） */
+    /** 读取会话文件元数据：真实 id（首行 header）与名称（最后一个 session_info）。
+     *  只读取文件头部与尾部，避免把大文件整体读入内存、阻塞扩展宿主。 */
     private _readMeta(file: string, mtimeMs: number): { id: string; name?: string } {
         const cached = this._fileCache.get(file);
         if (cached && cached.mtimeMs === mtimeMs) {
@@ -144,9 +148,9 @@ export class SessionManager {
         let name: string | undefined;
         try {
             const stat = fs.statSync(file);
-            if (stat.size <= MAX_PARSE_BYTES) {
-                const lines = fs.readFileSync(file, 'utf8').split('\n');
-                const first = lines.find((l) => l.trim());
+            if (stat.size > 0) {
+                const head = this._readRange(file, 0, Math.min(HEAD_BYTES, stat.size));
+                const first = head.split('\n').find((l) => l.trim());
                 if (first) {
                     try {
                         const o = JSON.parse(first);
@@ -155,23 +159,60 @@ export class SessionManager {
                         logError(`_readMeta: bad header in ${file}: ${(err as Error).message}`);
                     }
                 }
-                for (let i = lines.length - 1; i >= 0; i--) {
-                    if (lines[i].indexOf('session_info') === -1) { continue; }
-                    try {
-                        const o = JSON.parse(lines[i]);
-                        if (o.type === 'session_info') {
-                            name = (typeof o.name === 'string' ? o.name.trim() : '') || undefined;
-                            break;
-                        }
-                    } catch (err) {
-                        logError(`_readMeta: bad session_info line in ${file}: ${(err as Error).message}`);
-                    }
-                }
+                name = this._readLastName(file, stat.size);
             }
         } catch (err) {
             logError(`_readMeta failed for ${file}: ${(err as Error).message}`);
         }
         this._fileCache.set(file, { mtimeMs, id, name });
         return { id, name };
+    }
+
+    /** 读取 [start, start+len) 区间的文本 */
+    private _readRange(file: string, start: number, len: number): string {
+        if (len <= 0) { return ''; }
+        const fd = fs.openSync(file, 'r');
+        try {
+            const buf = Buffer.allocUnsafe(len);
+            fs.readSync(fd, buf, 0, len, start);
+            return buf.toString('utf8');
+        } finally {
+            fs.closeSync(fd);
+        }
+    }
+
+    /** 从文件尾部向前分块扫描，返回最后一个 session_info 的名称。
+     *  每字节最多读一次，且总量不超过 MAX_TAIL_SCAN_BYTES。 */
+    private _readLastName(file: string, size: number): string | undefined {
+        const fd = fs.openSync(file, 'r');
+        try {
+            let pos = size;
+            let scanned = 0;
+            let pending = ''; // 右侧已扫描区块开头那段不完整的行
+            while (pos > 0 && scanned < MAX_TAIL_SCAN_BYTES) {
+                const len = Math.min(TAIL_CHUNK_BYTES, pos, MAX_TAIL_SCAN_BYTES - scanned);
+                pos -= len;
+                scanned += len;
+                const buf = Buffer.allocUnsafe(len);
+                fs.readSync(fd, buf, 0, len, pos);
+                const lines = (buf.toString('utf8') + pending).split('\n');
+                pending = pos > 0 ? lines[0] : '';
+                // pos>0 时 lines[0] 可能被截断，跳过；文件头那一块则完整
+                for (let i = lines.length - 1; i >= (pos > 0 ? 1 : 0); i--) {
+                    if (lines[i].indexOf('session_info') === -1) { continue; }
+                    try {
+                        const o = JSON.parse(lines[i]);
+                        if (o.type === 'session_info') {
+                            return (typeof o.name === 'string' ? o.name.trim() : '') || undefined;
+                        }
+                    } catch {
+                        // 跨块边界可能截断，忽略该行
+                    }
+                }
+            }
+        } finally {
+            fs.closeSync(fd);
+        }
+        return undefined;
     }
 }

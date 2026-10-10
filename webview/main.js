@@ -528,7 +528,7 @@ const vscode = acquireVsCodeApi();
     }
 
     function addNotice(text) {
-        welcome.style.display = 'none';
+        // 通知不应清掉空状态：新会话/空会话切换后仍需保留引导与 logo
         const el = document.createElement('div');
         el.className = 'status-line notice';
         el.textContent = text;
@@ -828,16 +828,19 @@ const vscode = acquireVsCodeApi();
         switch (m.type) {
             case 'addUserMessage': addMessage('user', m.text); break;
             case 'history':
-                welcome.style.display = 'none';
-                m.messages.forEach(function (msg) { addMessage(msg.role, msg.text); });
-                (function () {
-                    const div = document.createElement('div');
-                    div.className = 'history-divider';
-                    div.textContent = S.historyDivider;
-                    chat.appendChild(div);
-                    scrollToBottom();
-                })();
-                renderMermaid();
+                // 空会话保留欢迎/引导页，只有真的有历史消息时才隐藏
+                if (m.messages && m.messages.length) {
+                    welcome.style.display = 'none';
+                    m.messages.forEach(function (msg) { addMessage(msg.role, msg.text); });
+                    (function () {
+                        const div = document.createElement('div');
+                        div.className = 'history-divider';
+                        div.textContent = S.historyDivider;
+                        chat.appendChild(div);
+                        scrollToBottom();
+                    })();
+                    renderMermaid();
+                }
                 break;
             case 'thinkingStart': showThinking(); break;
             case 'thinkingDelta': appendThinking(m.text); break;
@@ -885,6 +888,10 @@ const vscode = acquireVsCodeApi();
                 renderModelPanel();
                 break;
             }
+            case 'modelsError':
+                modelLabel.textContent = S.noModels;
+                modelPanel.innerHTML = '<div class="popover-empty">' + S.noModels + '</div>';
+                break;
             case 'thinking': {
                 thinkingLevels = m.levels || [];
                 currentThinking = m.currentThinking || null;
