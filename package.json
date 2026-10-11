@@ -230,7 +230,7 @@
         {
           "id": "pi-agent",
           "title": "Pi Agent",
-          "icon": "$(robot)"
+          "icon": "assets/icon-activity.svg"
         }
       ]
     },

@@ -36,7 +36,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
     <header class="header">
         <div class="brand">
             <span class="logo" aria-hidden="true">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"></polyline><line x1="12" y1="19" x2="20" y2="19"></line></svg>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 6 L11 12 L5.5 18"></path><path d="M13.5 18 H18.5"></path></svg>
             </span>
             <span class="name">Pi</span>
             <span class="connection-status connecting" id="connectionStatus" title="${S.connStatus}"></span>

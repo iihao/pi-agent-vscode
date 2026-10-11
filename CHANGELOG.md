@@ -67,6 +67,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Attached files/selections are sent as **references** (`@path:12-30`) instead
   of copied text, so pi reads the current file itself. Context blocks are
   stripped from displayed history.
+- The activity bar now uses the Pi `>_` mark (a bold monochrome 24×24 SVG,
+  `assets/icon-activity.svg`) instead of a robot codicon; the in-panel header
+  mark matches it.
 - Internally, chat state is now centralized in a state store (`src/state`) and
   VS Code access goes through a service container (`src/services`) — a
   testable seam for future work.
