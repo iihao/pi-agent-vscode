@@ -2,7 +2,6 @@
 // 集中式状态存储（观察者模式）
 // ---------------------------------------------------------------------------
 
-import { EventEmitter } from 'events';
 import { ChatState, ChatStateListener, getInitialState } from './types';
 
 /** 浅比较：原始值用 ===，数组按元素比较。避免对整状态做 JSON.stringify。 */
@@ -18,12 +17,11 @@ function shallowEqual(a: unknown, b: unknown): boolean {
     return false;
 }
 
-class StateStore extends EventEmitter {
+class StateStore {
     private state: ChatState;
-    private stateListeners: Set<ChatStateListener> = new Set();
+    private listeners = new Set<ChatStateListener>();
 
     constructor() {
-        super();
         this.state = getInitialState();
     }
 
@@ -38,33 +36,29 @@ class StateStore extends EventEmitter {
             if (!shallowEqual(this.state[key], partial[key])) { changed = true; break; }
         }
         if (!changed) { return; }
+
         this.state = { ...this.state, ...partial };
-        this.emit('change', this.state);
-        this.notifyListeners();
+        const snapshot = this.getState();
+        this.listeners.forEach((listener) => {
+            try {
+                listener(snapshot);
+            } catch (err) {
+                console.error('State listener failed:', err);
+            }
+        });
     }
 
     public subscribe(listener: ChatStateListener): () => void {
-        this.stateListeners.add(listener);
+        this.listeners.add(listener);
         // 立即通知当前状态
         listener(this.getState());
         return () => {
-            this.stateListeners.delete(listener);
+            this.listeners.delete(listener);
         };
     }
 
     public select<T>(selector: (state: ChatState) => T): T {
         return selector(this.state);
-    }
-
-    private notifyListeners(): void {
-        const state = this.getState();
-        this.stateListeners.forEach((listener) => {
-            try {
-                listener(state);
-            } catch (err) {
-                console.error('State listener failed:', err);
-            }
-        });
     }
 }
 

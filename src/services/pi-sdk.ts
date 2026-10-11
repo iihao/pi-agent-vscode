@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import { PiRpcClient, PiAgentEvent, PiModelInfo, PiSessionStats, PiSessionState } from '../sdk/piTypes';
+import { logError } from '../utils/logger';
 
 export interface IPiSdkAdapter {
     // 生命周期
@@ -106,9 +107,11 @@ export class PiSdkAdapter implements IPiSdkAdapter {
     }
 
     public async setThinkingLevel(level: string): Promise<void> {
-        if (typeof this.client.setThinkingLevel === 'function') {
-            return this.client.setThinkingLevel(level);
+        if (typeof this.client.setThinkingLevel !== 'function') {
+            logError(`PiSdkAdapter.setThinkingLevel: not supported by this client (level=${level})`);
+            return;
         }
+        return this.client.setThinkingLevel(level);
     }
 
     public getStderr(): string {

@@ -8,56 +8,55 @@ describe('VSCodeService', () => {
         service = new VSCodeService();
     });
 
-    it('should create service instance', () => {
-        expect(service).toBeDefined();
+    it('forwards showInformationMessage and its action items', async () => {
+        await expect(service.showInformationMessage('hi', 'Open')).resolves.toBe('Open');
     });
 
-    it('should expose showInformationMessage method', () => {
-        expect(typeof service.showInformationMessage).toBe('function');
+    it('forwards showWarningMessage / showErrorMessage', async () => {
+        await expect(service.showWarningMessage('w')).resolves.toBeUndefined();
+        await expect(service.showErrorMessage('e', 'Retry')).resolves.toBe('Retry');
     });
 
-    it('should expose showWarningMessage method', () => {
-        expect(typeof service.showWarningMessage).toBe('function');
+    it('forwards showInputBox', async () => {
+        await expect(service.showInputBox({ prompt: 'p' })).resolves.toBe('typed');
     });
 
-    it('should expose showErrorMessage method', () => {
-        expect(typeof service.showErrorMessage).toBe('function');
+    it('forwards showQuickPick', async () => {
+        await expect(service.showQuickPick(['a', 'b'])).resolves.toBe('a');
     });
 
-    it('should expose getConfiguration method', () => {
-        expect(typeof service.getConfiguration).toBe('function');
+    it('reads configuration through the workspace', () => {
+        expect(service.getConfiguration('pi-agent').get('x', 42)).toBe(42);
     });
 
-    it('should expose registerCommand method', () => {
-        expect(typeof service.registerCommand).toBe('function');
+    it('exposes workspaceFolders and resolves relative paths', () => {
+        expect(service.workspaceFolders).toEqual([]);
+        expect(service.asRelativePath('/a/b')).toBe('/a/b');
     });
 
-    it('should expose workspaceFolders property', () => {
-        expect(service.workspaceFolders).toBeDefined();
+    it('forwards findFiles and applyEdit', async () => {
+        await expect(service.findFiles('**/*')).resolves.toEqual([]);
+        await expect(service.applyEdit({} as never)).resolves.toBe(true);
     });
 
-    it('should expose asRelativePath method', () => {
-        expect(typeof service.asRelativePath).toBe('function');
+    it('exposes clipboard, language, appName and version', async () => {
+        await expect(service.clipboard.writeText('x')).resolves.toBeUndefined();
+        expect(service.language).toBe('en');
+        expect(service.appName).toBe('VS Code');
+        expect(service.version).toBe('1.90.0');
     });
 
-    it('should expose activeTextEditor property', () => {
-        // activeTextEditor can be undefined when no editor is active
-        expect('activeTextEditor' in service).toBe(true);
+    it('reports window focus', () => {
+        expect(service.windowFocused()).toBe(true);
     });
 
-    it('should expose clipboard property', () => {
-        expect(service.clipboard).toBeDefined();
+    it('builds file URIs through the uri namespace', () => {
+        expect(service.uri.file('/x').fsPath).toBe('/x');
+        expect(service.uri.joinPath(service.uri.file('/a'), 'b').fsPath).toBe('/a/b');
     });
 
-    it('should expose language property', () => {
-        expect(service.language).toBeDefined();
-    });
-
-    it('should expose appName property', () => {
-        expect(service.appName).toBeDefined();
-    });
-
-    it('should expose version property', () => {
-        expect(service.version).toBeDefined();
+    it('exposes ConfigurationTarget', () => {
+        expect(service.configurationTarget.Workspace).toBe(2);
+        expect(service.configurationTarget.Global).toBe(1);
     });
 });
