@@ -212,6 +212,28 @@ export interface ResolvedPi {
     sdkEntry: string;
 }
 
+/** 把「包目录」解析为 pi 的 CLI + SDK 入口（要求 dist/cli.js 与 dist/index.js 同时存在） */
+function resolvePackageDir(dir: string): ResolvedPi | null {
+    if (!dir) { return null; }
+    const cliPath = path.join(dir, 'dist', 'cli.js');
+    const sdkEntry = path.join(dir, 'dist', 'index.js');
+    if (fs.existsSync(cliPath) && fs.existsSync(sdkEntry)) {
+        return { cliPath, sdkEntry };
+    }
+    return null;
+}
+
+/** 从起始目录向上查找最近的 package.json 所在目录；到文件系统根仍找不到时返回起始目录 */
+function findPackageRoot(startDir: string): string {
+    let dir = startDir;
+    let parent = path.dirname(dir);
+    while (!fs.existsSync(path.join(dir, 'package.json')) && parent !== dir) {
+        dir = parent;
+        parent = path.dirname(dir);
+    }
+    return dir;
+}
+
 /** 从自定义 pi 可执行文件路径解析 cliPath + sdkEntry */
 export function resolvePiFromCli(cliPath: string): ResolvedPi | null {
     try {
@@ -221,17 +243,7 @@ export function resolvePiFromCli(cliPath: string): ResolvedPi | null {
         if (fs.existsSync(siblingEntry)) {
             return { cliPath: real, sdkEntry: siblingEntry };
         }
-        let d = dir;
-        let parent = path.dirname(d);
-        while (!fs.existsSync(path.join(d, 'package.json')) && parent !== d) {
-            d = parent;
-            parent = path.dirname(d);
-        }
-        const cli = path.join(d, 'dist', 'cli.js');
-        const entry = path.join(d, 'dist', 'index.js');
-        if (fs.existsSync(cli) && fs.existsSync(entry)) {
-            return { cliPath: cli, sdkEntry: entry };
-        }
+        return resolvePackageDir(findPackageRoot(dir));
     } catch (err) {
         logError(`resolvePiFromCli failed for ${cliPath}: ${(err as Error).message}`);
     }
@@ -245,18 +257,8 @@ export function resolvePi(extensionPath: string, executableOverride?: string): R
         if (custom) { return custom; }
     }
 
-    const tryPackageDir = (dir: string): ResolvedPi | null => {
-        if (!dir) { return null; }
-        const cliPath = path.join(dir, 'dist', 'cli.js');
-        const sdkEntry = path.join(dir, 'dist', 'index.js');
-        if (fs.existsSync(cliPath) && fs.existsSync(sdkEntry)) {
-            return { cliPath, sdkEntry };
-        }
-        return null;
-    };
-
     // 1. 优先使用插件内置的 pi
-    const bundled = tryPackageDir(
+    const bundled = resolvePackageDir(
         path.join(extensionPath, 'node_modules', '@earendil-works', 'pi-coding-agent')
     );
     if (bundled) { return bundled; }
@@ -268,7 +270,7 @@ export function resolvePi(extensionPath: string, executableOverride?: string): R
         const packageJsonPath = path.join(searchDir, 'package.json');
         if (fs.existsSync(packageJsonPath)) {
             // 找到项目根目录，尝试查找 node_modules
-            const projectBundled = tryPackageDir(
+            const projectBundled = resolvePackageDir(
                 path.join(searchDir, 'node_modules', '@earendil-works', 'pi-coding-agent')
             );
             if (projectBundled) { return projectBundled; }
@@ -305,14 +307,8 @@ export function resolvePi(extensionPath: string, executableOverride?: string): R
     for (const bin of binCandidates) {
         try {
             const real = fs.realpathSync(bin);
-            let dir = path.dirname(real);
-            let parent = path.dirname(dir);
-            // 跨平台向上查找 package.json，parent === dir 表示已到文件系统根目录
-            while (!fs.existsSync(path.join(dir, 'package.json')) && parent !== dir) {
-                dir = parent;
-                parent = path.dirname(dir);
-            }
-            const found = tryPackageDir(dir);
+            // 跨平台向上查找 package.json；findPackageRoot 内部处理到达根目录的情况
+            const found = resolvePackageDir(findPackageRoot(path.dirname(real)));
             if (found) { return found; }
         } catch (err) {
             logError(`probe pi candidate failed (${bin}): ${(err as Error).message}`);

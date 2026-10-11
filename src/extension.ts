@@ -18,30 +18,18 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // ---- 解释选中代码 ----
-    const explainCode = vscode.commands.registerCommand('pi-agent.explainCode', async () => {
-        const ctx = getSelectionContext();
-        if (!ctx) {
-            return;
-        }
-        const panel = await ChatPanel.ensureView();
-        await panel.askQuestion(vscode.l10n.t(
+    const explainCode = vscode.commands.registerCommand('pi-agent.explainCode', () =>
+        askAboutSelection((ctx) => vscode.l10n.t(
             'Explain the code at {0} line {1} (current selection):\n\n```{2}\n{3}\n```\n\nDescribe its overall purpose, key logic, and potential issues.',
             ctx.relPath, ctx.lineRange, ctx.languageId, ctx.code
-        ));
-    });
+        )));
 
     // ---- 重构选中代码 ----
-    const refactorCode = vscode.commands.registerCommand('pi-agent.refactorCode', async () => {
-        const ctx = getSelectionContext();
-        if (!ctx) {
-            return;
-        }
-        const panel = await ChatPanel.ensureView();
-        await panel.askQuestion(vscode.l10n.t(
+    const refactorCode = vscode.commands.registerCommand('pi-agent.refactorCode', () =>
+        askAboutSelection((ctx) => vscode.l10n.t(
             'Refactor the code at {0} line {1} (current selection):\n\n```{2}\n{3}\n```\n\nRequirements: improve readability, fix potential issues, keep external behavior unchanged. Edit the files directly and explain the changes.',
             ctx.relPath, ctx.lineRange, ctx.languageId, ctx.code
-        ));
-    });
+        )));
 
     // ---- 生成代码 ----
     const generateCode = vscode.commands.registerCommand('pi-agent.generateCode', async () => {
@@ -62,73 +50,48 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // ---- 清空对话（同时开启全新 pi 会话）----
-    const clearChat = vscode.commands.registerCommand('pi-agent.clearChat', () => {
-        if (ChatPanel.currentView) {
-            ChatPanel.currentView.clear();
-        } else {
-            void ChatPanel.ensureView().then((panel) => panel.clear());
-        }
-    });
+    const clearChat = vscode.commands.registerCommand('pi-agent.clearChat', () =>
+        withPanel((panel) => panel.clear()));
 
     // ---- 新建对话 ----
-    const newChat = vscode.commands.registerCommand('pi-agent.newChat', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.newSession();
-    });
+    const newChat = vscode.commands.registerCommand('pi-agent.newChat', () =>
+        withPanel((panel) => panel.newSession()));
 
     // ---- 聚焦输入框 ----
-    const focusInput = vscode.commands.registerCommand('pi-agent.focusInput', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        panel.focusInput();
-    });
+    const focusInput = vscode.commands.registerCommand('pi-agent.focusInput', () =>
+        withPanel((panel) => panel.focusInput()));
 
     // ---- 编辑上一条消息 ----
-    const editLastMessage = vscode.commands.registerCommand('pi-agent.editLastMessage', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        panel.editLastMessage();
-    });
+    const editLastMessage = vscode.commands.registerCommand('pi-agent.editLastMessage', () =>
+        withPanel((panel) => panel.editLastMessage()));
 
     // ---- 切换模型 ----
-    const cycleModel = vscode.commands.registerCommand('pi-agent.cycleModel', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.cycleModel();
-    });
+    const cycleModel = vscode.commands.registerCommand('pi-agent.cycleModel', () =>
+        withPanel((panel) => panel.cycleModel()));
 
     // ---- 切换思考档位 ----
-    const cycleThinkingLevel = vscode.commands.registerCommand('pi-agent.cycleThinkingLevel', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.cycleThinkingLevel();
-    });
+    const cycleThinkingLevel = vscode.commands.registerCommand('pi-agent.cycleThinkingLevel', () =>
+        withPanel((panel) => panel.cycleThinkingLevel()));
 
     // ---- 压缩上下文 ----
-    const compact = vscode.commands.registerCommand('pi-agent.compact', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.compact();
-    });
+    const compact = vscode.commands.registerCommand('pi-agent.compact', () =>
+        withPanel((panel) => panel.compact()));
 
     // ---- 生成 commit message ----
-    const generateCommitMessage = vscode.commands.registerCommand('pi-agent.generateCommitMessage', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.generateCommitMessage();
-    });
+    const generateCommitMessage = vscode.commands.registerCommand('pi-agent.generateCommitMessage', () =>
+        withPanel((panel) => panel.generateCommitMessage()));
 
     // ---- 生成 PR 描述 ----
-    const generatePullRequestDescription = vscode.commands.registerCommand('pi-agent.generatePullRequestDescription', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.generatePullRequestDescription();
-    });
+    const generatePullRequestDescription = vscode.commands.registerCommand('pi-agent.generatePullRequestDescription', () =>
+        withPanel((panel) => panel.generatePullRequestDescription()));
 
     // ---- 撤销本回合改动 ----
-    const revertLastTurn = vscode.commands.registerCommand('pi-agent.revertLastTurn', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.revertLastTurn();
-    });
+    const revertLastTurn = vscode.commands.registerCommand('pi-agent.revertLastTurn', () =>
+        withPanel((panel) => panel.revertLastTurn()));
 
     // ---- 克隆当前会话 ----
-    const cloneSession = vscode.commands.registerCommand('pi-agent.cloneSession', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.cloneSession();
-    });
+    const cloneSession = vscode.commands.registerCommand('pi-agent.cloneSession', () =>
+        withPanel((panel) => panel.cloneSession()));
 
     // ---- 在编辑器标签打开 ----
     const openInEditor = vscode.commands.registerCommand('pi-agent.openInEditor', () => {
@@ -141,20 +104,14 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     // ---- 附加编辑器上下文 ----
-    const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        panel.attachFile();
-    });
-    const attachSelection = vscode.commands.registerCommand('pi-agent.attachSelection', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        panel.attachSelection();
-    });
+    const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', () =>
+        withPanel((panel) => panel.attachFile()));
+    const attachSelection = vscode.commands.registerCommand('pi-agent.attachSelection', () =>
+        withPanel((panel) => panel.attachSelection()));
 
     // ---- 重启会话（权限模式 / 可执行路径变更后生效）----
-    const restartSession = vscode.commands.registerCommand('pi-agent.restartSession', async () => {
-        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
-        await panel.restartClient();
-    });
+    const restartSession = vscode.commands.registerCommand('pi-agent.restartSession', () =>
+        withPanel((panel) => panel.restartClient()));
 
     // ---- 导出诊断信息 ----
     const exportDiagnostics = vscode.commands.registerCommand('pi-agent.exportDiagnostics', async () => {
@@ -223,13 +180,29 @@ function applyLogLevel(): void {
     setLogLevel(level);
 }
 
-/** 获取当前编辑器选区上下文（无选区时提示并返回 undefined） */
-function getSelectionContext(): {
+/** 命令入口统一取面板：优先复用当前面板，否则在侧边栏创建 */
+async function withPanel(run: (panel: ChatPanel) => void | Promise<void>): Promise<void> {
+    const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+    await run(panel);
+}
+
+/** 取当前选区并按需构造提问发送给面板（无选区时由 getSelectionContext 提示并中止） */
+async function askAboutSelection(build: (ctx: SelectionContext) => string): Promise<void> {
+    const ctx = getSelectionContext();
+    if (!ctx) { return; }
+    const panel = await ChatPanel.ensureView();
+    await panel.askQuestion(build(ctx));
+}
+
+interface SelectionContext {
     relPath: string;
     languageId: string;
     code: string;
     lineRange: string;
-} | undefined {
+}
+
+/** 获取当前编辑器选区上下文（无选区时提示并返回 undefined） */
+function getSelectionContext(): SelectionContext | undefined {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.selection.isEmpty) {
         vscode.window.showWarningMessage(vscode.l10n.t('Please select some code first'));

@@ -33,10 +33,6 @@ export function logInfo(msg: string): void {
     if (level !== 'error') { write('info', msg); }
 }
 
-export function logDebug(msg: string): void {
-    if (level === 'debug') { write('debug', msg); }
-}
-
 export function logError(msg: string): void {
     write('error', msg);
 }
