@@ -374,10 +374,10 @@
         display: grid; place-items: center;
         margin-bottom: 20px;
         border-radius: 20px;
-        color: #fff;
-        background: linear-gradient(155deg, #14b98f, #0b8c6b);
-        box-shadow: 0 12px 30px rgba(16, 163, 127, .22), inset 0 1px 0 rgba(255, 255, 255, .18);
-        opacity: .78;
+        color: var(--cx-accent);
+        background: var(--cx-accent-soft);
+        border: 1px solid rgba(16, 163, 127, .28);
+        box-shadow: none;
     }
     .welcome-logo svg { width: 32px; height: 32px; }
     .welcome-title { font-size: 19px; font-weight: 600; letter-spacing: .3px; margin-bottom: 24px; }
