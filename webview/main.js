@@ -68,6 +68,7 @@ const vscode = acquireVsCodeApi();
     const permBtn = document.getElementById('permBtn');
     const permLabel = document.getElementById('permLabel');
     const permPanel = document.getElementById('permPanel');
+    const attachPanel = document.getElementById('attachPanel');
     const sessionBtn = document.getElementById('sessionBtn');
     const sessionLabel = document.getElementById('sessionLabel');
     const sessionPanel = document.getElementById('sessionPanel');
@@ -135,6 +136,7 @@ const vscode = acquireVsCodeApi();
         thinkingPanel.classList.add('hidden');
         sessionPanel.classList.add('hidden');
         permPanel.classList.add('hidden');
+        attachPanel.classList.add('hidden');
         outlinePanel.classList.add('hidden');
     }
 
@@ -217,6 +219,20 @@ const vscode = acquireVsCodeApi();
             (s.autoCompact ? ' (' + S.autoCompact + ')' : '') +
             (parts.length ? '\n' + S.cumulative + ' ' + parts.join('  ') : '');
         ctxStats.classList.remove('hidden');
+    }
+
+    function renderAttachPanel() {
+        const items = [
+            { action: 'workspace', label: S.attachFilesFolders },
+            { action: 'file', label: S.attachCurrentFile },
+            { action: 'selection', label: S.attachCurrentSelection },
+        ];
+        let html = '';
+        items.forEach(function (it) {
+            html += '<button class="popover-item" data-action="' + it.action + '">' +
+                '<span class="popover-item-main">' + escapeHtml(it.label) + '</span></button>';
+        });
+        attachPanel.innerHTML = html;
     }
 
     function renderPermissionPanel() {
@@ -1244,7 +1260,21 @@ const vscode = acquireVsCodeApi();
             navigateUserMessage(e.key === 'ArrowDown' ? 1 : -1);
         }
     });
-    attachBtn.addEventListener('click', function (e) { e.stopPropagation(); vscode.postMessage({ type: 'attachActive' }); });
+    attachBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        const willShow = attachPanel.classList.contains('hidden');
+        closePopovers();
+        if (willShow) { renderAttachPanel(); attachPanel.classList.remove('hidden'); }
+    });
+    attachPanel.addEventListener('click', function (e) {
+        const item = e.target.closest('.popover-item');
+        if (!item) { return; }
+        const action = item.dataset.action;
+        if (action === 'workspace') { vscode.postMessage({ type: 'attachWorkspace' }); }
+        else if (action === 'file') { vscode.postMessage({ type: 'attachFile' }); }
+        else if (action === 'selection') { vscode.postMessage({ type: 'attachSelection' }); }
+        closePopovers();
+    });
     chipRow.addEventListener('click', function (e) {
         const btn = e.target.closest('.chip-remove');
         if (btn) { vscode.postMessage({ type: 'removeContext', id: btn.dataset.id }); }

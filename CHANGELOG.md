@@ -54,11 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Compact Session**.
 - Context meter warning when the window is nearly full, with a one-click
   **Compact** action.
-- **Attach from the workspace**: the composer's paperclip now opens a menu —
-  current file, current selection, **choose files from the workspace**, or
-  **choose a folder** — so context is no longer limited to the open file. A
-  **Pi: Attach Files from Workspace** command (command palette + editor context
-  menu) opens the file picker directly.
+- **Add context**: the composer's `+` button opens a popup menu (like VS
+  Code's native chat) with **Files & folders…** (native picker, multi-select),
+  **Current file** and **Current selection**. A **Pi: Attach Files from
+  Workspace** command (command palette + editor context menu) opens the picker
+  directly.
 - The editor title bar shows a single Pi (`>_`) icon that opens the plugin's
   own chat as an editor tab (content area).
 - Marketplace polish: a README cover image, Marketplace install instructions, a

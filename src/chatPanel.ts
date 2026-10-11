@@ -394,43 +394,11 @@ export class ChatPanel {
         this._addSelectionContext(editor);
     }
 
-    /** 回形针菜单：当前文件 / 当前选区 / 从工作区选文件 / 选文件夹 */
-    public async attachMenu(): Promise<void> {
-        const editor = vs.activeTextEditor;
-        const items: Array<{ label: string; action: string }> = [];
-        if (editor) {
-            items.push({ label: vscode.l10n.t('Current file'), action: 'file' });
-            if (!editor.selection.isEmpty) { items.push({ label: vscode.l10n.t('Current selection'), action: 'selection' }); }
-        }
-        items.push({ label: vscode.l10n.t('Choose files from workspace…'), action: 'files' });
-        items.push({ label: vscode.l10n.t('Choose a folder…'), action: 'folder' });
-        const pick = await vs.showQuickPick<{ label: string; action: string }>(items, { placeHolder: vscode.l10n.t('Attach context') });
-        if (!pick) { return; }
-        if (pick.action === 'file' && editor) { this._addFileContext(editor); }
-        else if (pick.action === 'selection' && editor) { this._addSelectionContext(editor); }
-        else if (pick.action === 'files') { await this._pickWorkspaceFiles(); }
-        else if (pick.action === 'folder') { await this._pickWorkspaceFolder(); }
-    }
-
-    /** 从工作区选择若干文件并附加 */
-    public async attachFiles(): Promise<void> { await this._pickWorkspaceFiles(); }
-
-    private async _pickWorkspaceFiles(): Promise<void> {
+    /** 从工作区选择文件/文件夹并附加（弹出菜单的“Files & folders…”） */
+    public async attachFiles(): Promise<void> {
         const uris = await vs.showOpenDialog({
             canSelectMany: true,
             canSelectFiles: true,
-            canSelectFolders: false,
-            defaultUri: vs.workspaceFolders?.[0]?.uri,
-            openLabel: vscode.l10n.t('Attach'),
-        });
-        if (!uris || !uris.length) { return; }
-        for (const uri of uris) { this._addUriContext(uri); }
-    }
-
-    private async _pickWorkspaceFolder(): Promise<void> {
-        const uris = await vs.showOpenDialog({
-            canSelectMany: true,
-            canSelectFiles: false,
             canSelectFolders: true,
             defaultUri: vs.workspaceFolders?.[0]?.uri,
             openLabel: vscode.l10n.t('Attach'),
@@ -872,8 +840,14 @@ export class ChatPanel {
             case 'attachActive':
                 this.attachActive();
                 break;
-            case 'attachMenu':
-                await this.attachMenu();
+            case 'attachFile':
+                this.attachFile();
+                break;
+            case 'attachSelection':
+                this.attachSelection();
+                break;
+            case 'attachWorkspace':
+                await this.attachFiles();
                 break;
             case 'removeContext':
                 if (message.id) { this._removeContext(message.id); }

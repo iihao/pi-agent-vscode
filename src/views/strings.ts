@@ -42,6 +42,9 @@ export interface UiStrings {
     bashTruncated: string;
     imageTooLarge: string;
     attachTitle: string;
+    attachFilesFolders: string;
+    attachCurrentFile: string;
+    attachCurrentSelection: string;
     modelTitle: string;
     notConnected: string;
     connecting: string;
@@ -114,7 +117,10 @@ export function getUiStrings(): UiStrings {
         steering: t('Steering'),
         bashTruncated: t('Output truncated'),
         imageTooLarge: t('Image is too large (max 5 MB)'),
-        attachTitle: t('Attach current file/selection'),
+        attachTitle: t('Add context'),
+        attachFilesFolders: t('Files & folders…'),
+        attachCurrentFile: t('Current file'),
+        attachCurrentSelection: t('Current selection'),
         modelTitle: t('Select model'),
         notConnected: t('Not connected'),
         connecting: t('Connecting…'),

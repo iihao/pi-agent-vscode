@@ -116,6 +116,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
         <div class="popover hidden" id="modelPanel"></div>
         <div class="popover hidden" id="thinkingPanel"></div>
         <div class="popover hidden" id="permPanel"></div>
+        <div class="popover hidden" id="attachPanel"></div>
         <div class="suggest hidden" id="suggest"></div>
         <div class="composer">
             <div class="image-row hidden" id="imageRow"></div>
@@ -125,7 +126,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                 <div class="composer-meta">
                     <button id="attachBtn" class="pill pill-icon-only" title="${escapeAttr(S.attachTitle)}">
                         <span class="pill-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         </span>
                     </button>
                     <button id="modelBtn" class="pill" title="${escapeAttr(S.modelTitle)}">
