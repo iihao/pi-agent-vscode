@@ -64,9 +64,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Richer empty state for new conversations: a proper Pi logo mark, a
-  "Getting started" guide (ask a task / add context / control permissions),
-  and a short tagline instead of the bare `›_` placeholder.
+- Empty state for new conversations: a Pi logo mark, a short tagline, quick
+  actions, and keyboard hints (the earlier "Getting started" guide card was
+  removed for a simpler first screen).
 - Renamed the Marketplace extension to `pi-agent-assistant`
   (`pi-agent-vscode` was already taken; extension id is now
   `iihao.pi-agent-assistant`).

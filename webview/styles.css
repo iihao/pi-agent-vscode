@@ -391,32 +391,6 @@
         transition: border-color .12s, color .12s, background .12s;
     }
     .quick-action:hover { border-color: var(--cx-accent); color: var(--cx-accent); background: var(--cx-accent-soft); }
-    .welcome-guide {
-        width: 100%;
-        max-width: 340px;
-        margin: 24px auto 0;
-        text-align: left;
-        border: 1px solid var(--cx-border);
-        border-radius: var(--cx-radius);
-        background: var(--cx-panel);
-        overflow: hidden;
-    }
-    .guide-heading {
-        font-family: var(--cx-mono);
-        font-size: 10px;
-        letter-spacing: .9px;
-        text-transform: uppercase;
-        color: var(--cx-muted);
-        padding: 10px 14px;
-        border-bottom: 1px solid var(--cx-border);
-    }
-    .guide-item { display: flex; gap: 11px; padding: 11px 14px; }
-    .guide-item + .guide-item { border-top: 1px solid var(--cx-border); }
-    .guide-icon { flex-shrink: 0; color: var(--cx-accent); margin-top: 1px; }
-    .guide-icon svg { width: 16px; height: 16px; }
-    .guide-text { min-width: 0; }
-    .guide-item-title { font-size: 12px; font-weight: 600; margin-bottom: 2px; }
-    .guide-item-desc { font-size: 11.5px; color: var(--cx-muted); line-height: 1.5; }
     .welcome-shortcuts {
         display: flex;
         justify-content: center;

@@ -101,30 +101,6 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                 <button class="quick-action" data-q="${escapeAttr(S.quickSummaryQ)}">${S.quickSummary}</button>
                 <button class="quick-action" data-q="${escapeAttr(S.quickTestQ)}">${S.quickTest}</button>
             </div>
-            <div class="welcome-guide">
-                <div class="guide-heading">${S.guideTitle}</div>
-                <div class="guide-item">
-                    <span class="guide-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg></span>
-                    <div class="guide-text">
-                        <div class="guide-item-title">${S.guideAsk}</div>
-                        <div class="guide-item-desc">${S.guideAskDesc}</div>
-                    </div>
-                </div>
-                <div class="guide-item">
-                    <span class="guide-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg></span>
-                    <div class="guide-text">
-                        <div class="guide-item-title">${S.guideAttach}</div>
-                        <div class="guide-item-desc">${S.guideAttachDesc}</div>
-                    </div>
-                </div>
-                <div class="guide-item">
-                    <span class="guide-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg></span>
-                    <div class="guide-text">
-                        <div class="guide-item-title">${S.guidePerm}</div>
-                        <div class="guide-item-desc">${S.guidePermDesc}</div>
-                    </div>
-                </div>
-            </div>
             <div class="welcome-shortcuts">
                 <div class="shortcut-hint"><kbd>Enter</kbd> ${S.kbdSend}</div>
                 <div class="shortcut-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> ${S.kbdNewline}</div>
