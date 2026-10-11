@@ -21,6 +21,7 @@
   "cmd.openInEditorToSide": "Pi: 横にチャットを開く",
   "cmd.attachFile": "Pi: 現在のファイルをチャットに添付",
   "cmd.attachSelection": "Pi: 選択範囲をチャットに添付",
+  "cmd.attachFiles": "Pi: ワークスペースからファイルを添付",
   "cmd.restartSession": "Pi: セッションを再起動",
   "cmd.exportDiagnostics": "Pi: 診断情報をエクスポート",
   "view.chat.name": "チャット",

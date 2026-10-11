@@ -342,8 +342,9 @@ export class ChatPanel {
         throw new Error(vscode.l10n.t('Pi chat view could not be created, please retry'));
     }
 
-    public clear() {
-        void this._abortIfBusy();
+    public async clear(): Promise<void> {
+        // 先等流式中止落盘，再切会话；否则 pi 侧可能报「正在流式时不能新建会话」
+        await this._abortIfBusy();
         this._busy = false;
         this._turnHadText = false;
         this._contexts = [];
@@ -355,9 +356,12 @@ export class ChatPanel {
         this._postContexts();
         const client = this._clientManager.client;
         if (this._clientManager.isConnected && client) {
-            void this._sessionManager.createNewSession(client).then((ok) => {
+            try {
+                const ok = await this._sessionManager.createNewSession(client);
                 if (ok) { this._postSessionList(); }
-            }).catch((err) => { logError(`clear/newSession failed: ${(err as Error).message}`); });
+            } catch (err) {
+                logError(`clear/newSession failed: ${(err as Error).message}`);
+            }
         }
     }
 
@@ -426,7 +430,7 @@ export class ChatPanel {
                 const sel = active.selection;
                 const range = sel.start.line === sel.end.line
                     ? `${sel.start.line + 1}`
-                    : `${sel.start.line + 1}–${sel.end.line + 1}`;
+                    : `${sel.start.line + 1}-${sel.end.line + 1}`;
                 openEditors.push({ path: file, label: this._baseName(file), range });
             }
             openEditors.push({ path: file, label: this._baseName(file) });
@@ -890,7 +894,8 @@ export class ChatPanel {
                 break;
             case 'attachPath':
                 if (message.path) {
-                    if (message.range && vs.activeTextEditor) { this.attachSelection(); }
+                    // 用菜单传入的 path + range 直接生成引用，不依赖当前活动编辑器
+                    if (message.range) { this._addContext({ type: 'selection', path: message.path, lineRange: message.range }); }
                     else { this._addContext({ type: 'file', path: message.path }); }
                 }
                 break;

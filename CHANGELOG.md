@@ -107,6 +107,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **pi discovery**: besides the bundled copy, `pi` is now resolved from `PATH`
+  (covering nvm/fnm/asdf/volta/bun/pnpm and custom npm prefixes) and from
+  `npm root -g`, with Windows support (`pi.cmd`/`pi.exe`, `%APPDATA%\npm`).
+  Global installs no longer require setting `pi-agent.pi.executable`.
+- Creating a new chat now waits for an in-flight stream to abort before
+  switching sessions, avoiding an intermittent "cannot start a new session
+  while streaming" failure.
+- The add-context menu's selection entry attaches the exact file and line
+  range it was clicked with, instead of the active editor's selection.
+- Added the missing `cmd.attachFiles` title to the German, French, Japanese
+  and Korean command labels.
 - Keep the welcome/guide screen visible after creating a new session or
   switching to an empty one — the "New session created" notice no longer
   hides it, leaving a blank panel.

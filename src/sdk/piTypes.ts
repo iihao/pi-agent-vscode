@@ -185,6 +185,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
 import { pathToFileURL } from 'url';
+import { execFileSync } from 'child_process';
 import { logError } from '../utils/logger';
 
 const sdkCache = new Map<string, Promise<PiSdkModule>>();
@@ -250,6 +251,70 @@ export function resolvePiFromCli(cliPath: string): ResolvedPi | null {
     return null;
 }
 
+/** pi 的可执行文件名（Windows 需要 .cmd/.exe） */
+function piExecutableNames(): string[] {
+    return process.platform === 'win32' ? ['pi.cmd', 'pi.exe', 'pi'] : ['pi'];
+}
+
+/** 从可执行文件路径解析 pi：先解软链向上找 package.json，再回退同目录 node_modules */
+function resolveFromBin(bin: string): ResolvedPi | null {
+    try {
+        const real = fs.realpathSync(bin);
+        const found = resolvePackageDir(findPackageRoot(path.dirname(real)));
+        if (found) { return found; }
+    } catch { /* 文件不存在或不是软链：继续尝试同目录 node_modules */ }
+    // Windows 的 npm 全局：bin（%APPDATA%\npm）与 node_modules 同级
+    const binDir = path.dirname(bin);
+    for (const rel of [
+        path.join('node_modules', '@earendil-works', 'pi-coding-agent'),
+        path.join('..', 'node_modules', '@earendil-works', 'pi-coding-agent'),
+    ]) {
+        const found = resolvePackageDir(path.join(binDir, rel));
+        if (found) { return found; }
+    }
+    return null;
+}
+
+/** 在 PATH 中查找第一个存在的可执行文件名 */
+function findOnPath(names: string[]): string | null {
+    const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
+    for (const dir of dirs) {
+        for (const name of names) {
+            const candidate = path.join(dir, name);
+            if (fs.existsSync(candidate)) { return candidate; }
+        }
+    }
+    return null;
+}
+
+/** 通过 `npm root -g` 定位全局安装的 pi */
+function resolveNpmGlobal(): ResolvedPi | null {
+    const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+    try {
+        const root = execFileSync(npm, ['root', '-g'], {
+            encoding: 'utf8',
+            timeout: 5000,
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        if (!root) { return null; }
+        const inModules = resolvePackageDir(path.join(root, '@earendil-works', 'pi-coding-agent'));
+        if (inModules) { return inModules; }
+        // 回退：npm 的 bin 目录（Windows: root 本身即全局目录）
+        for (const binDir of [root, path.dirname(root)]) {
+            for (const name of piExecutableNames()) {
+                const bin = path.join(binDir, name);
+                if (fs.existsSync(bin)) {
+                    const found = resolveFromBin(bin);
+                    if (found) { return found; }
+                }
+            }
+        }
+    } catch (err) {
+        logError(`npm root -g probe failed: ${(err as Error).message}`);
+    }
+    return null;
+}
+
 export function resolvePi(extensionPath: string, executableOverride?: string): ResolvedPi | null {
     // 0. 用户显式配置的可执行文件优先
     if (executableOverride) {
@@ -281,17 +346,50 @@ export function resolvePi(extensionPath: string, executableOverride?: string): R
         searchDir = parent;
     }
 
-    // 2. 探测用户全局安装的 pi
-    const home = os.homedir();
-    const binCandidates: string[] = [
-        path.join(home, '.local', 'opt', 'node', 'bin', 'pi'),
-        '/opt/homebrew/bin/pi',
-        '/usr/local/bin/pi',
-        path.join(home, '.volta', 'bin', 'pi'),
-        path.join(home, 'Library', 'pnpm', 'pi'),
-    ];
+    // 2. PATH 上的 pi（覆盖 nvm/fnm/asdf/volta/bun/pnpm/自定义 prefix 等）
+    const onPath = findOnPath(piExecutableNames());
+    if (onPath) {
+        const found = resolveFromBin(onPath);
+        if (found) { return found; }
+    }
 
-    // 3. 探测 nvm 安装的 pi
+    // 2.5 npm 全局安装（npm i -g @earendil-works/pi-coding-agent）
+    const npmGlobal = resolveNpmGlobal();
+    if (npmGlobal) { return npmGlobal; }
+
+    // 3. 常见安装位置
+    const home = os.homedir();
+    const binCandidates: string[] = [];
+    if (process.platform === 'win32') {
+        const appData = process.env.APPDATA;
+        const localAppData = process.env.LOCALAPPDATA;
+        if (appData) {
+            binCandidates.push(path.join(appData, 'npm', 'pi.cmd'));
+            binCandidates.push(path.join(appData, 'npm', 'pi'));
+        }
+        if (localAppData) {
+            binCandidates.push(path.join(localAppData, 'pnpm', 'pi.cmd'));
+            binCandidates.push(path.join(localAppData, 'Volta', 'bin', 'pi.exe'));
+        }
+    } else {
+        binCandidates.push(
+            path.join(home, '.local', 'opt', 'node', 'bin', 'pi'),
+            path.join(home, '.local', 'bin', 'pi'),
+            path.join(home, '.bun', 'bin', 'pi'),
+            path.join(home, '.volta', 'bin', 'pi'),
+            path.join(home, '.asdf', 'shims', 'pi'),
+            path.join(home, '.nodenv', 'shims', 'pi'),
+            path.join(home, '.yarn', 'bin', 'pi'),
+            path.join(home, '.npm-global', 'bin', 'pi'),
+            path.join(home, 'Library', 'pnpm', 'pi'),
+            path.join(home, '.local', 'share', 'pnpm', 'pi'),
+            '/opt/homebrew/bin/pi',
+            '/usr/local/bin/pi',
+            '/usr/bin/pi',
+        );
+    }
+
+    // 3.5 nvm 各版本目录 + fnm 默认别名
     try {
         const nvmRoot = path.join(home, '.nvm', 'versions', 'node');
         if (fs.existsSync(nvmRoot)) {
@@ -303,16 +401,14 @@ export function resolvePi(extensionPath: string, executableOverride?: string): R
     } catch (err) {
         logError(`scanning nvm versions failed: ${(err as Error).message}`);
     }
+    binCandidates.push(
+        path.join(home, '.local', 'share', 'fnm', 'aliases', 'default', 'bin', 'pi'),
+        path.join(home, '.fnm', 'aliases', 'default', 'bin', 'pi'),
+    );
 
     for (const bin of binCandidates) {
-        try {
-            const real = fs.realpathSync(bin);
-            // 跨平台向上查找 package.json；findPackageRoot 内部处理到达根目录的情况
-            const found = resolvePackageDir(findPackageRoot(path.dirname(real)));
-            if (found) { return found; }
-        } catch (err) {
-            logError(`probe pi candidate failed (${bin}): ${(err as Error).message}`);
-        }
+        const found = resolveFromBin(bin);
+        if (found) { return found; }
     }
 
     return null;

@@ -60,9 +60,9 @@ describe('ChatPanel webview bridge', () => {
         expect(webview.posted).toContainEqual({ type: 'editLast' });
     });
 
-    it('clear() posts clear, setBusy, contexts and turnChanges', () => {
+    it('clear() posts clear, setBusy, contexts and turnChanges', async () => {
         const { webview, panel } = make();
-        panel.clear();
+        await panel.clear();
         const types = webview.posted.map((m) => m.type);
         expect(types).toContain('clear');
         expect(types).toContain('setBusy');
@@ -97,6 +97,14 @@ describe('ChatPanel webview bridge', () => {
         webview.emit({ type: 'attachPath', path: 'src/a.ts' });
         const ctx = webview.posted.filter((m) => m.type === 'contexts').pop();
         expect((ctx?.contexts as Array<{ path: string }>)).toContainEqual(expect.objectContaining({ path: 'src/a.ts' }));
+    });
+
+    it('attachPath with a range adds a selection context for that path', () => {
+        const { webview } = make();
+        webview.emit({ type: 'attachPath', path: 'src/b.ts', range: '3-9' });
+        const ctx = webview.posted.filter((m) => m.type === 'contexts').pop();
+        expect((ctx?.contexts as Array<{ path: string; lineRange?: string; type: string }>))
+            .toContainEqual(expect.objectContaining({ path: 'src/b.ts', lineRange: '3-9', type: 'selection' }));
     });
 
     it('attachFiles() adds selected workspace files as context', async () => {
