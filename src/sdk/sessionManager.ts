@@ -67,23 +67,31 @@ export class SessionManager {
                 try {
                     const sessionDir = path.dirname(sessionFile);
                     if (fs.existsSync(sessionDir)) {
-                        const files = fs.readdirSync(sessionDir)
-                            .filter((f) => f.endsWith('.jsonl'))
-                            .map((f) => {
-                                const full = path.join(sessionDir, f);
-                                const stat = fs.statSync(full);
-                                const meta = this._readMeta(full, stat.mtimeMs);
+                        // 先按 mtime 排序截断，再读取内容：避免为目录内所有会话文件做头部/尾部扫描
+                        const candidates: Array<{ full: string; mtimeMs: number }> = [];
+                        for (const f of fs.readdirSync(sessionDir)) {
+                            if (!f.endsWith('.jsonl')) { continue; }
+                            const full = path.join(sessionDir, f);
+                            try {
+                                candidates.push({ full, mtimeMs: fs.statSync(full).mtimeMs });
+                            } catch (err) {
+                                logError(`loadSessions: stat failed for ${full}: ${(err as Error).message}`);
+                            }
+                        }
+                        const files = candidates
+                            .sort((a, b) => b.mtimeMs - a.mtimeMs)
+                            .slice(0, 20)
+                            .map(({ full, mtimeMs }) => {
+                                const meta = this._readMeta(full, mtimeMs);
                                 return {
                                     id: meta.id,
                                     name: meta.name,
                                     preview: meta.preview,
                                     file: full,
-                                    createdAt: stat.mtimeMs,
+                                    createdAt: mtimeMs,
                                     messageCount: 0,
                                 };
-                            })
-                            .sort((a, b) => b.createdAt - a.createdAt)
-                            .slice(0, 20);
+                            });
                         sessions.push(...files);
                     }
                 } catch (err) {
