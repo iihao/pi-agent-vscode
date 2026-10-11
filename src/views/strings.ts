@@ -22,7 +22,6 @@ export interface UiStrings {
     prev: string;
     next: string;
     close: string;
-    welcomeDesc: string;
     quickExplain: string;
     quickExplainQ: string;
     quickReview: string;
@@ -96,7 +95,6 @@ export function getUiStrings(): UiStrings {
         prev: t('Previous'),
         next: t('Next'),
         close: t('Close'),
-        welcomeDesc: t('Your local pi coding agent, right in the VS Code sidebar.'),
         quickExplain: t('Explain code'),
         quickExplainQ: t('Explain my selected code'),
         quickReview: t('Review code'),
