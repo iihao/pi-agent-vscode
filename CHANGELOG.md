@@ -68,6 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- All composer popovers (model, thinking, permissions, add-context) share a
+  single width (380px, shrinking to fit narrow sidebars).
 - Empty state for new conversations: a Pi logo mark, quick actions, and
   keyboard hints (the tagline and the earlier "Getting started" guide card were
   removed for a simpler first screen).
