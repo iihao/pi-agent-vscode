@@ -19,6 +19,11 @@ import { getVSCodeService } from './services';
 /** VS Code 访问统一走服务容器（便于测试与替换） */
 const vs = getVSCodeService();
 
+/** 所有聊天面板（侧边栏 / 编辑器标签）共享同一 pi 客户端与会话管理器，
+ *  避免多开时启动多个 pi 进程、争用同一会话文件。 */
+const sharedClientManager = new PiClientManager();
+const sharedSessionManager = new SessionManager();
+
 /** 判断错误是否为「pi 进程/连接」类问题（用类型/code 判断，不依赖本地化文案） */
 function isProcessError(err: unknown): boolean {
     if (err instanceof PiStartError) { return true; }
@@ -179,7 +184,10 @@ interface WebviewMessage {
     mode?: string;
     paths?: string[];
     path?: string;
+    images?: ImageAttachment[];
 }
+
+type ImageAttachment = { type?: string; data?: string; mimeType?: string };
 
 // 发送给 webview 的消息类型
 interface PostMessage {
@@ -218,6 +226,8 @@ interface PostMessage {
 export class ChatPanel {
     public static currentView: ChatPanel | undefined;
     public static readonly viewType = 'pi-agent.chatView';
+    public static readonly editorViewType = 'pi-agent.chatEditor';
+    private static _instances: ChatPanel[] = [];
 
     private readonly _webview: vscode.Webview;
     private readonly _extensionPath: string;
@@ -249,8 +259,9 @@ export class ChatPanel {
     private constructor(webview: vscode.Webview, extensionPath: string, disposeEvent: vscode.Event<void>) {
         this._webview = webview;
         this._extensionPath = extensionPath;
-        this._clientManager = new PiClientManager();
-        this._sessionManager = new SessionManager();
+        this._clientManager = sharedClientManager;
+        this._sessionManager = sharedSessionManager;
+        ChatPanel._instances.push(this);
         // 每个面板实例从干净状态开始（单例 store 可能残留上一实例的值）
         setState(getInitialState());
 
@@ -287,6 +298,25 @@ export class ChatPanel {
         context.subscriptions.push(
             vscode.window.registerWebviewViewProvider(ChatPanel.viewType, provider)
         );
+    }
+
+    /** 在编辑器标签打开聊天（复用同一 pi 客户端 / 会话） */
+    public static openInEditor(extensionPath: string, column: vscode.ViewColumn = vscode.ViewColumn.Active): ChatPanel {
+        const panel = vscode.window.createWebviewPanel(
+            ChatPanel.editorViewType,
+            'Pi',
+            column,
+            { enableScripts: true, localResourceRoots: [mediaRoot(extensionPath)], retainContextWhenHidden: true }
+        );
+        try { panel.iconPath = vscode.Uri.file(path.join(extensionPath, 'assets', 'icon.png')); } catch { /* optional */ }
+        const chat = new ChatPanel(panel.webview, extensionPath, panel.onDidDispose);
+        ChatPanel.currentView = chat;
+        return chat;
+    }
+
+    /** 停止共享的 pi 客户端（扩展停用时调用） */
+    public static async stopSharedClient(): Promise<void> {
+        await sharedClientManager.stop();
     }
 
     public static async ensureView(): Promise<ChatPanel> {
@@ -703,13 +733,16 @@ export class ChatPanel {
     private async _handleWebviewMessage(message: WebviewMessage): Promise<void> {
         switch (message.type) {
             case 'sendMessage':
-                if (message.text) {
-                    const validation = validateMessage(message.text);
-                    if (!validation.valid) {
-                        this._post({ type: 'notice', text: validation.error || vscode.l10n.t('Invalid message') });
-                        return;
+                if (message.text || (message.images && message.images.length)) {
+                    const text = message.text || '';
+                    if (text) {
+                        const validation = validateMessage(text);
+                        if (!validation.valid) {
+                            this._post({ type: 'notice', text: validation.error || vscode.l10n.t('Invalid message') });
+                            return;
+                        }
                     }
-                    await this._handleUserMessage(message.text, message.mode);
+                    await this._handleUserMessage(text, message.mode, message.images);
                 }
                 break;
             case 'runBash':
@@ -1374,10 +1407,10 @@ export class ChatPanel {
 
     // ---------- 用户消息 ----------
 
-    private async _handleUserMessage(userText: string, mode?: string) {
-        if (!this._firstUserMessage) { this._firstUserMessage = userText; }
+    private async _handleUserMessage(userText: string, mode?: string, images?: ImageAttachment[]) {
+        if (userText && !this._firstUserMessage) { this._firstUserMessage = userText; }
         if (this._busy) {
-            await this._enqueueWhileBusy(userText, mode);
+            await this._enqueueWhileBusy(userText, mode, images);
             return;
         }
 
@@ -1388,7 +1421,7 @@ export class ChatPanel {
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
             const extra = await this._buildAutoContext();
-            const disposition = await client.prompt(this._withContext(userText, extra));
+            const disposition = await client.prompt(this._withContext(userText, extra), images);
             this._clearContexts();
             if (disposition === 'handled') {
                 // pi 未启动新一轮（如扩展命令已处理），立即结束 busy
@@ -1429,19 +1462,19 @@ export class ChatPanel {
     }
 
     /** 忙碌时：steer 立刻插入当前回合；否则排队为 follow-up */
-    private async _enqueueWhileBusy(userText: string, mode?: string): Promise<void> {
+    private async _enqueueWhileBusy(userText: string, mode?: string, images?: ImageAttachment[]): Promise<void> {
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
             const extra = await this._buildAutoContext();
             const message = this._withContext(userText, extra);
             const steering = mode === 'steer';
             if (steering && typeof client.steer === 'function') {
-                await client.steer(message);
+                await client.steer(message, images);
             } else if (typeof client.followUp === 'function') {
-                await client.followUp(message);
+                await client.followUp(message, images);
             } else {
                 // 客户端不支持 steer/followUp 时回退到带 streamingBehavior 的 prompt
-                await client.prompt(message, undefined, steering ? 'steer' : 'followUp');
+                await client.prompt(message, images, steering ? 'steer' : 'followUp');
             }
             this._clearContexts();
             this._post({ type: 'addUserMessage', text: userText, pending: steering ? 'steering' : 'queued' });
@@ -1485,8 +1518,11 @@ export class ChatPanel {
     }
 
     public dispose() {
-        if (ChatPanel.currentView === this) { ChatPanel.currentView = undefined; }
-        void this._clientManager.stop().catch((err) => { logError(`dispose stop failed: ${(err as Error).message}`); });
+        // 不在这里停 pi 客户端：可能有其他面板仍在使用（共享）
+        ChatPanel._instances = ChatPanel._instances.filter((p) => p !== this);
+        if (ChatPanel.currentView === this) {
+            ChatPanel.currentView = ChatPanel._instances[ChatPanel._instances.length - 1];
+        }
         while (this._disposables.length) {
             const d = this._disposables.pop();
             if (d) { d.dispose(); }

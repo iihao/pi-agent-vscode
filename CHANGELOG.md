@@ -11,6 +11,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Editor tabs**: open the chat in an editor tab (or beside) with
+  **Pi: Open Chat in Editor Tab** / **Pi: Open Chat Beside**. All surfaces share
+  one pi client and session, so the sidebar and tabs stay in sync.
+- **Image paste**: paste an image into the composer to send it to vision models;
+  thumbnails show above the input and can be removed before sending.
 - **Automatic context**: optionally attach the open file and selection to every
   message, plus diagnostics and Git branch/changes (`pi-agent.context.autoAttach`,
   `includeDiagnostics`, `includeGit`). Sent as a `<editor-context>` /

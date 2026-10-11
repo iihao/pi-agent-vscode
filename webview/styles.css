@@ -141,6 +141,29 @@
     .popover-item-meta { margin-left: auto; font-family: var(--cx-mono); font-size: 10px; color: var(--cx-muted); flex-shrink: 0; }
     .popover-empty { padding: 8px 10px; font-size: 11px; color: var(--cx-muted); }
 
+    /* 粘贴的图片缩略图 */
+    .image-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .image-row.hidden { display: none; }
+    .image-thumb {
+        position: relative;
+        width: 52px; height: 52px;
+        border-radius: 8px;
+        overflow: hidden;
+        border: 1px solid var(--cx-border-strong);
+        background: var(--cx-panel);
+    }
+    .image-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .image-thumb button {
+        position: absolute; top: 1px; right: 1px;
+        width: 16px; height: 16px;
+        border-radius: 50%;
+        border: none;
+        background: rgba(0, 0, 0, .6);
+        color: #fff;
+        font-size: 10px; line-height: 1; cursor: pointer; padding: 0;
+        display: grid; place-items: center;
+    }
+
     /* 输入框补全（斜杠命令 / @ 文件提及） */
     .suggest {
         position: absolute;

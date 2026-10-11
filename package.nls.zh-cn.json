@@ -17,6 +17,8 @@
   "cmd.generatePullRequestDescription": "Pi: 生成 PR 描述",
   "cmd.revertLastTurn": "Pi: 撤销本回合改动",
   "cmd.cloneSession": "Pi: 克隆会话",
+  "cmd.openInEditor": "Pi: 在编辑器标签打开对话",
+  "cmd.openInEditorToSide": "Pi: 在侧边打开对话",
   "cmd.attachFile": "Pi: 附加当前文件到对话",
   "cmd.attachSelection": "Pi: 附加选中代码到对话",
   "cmd.restartSession": "Pi: 重启会话",

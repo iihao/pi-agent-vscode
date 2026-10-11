@@ -130,6 +130,16 @@ export function activate(context: vscode.ExtensionContext) {
         await panel.cloneSession();
     });
 
+    // ---- 在编辑器标签打开 ----
+    const openInEditor = vscode.commands.registerCommand('pi-agent.openInEditor', () => {
+        ChatPanel.openInEditor(context.extensionPath, vscode.ViewColumn.Active);
+    });
+
+    // ---- 在侧边（分栏）打开 ----
+    const openInEditorToSide = vscode.commands.registerCommand('pi-agent.openInEditorToSide', () => {
+        ChatPanel.openInEditor(context.extensionPath, vscode.ViewColumn.Beside);
+    });
+
     // ---- 附加编辑器上下文 ----
     const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', async () => {
         const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
@@ -196,6 +206,8 @@ export function activate(context: vscode.ExtensionContext) {
         generatePullRequestDescription,
         revertLastTurn,
         cloneSession,
+        openInEditor,
+        openInEditorToSide,
         attachFile,
         attachSelection,
         restartSession,
@@ -238,5 +250,6 @@ function getSelectionContext(): {
 }
 
 export function deactivate() {
-    // 视图由 VSCode 自动销毁
+    // 视图由 VSCode 自动销毁；停掉共享的 pi 客户端
+    void ChatPanel.stopSharedClient();
 }

@@ -57,6 +57,7 @@ const vscode = acquireVsCodeApi();
     const sendBtn = document.getElementById('send');
     const attachBtn = document.getElementById('attachBtn');
     const chipRow = document.getElementById('chipRow');
+    const imageRow = document.getElementById('imageRow');
     const suggest = document.getElementById('suggest');
     const modelBtn = document.getElementById('modelBtn');
     const modelLabel = document.getElementById('modelLabel');
@@ -118,6 +119,8 @@ const vscode = acquireVsCodeApi();
 
     // 编辑器上下文 chip
     let contexts = [];
+    // 待发送的粘贴图片
+    let pendingImages = [];
 
     function shortId(id) { return id ? String(id).slice(0, 8) : S.sessionTitle; }
 
@@ -664,6 +667,30 @@ const vscode = acquireVsCodeApi();
         }
     }
 
+    // ========== 图片粘贴 ==========
+
+    function readImage(file) {
+        const reader = new FileReader();
+        reader.onload = function () {
+            const dataUrl = String(reader.result || '');
+            const comma = dataUrl.indexOf(',');
+            if (comma === -1) { return; }
+            pendingImages.push({ mimeType: file.type || 'image/png', data: dataUrl.slice(comma + 1), dataUrl: dataUrl });
+            renderImages();
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function renderImages() {
+        if (!pendingImages.length) { imageRow.classList.add('hidden'); imageRow.innerHTML = ''; return; }
+        imageRow.classList.remove('hidden');
+        let html = '';
+        pendingImages.forEach(function (img, i) {
+            html += '<div class="image-thumb"><img src="' + img.dataUrl + '" alt=""><button data-i="' + i + '" title="' + S.remove + '">✕</button></div>';
+        });
+        imageRow.innerHTML = html;
+    }
+
     // ========== `!` shell 命令 ==========
 
     function bashId() {
@@ -931,9 +958,10 @@ const vscode = acquireVsCodeApi();
 
     function send(mode) {
         const text = input.value.trim();
-        if (!text) return;
+        const images = pendingImages.map(function (i) { return { type: 'image', data: i.data, mimeType: i.mimeType }; });
+        if (!text && !images.length) { return; }
         // 保存到历史
-        if (messageHistory.length === 0 || messageHistory[messageHistory.length - 1] !== text) {
+        if (text && (messageHistory.length === 0 || messageHistory[messageHistory.length - 1] !== text)) {
             messageHistory.push(text);
             if (messageHistory.length > 50) messageHistory.shift();
         }
@@ -951,8 +979,10 @@ const vscode = acquireVsCodeApi();
             return;
         }
         // 忙碌时：默认排队（follow-up），带修饰键则 steer 插入当前回合
-        vscode.postMessage({ type: 'sendMessage', text: text, mode: busy ? (mode || 'queue') : undefined });
+        vscode.postMessage({ type: 'sendMessage', text: text, mode: busy ? (mode || 'queue') : undefined, images: images.length ? images : undefined });
         input.value = '';
+        pendingImages = [];
+        renderImages();
         autoResizeInput();
     }
     
@@ -1033,6 +1063,23 @@ const vscode = acquireVsCodeApi();
     sendBtn.addEventListener('click', function () { if (busy) { vscode.postMessage({ type: 'abort' }); } else { send(); } });
     input.addEventListener('input', function () { autoResizeInput(); updateSuggest(); });
     input.addEventListener('click', function () { updateSuggest(); });
+    input.addEventListener('paste', function (e) {
+        const items = e.clipboardData && e.clipboardData.items;
+        if (!items) { return; }
+        let handled = false;
+        for (let i = 0; i < items.length; i++) {
+            const it = items[i];
+            if (it.kind === 'file' && it.type && it.type.indexOf('image/') === 0) {
+                const file = it.getAsFile();
+                if (file) { readImage(file); handled = true; }
+            }
+        }
+        if (handled) { e.preventDefault(); }
+    });
+    imageRow.addEventListener('click', function (e) {
+        const btn = e.target.closest('button[data-i]');
+        if (btn) { pendingImages.splice(Number(btn.dataset.i), 1); renderImages(); }
+    });
     input.addEventListener('keyup', function (e) {
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight' || e.key === 'Home' || e.key === 'End') { updateSuggest(); }
     });
@@ -1307,6 +1354,8 @@ const vscode = acquireVsCodeApi();
                 ctxStats.classList.add('hidden');
                 clearSearch();
                 closeSuggest();
+                pendingImages = [];
+                renderImages();
                 updateMessageCount();
                 renderRail();
                 scrollToBottom();

@@ -17,6 +17,8 @@
   "cmd.generatePullRequestDescription": "Pi: Generate Pull Request Description",
   "cmd.revertLastTurn": "Pi: Revert Changes From Last Turn",
   "cmd.cloneSession": "Pi: Clone Session",
+  "cmd.openInEditor": "Pi: Open Chat in Editor Tab",
+  "cmd.openInEditorToSide": "Pi: Open Chat Beside",
   "cmd.attachFile": "Pi: Attach Current File to Chat",
   "cmd.attachSelection": "Pi: Attach Selection to Chat",
   "cmd.restartSession": "Pi: Restart Session",

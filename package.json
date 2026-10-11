@@ -61,6 +61,8 @@
     "onCommand:pi-agent.generatePullRequestDescription",
     "onCommand:pi-agent.revertLastTurn",
     "onCommand:pi-agent.cloneSession",
+    "onCommand:pi-agent.openInEditor",
+    "onCommand:pi-agent.openInEditorToSide",
     "onCommand:pi-agent.restartSession",
     "onCommand:pi-agent.exportDiagnostics",
     "onCommand:pi-agent.attachFile",
@@ -135,6 +137,16 @@
         "title": "%cmd.cloneSession%"
       },
       {
+        "command": "pi-agent.openInEditor",
+        "title": "%cmd.openInEditor%",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "pi-agent.openInEditorToSide",
+        "title": "%cmd.openInEditorToSide%",
+        "icon": "$(split-horizontal)"
+      },
+      {
         "command": "pi-agent.attachFile",
         "title": "%cmd.attachFile%",
         "icon": "$(add)"
@@ -191,6 +203,18 @@
           "command": "pi-agent.restartSession",
           "when": "view == pi-agent.chatView",
           "group": "navigation@1"
+        },
+        {
+          "command": "pi-agent.openInEditor",
+          "when": "view == pi-agent.chatView",
+          "group": "navigation@2"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "pi-agent.openInEditorToSide",
+          "when": "activeWebviewPanelId != 'pi-agent.chatEditor'",
+          "group": "navigation@100"
         }
       ],
       "scm/title": [
