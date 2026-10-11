@@ -394,6 +394,58 @@ export class ChatPanel {
         this._addSelectionContext(editor);
     }
 
+    /** 回形针菜单：当前文件 / 当前选区 / 从工作区选文件 / 选文件夹 */
+    public async attachMenu(): Promise<void> {
+        const editor = vs.activeTextEditor;
+        const items: Array<{ label: string; action: string }> = [];
+        if (editor) {
+            items.push({ label: vscode.l10n.t('Current file'), action: 'file' });
+            if (!editor.selection.isEmpty) { items.push({ label: vscode.l10n.t('Current selection'), action: 'selection' }); }
+        }
+        items.push({ label: vscode.l10n.t('Choose files from workspace…'), action: 'files' });
+        items.push({ label: vscode.l10n.t('Choose a folder…'), action: 'folder' });
+        const pick = await vs.showQuickPick<{ label: string; action: string }>(items, { placeHolder: vscode.l10n.t('Attach context') });
+        if (!pick) { return; }
+        if (pick.action === 'file' && editor) { this._addFileContext(editor); }
+        else if (pick.action === 'selection' && editor) { this._addSelectionContext(editor); }
+        else if (pick.action === 'files') { await this._pickWorkspaceFiles(); }
+        else if (pick.action === 'folder') { await this._pickWorkspaceFolder(); }
+    }
+
+    /** 从工作区选择若干文件并附加 */
+    public async attachFiles(): Promise<void> { await this._pickWorkspaceFiles(); }
+
+    private async _pickWorkspaceFiles(): Promise<void> {
+        const uris = await vs.showOpenDialog({
+            canSelectMany: true,
+            canSelectFiles: true,
+            canSelectFolders: false,
+            defaultUri: vs.workspaceFolders?.[0]?.uri,
+            openLabel: vscode.l10n.t('Attach'),
+        });
+        if (!uris || !uris.length) { return; }
+        for (const uri of uris) { this._addUriContext(uri); }
+    }
+
+    private async _pickWorkspaceFolder(): Promise<void> {
+        const uris = await vs.showOpenDialog({
+            canSelectMany: true,
+            canSelectFiles: false,
+            canSelectFolders: true,
+            defaultUri: vs.workspaceFolders?.[0]?.uri,
+            openLabel: vscode.l10n.t('Attach'),
+        });
+        if (!uris || !uris.length) { return; }
+        for (const uri of uris) { this._addUriContext(uri); }
+    }
+
+    /** 把选中的 Uri 作为路径引用附加（工作区内用相对路径） */
+    private _addUriContext(uri: vscode.Uri): void {
+        const inWorkspace = Boolean(vs.getWorkspaceFolder(uri));
+        const path = inWorkspace ? vs.asRelativePath(uri, false) : uri.fsPath;
+        this._addContext({ type: 'file', path });
+    }
+
     private _addFileContext(editor: vscode.TextEditor): void {
         const rel = vs.asRelativePath(editor.document.uri);
         this._addContext({ type: 'file', path: rel });
@@ -819,6 +871,9 @@ export class ChatPanel {
                 break;
             case 'attachActive':
                 this.attachActive();
+                break;
+            case 'attachMenu':
+                await this.attachMenu();
                 break;
             case 'removeContext':
                 if (message.id) { this._removeContext(message.id); }

@@ -21,6 +21,7 @@
   "cmd.openInEditorToSide": "Pi: Open Chat Beside",
   "cmd.attachFile": "Pi: Attach Current File to Chat",
   "cmd.attachSelection": "Pi: Attach Selection to Chat",
+  "cmd.attachFiles": "Pi: Attach Files from Workspace",
   "cmd.restartSession": "Pi: Restart Session",
   "cmd.exportDiagnostics": "Pi: Export Diagnostics",
   "view.chat.name": "Chat",

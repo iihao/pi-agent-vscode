@@ -84,6 +84,19 @@ describe('ChatPanel webview bridge', () => {
         expect(webview.posted.some((m) => m.type === 'notice')).toBe(true);
     });
 
+    it('attachFiles() adds selected workspace files as context', async () => {
+        const original = vscodeMock.window.showOpenDialog;
+        (vscodeMock.window as { showOpenDialog: unknown }).showOpenDialog = () => Promise.resolve([{ fsPath: '/x/a.ts' }]);
+        try {
+            const { webview, panel } = make();
+            await panel.attachFiles();
+            const ctx = webview.posted.filter((m) => m.type === 'contexts').pop();
+            expect((ctx?.contexts as Array<{ path: string }>)).toEqual([expect.objectContaining({ path: '/x/a.ts' })]);
+        } finally {
+            (vscodeMock.window as { showOpenDialog: unknown }).showOpenDialog = original;
+        }
+    });
+
     it('a disposed panel ignores later posts', () => {
         const { webview, panel } = make();
         panel.dispose();

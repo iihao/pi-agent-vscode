@@ -108,6 +108,8 @@ export function activate(context: vscode.ExtensionContext) {
         withPanel((panel) => panel.attachFile()));
     const attachSelection = vscode.commands.registerCommand('pi-agent.attachSelection', () =>
         withPanel((panel) => panel.attachSelection()));
+    const attachFiles = vscode.commands.registerCommand('pi-agent.attachFiles', () =>
+        withPanel((panel) => panel.attachFiles()));
 
     // ---- 重启会话（权限模式 / 可执行路径变更后生效）----
     const restartSession = vscode.commands.registerCommand('pi-agent.restartSession', () =>
@@ -167,6 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
         openInEditorToSide,
         attachFile,
         attachSelection,
+        attachFiles,
         restartSession,
         exportDiagnostics,
         configWatcher,

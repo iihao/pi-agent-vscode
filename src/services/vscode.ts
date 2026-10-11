@@ -14,6 +14,7 @@ export interface IVSCodeService {
     showInputBox(options?: vscode.InputBoxOptions): Thenable<string | undefined>;
     showQuickPick<T = string>(items: readonly any[], options?: vscode.QuickPickOptions): Thenable<T | undefined>;
     showSaveDialog(options?: vscode.SaveDialogOptions): Thenable<vscode.Uri | undefined>;
+    showOpenDialog(options?: vscode.OpenDialogOptions): Thenable<vscode.Uri[] | undefined>;
 
     // 编辑器 / 文档
     showTextDocument(document: vscode.TextDocument, options?: vscode.TextDocumentShowOptions): Thenable<vscode.TextEditor>;
@@ -71,6 +72,10 @@ export class VSCodeService implements IVSCodeService {
 
     public showSaveDialog(options?: vscode.SaveDialogOptions): Thenable<vscode.Uri | undefined> {
         return vscode.window.showSaveDialog(options);
+    }
+
+    public showOpenDialog(options?: vscode.OpenDialogOptions): Thenable<vscode.Uri[] | undefined> {
+        return vscode.window.showOpenDialog(options);
     }
 
     public showTextDocument(document: vscode.TextDocument, options?: vscode.TextDocumentShowOptions): Thenable<vscode.TextEditor> {

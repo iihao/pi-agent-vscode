@@ -29,6 +29,7 @@ export const window = {
     showInputBox: (_opts?: unknown) => Promise.resolve('typed'),
     showQuickPick: (items: unknown[]) => Promise.resolve(items[0]),
     showSaveDialog: (_opts?: unknown) => Promise.resolve(undefined),
+    showOpenDialog: (_opts?: unknown) => Promise.resolve([] as unknown[]),
     showTextDocument: (doc: unknown) => Promise.resolve({ document: doc }),
     activeTextEditor: undefined,
     state: { focused: true },

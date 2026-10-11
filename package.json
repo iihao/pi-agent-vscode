@@ -67,6 +67,7 @@
     "onCommand:pi-agent.exportDiagnostics",
     "onCommand:pi-agent.attachFile",
     "onCommand:pi-agent.attachSelection",
+    "onCommand:pi-agent.attachFiles",
     "onView:pi-agent.chatView"
   ],
   "main": "./out/extension.js",
@@ -160,6 +161,11 @@
         "icon": "$(add)"
       },
       {
+        "command": "pi-agent.attachFiles",
+        "title": "%cmd.attachFiles%",
+        "icon": "$(add)"
+      },
+      {
         "command": "pi-agent.restartSession",
         "title": "%cmd.restartSession%",
         "icon": "$(debug-restart)"
@@ -189,6 +195,10 @@
         {
           "command": "pi-agent.attachFile",
           "group": "9_cutcopypaste@8"
+        },
+        {
+          "command": "pi-agent.attachFiles",
+          "group": "9_cutcopypaste@9"
         }
       ],
       "commandPalette": [
