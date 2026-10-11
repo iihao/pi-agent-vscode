@@ -350,7 +350,12 @@ const vscode = acquireVsCodeApi();
         for (var i = 0; i < lines.length; i++) {
             lineNumbers += '<span class="line-number">' + (i + 1) + '</span>';
         }
-        var actions = '<div class="code-actions"><button data-act="apply">' + S.codeApply + '</button><button data-act="copy">' + S.codeCopy + '</button></div>';
+        var applyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 12.5 9.5 18 20 6"></polyline></svg>';
+        var copyIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2.5"></rect><path d="M5 15H4.5A1.5 1.5 0 0 1 3 13.5V4.5A1.5 1.5 0 0 1 4.5 3h9A1.5 1.5 0 0 1 15 4.5V5"></path></svg>';
+        var actions = '<div class="code-actions">' +
+            '<button data-act="apply" title="' + escapeHtml(S.codeApply) + '" aria-label="' + escapeHtml(S.codeApply) + '">' + applyIcon + '</button>' +
+            '<button data-act="copy" title="' + escapeHtml(S.codeCopy) + '" aria-label="' + escapeHtml(S.codeCopy) + '">' + copyIcon + '</button>' +
+            '</div>';
         return '<div class="code-block"><div class="code-block-header"><span>' + escapeHtml(lang) + '</span>' + actions + '</div><pre><div class="code-with-lines"><div class="line-numbers">' + lineNumbers + '</div><code class="hljs">' + codeHtml + '</code></div></pre></div>';
     }
 

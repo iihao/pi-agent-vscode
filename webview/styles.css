@@ -515,23 +515,27 @@
         color: var(--cx-muted);
         opacity: .8;
     }
-    .code-actions { display: inline-flex; gap: 3px; opacity: 0; transition: opacity .12s; }
-    .code-block:hover .code-actions { opacity: 1; }
+    .code-actions { display: inline-flex; gap: 2px; opacity: 0; transition: opacity .12s; }
+    .code-block:hover .code-actions, .code-actions:focus-within { opacity: 1; }
     .code-actions button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 20px;
+        height: 20px;
+        padding: 0;
         background: transparent;
         border: none;
         color: var(--cx-muted);
         cursor: pointer;
-        padding: 2px 8px;
         border-radius: 5px;
-        font-family: var(--cx-mono);
-        font-size: 10.5px;
     }
+    .code-actions button svg { width: 12.5px; height: 12.5px; }
     .code-actions button:hover { background: var(--cx-hover); color: var(--cx-fg); }
     .code-block pre { margin: 0; padding: 6px 0 10px; overflow-x: auto; }
     .code-with-lines { display: flex; align-items: stretch; }
     .line-numbers {
-        padding: 0 10px 0 12px;
+        padding: 0 6px 0 8px;
         text-align: right;
         color: var(--vscode-editorLineNumber-foreground, var(--cx-muted));
         opacity: .5;
@@ -544,7 +548,7 @@
     .code-with-lines code {
         flex: 1;
         display: block;
-        padding: 0 14px;
+        padding: 0 12px;
         font-family: var(--cx-mono);
         font-size: 12px;
         line-height: 1.6;

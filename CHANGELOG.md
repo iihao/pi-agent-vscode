@@ -68,6 +68,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Code blocks: a narrower line-number gutter and icon-only **Apply** /
+  **Copy** actions (check / copy glyphs) with tooltips, shown on hover or
+  keyboard focus.
 - All composer popovers (model, thinking, permissions, add-context) share a
   single width (380px, shrinking to fit narrow sidebars).
 - Empty state for new conversations: a Pi logo mark, quick actions, and
