@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/iihao/pi-agent-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/iihao/pi-agent-vscode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.80%2B-007ACC.svg)](https://code.visualstudio.com/)
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.90%2B-007ACC.svg)](https://code.visualstudio.com/)
 [![Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-Pi%20Agent-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=iihao.pi-agent-assistant)
 
 [English](./README.md) · **简体中文**
@@ -61,6 +61,7 @@
 ## 亮点
 
 - 💬 **流式对话**：思考过程、实时工具调用卡片。
+- 🧠 **原生聊天**：在 VS Code 自带的 Chat 视图里用 **`@pi`**，或点编辑器标题栏的聊天图标（**Pi: 在聊天中提问**）直接进入。
 - ⏯️ **排队 + 插入（steer）**：pi 工作时可继续输入 —— **Enter** 排队，**Ctrl/⌘+Enter** 立即插入当前回合。
 - 🧰 **直接跑 shell**：输入框以 `!` 开头即可执行命令。
 - 🎯 **免复制粘贴的上下文**：附加文件/选区（以 `@路径:12-30` 引用发送）、输入 `@` 提及文件、拖拽文件，或开启**自动上下文**（当前文件、选区、诊断、Git）。
@@ -81,6 +82,7 @@
 | 操作 | 方式 |
 |------|------|
 | 打开对话 | `⌥⌘P` / `Ctrl+Alt+P`、状态栏 ✨Pi，或 **Pi: 打开对话** |
+| 在原生聊天中提问 | Chat 视图里 `@pi`，或 **Pi: 在聊天中提问**（编辑器标题栏） |
 | 新建对话 | 侧边栏内 `⌘⇧N` / `Ctrl+Shift+N`，或 **Pi: 新建对话** |
 | 在编辑器标签 / 分栏打开 | **Pi: 在编辑器标签打开对话** / **Pi: 在侧边打开对话** |
 | 提问间跳转 | `Alt+↑` / `Alt+↓`，或 `‹ ›` 按钮与右侧刻度条 |

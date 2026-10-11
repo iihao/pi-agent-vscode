@@ -9,6 +9,7 @@ class FakeRpcClient {
     public prompts: string[] = [];
     public writes: string[] = [];
     public lastText: string | null = 'generated title';
+    public deltas: string[] = ['Hello', ' world'];
     public options: { cliPath?: string; cwd?: string; args?: string[] };
     public failStart = false;
     public process = { stdin: { write: (data: string) => { this.writes.push(data); return true; } } };
@@ -30,6 +31,9 @@ class FakeRpcClient {
     async prompt(m: string): Promise<string> {
         this.prompts.push(m);
         this.emit({ type: 'extension_ui_request', id: 'req1' });
+        for (const d of this.deltas) {
+            this.emit({ type: 'message_update', assistantMessageEvent: { type: 'text_delta', delta: d } });
+        }
         return 'handled';
     }
     async abort(): Promise<void> { this.aborted = true; }
@@ -134,5 +138,29 @@ describe('PiClientManager.runOneShot', () => {
     it('throws PiNotFoundError when pi is missing', async () => {
         const { manager } = setup({ notFound: true });
         await expect(manager.runOneShot('/ext', 'x')).rejects.toBeInstanceOf(PiNotFoundError);
+    });
+});
+
+describe('PiClientManager.runStreaming', () => {
+    it('forwards text deltas and stops the ephemeral client', async () => {
+        const { manager, instances } = setup();
+        const out: string[] = [];
+        await manager.runStreaming('/ext', 'hi', (d) => out.push(d));
+        expect(out).toEqual(['Hello', ' world']);
+        expect(instances).toHaveLength(1);
+        expect(instances[0].options.args).toContain('--no-session');
+        expect(instances[0].stopped).toBe(true);
+        expect(manager.isConnected).toBe(false);
+    });
+
+    it('subscribes to cancellation when a token is given', async () => {
+        const { manager } = setup();
+        let subscribed = false;
+        const token = {
+            isCancellationRequested: false,
+            onCancellationRequested: (_cb: () => void) => { subscribed = true; return { dispose() { /* noop */ } }; },
+        } as unknown as import('vscode').CancellationToken;
+        await manager.runStreaming('/ext', 'hi', () => { /* noop */ }, token);
+        expect(subscribed).toBe(true);
     });
 });

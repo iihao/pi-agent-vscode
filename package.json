@@ -22,7 +22,7 @@
     "url": "https://github.com/iihao/pi-agent-vscode/issues"
   },
   "engines": {
-    "vscode": "^1.80.0"
+    "vscode": "^1.90.0"
   },
   "capabilities": {
     "untrustedWorkspaces": {
@@ -63,6 +63,8 @@
     "onCommand:pi-agent.cloneSession",
     "onCommand:pi-agent.openInEditor",
     "onCommand:pi-agent.openInEditorToSide",
+    "onCommand:pi-agent.openNativeChat",
+    "onChatParticipant:pi-agent.pi",
     "onCommand:pi-agent.restartSession",
     "onCommand:pi-agent.exportDiagnostics",
     "onCommand:pi-agent.attachFile",
@@ -147,6 +149,11 @@
         "icon": "$(split-horizontal)"
       },
       {
+        "command": "pi-agent.openNativeChat",
+        "title": "%cmd.openNativeChat%",
+        "icon": "$(comment-discussion)"
+      },
+      {
         "command": "pi-agent.attachFile",
         "title": "%cmd.attachFile%",
         "icon": "$(add)"
@@ -215,6 +222,10 @@
           "command": "pi-agent.openInEditorToSide",
           "when": "activeWebviewPanelId != 'pi-agent.chatEditor'",
           "group": "navigation@100"
+        },
+        {
+          "command": "pi-agent.openNativeChat",
+          "group": "navigation@99"
         }
       ],
       "scm/title": [
@@ -244,6 +255,21 @@
         }
       ]
     },
+    "chatParticipants": [
+      {
+        "id": "pi-agent.pi",
+        "name": "pi",
+        "fullName": "Pi Agent",
+        "description": "%chatParticipant.description%",
+        "isSticky": true,
+        "commands": [
+          {
+            "name": "explain",
+            "description": "%chatParticipant.explain.description%"
+          }
+        ]
+      }
+    ],
     "keybindings": [
       {
         "command": "pi-agent.openChat",
@@ -384,7 +410,7 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^1.1.0",
     "@types/node": "^18.0.0",
-    "@types/vscode": "^1.80.0",
+    "@types/vscode": "^1.90.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
     "@typescript-eslint/parser": "^5.0.0",
     "@vscode/markdown-it-katex": "^1.1.2",

@@ -39,6 +39,15 @@ export interface PiClientDeps {
 
 const defaultDeps: PiClientDeps = { resolvePi, loadPiSdk };
 
+/** 根据权限模式生成 pi 启动参数 */
+function permissionArgs(config: vscode.WorkspaceConfiguration): string[] {
+    const args: string[] = [];
+    const mode = config.get<string>('agent.permissionMode', 'ask');
+    if (mode === 'restricted') { args.push('--exclude-tools', 'bash,edit,write'); }
+    else if (mode === 'autoConfirm') { args.push('--approve'); }
+    return args;
+}
+
 export class PiClientManager {
     private _client: PiRpcClient | undefined;
     private _unsubscribe: (() => void) | undefined;
@@ -134,6 +143,57 @@ export class PiClientManager {
         }
     }
 
+    /**
+     * 流式运行一次任务（供原生 Chat 参与者使用）：启动临时（--no-session）进程，
+     * 把助手文本增量交给 onDelta，结束后关闭。交互请求直接取消，避免挂起。
+     */
+    public async runStreaming(
+        extensionPath: string,
+        prompt: string,
+        onDelta: (text: string) => void,
+        token?: vscode.CancellationToken,
+        timeoutMs = 300000,
+    ): Promise<void> {
+        const config = vscode.workspace.getConfiguration('pi-agent');
+        const executable = (config.get<string>('pi.executable') || '').trim();
+        const resolved = this._deps.resolvePi(extensionPath, executable || undefined);
+        if (!resolved) {
+            throw new PiNotFoundError(vscode.l10n.t('pi not found; please install it and retry: {0}', PI_INSTALL_HINT));
+        }
+        let sdk: PiSdkModule;
+        try {
+            sdk = await this._deps.loadPiSdk(resolved.sdkEntry);
+        } catch (sdkErr) {
+            throw new PiStartError(vscode.l10n.t('Failed to load pi SDK: {0}', (sdkErr as Error).message));
+        }
+
+        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+        const client = new sdk.RpcClient({ cliPath: resolved.cliPath, cwd, args: ['--no-session', ...permissionArgs(config)] });
+        const unsubscribe = client.onEvent((event) => {
+            if (event.type === 'extension_ui_request' && event.id) {
+                // 原生聊天无法弹确认框：直接取消，避免 pi 挂起
+                respondExtensionUI(client, event.id, { cancelled: true });
+                return;
+            }
+            if (event.type === 'message_update') {
+                const ae = event.assistantMessageEvent;
+                if (ae && ae.type === 'text_delta' && ae.delta) { onDelta(ae.delta); }
+            }
+        });
+        const cancelSub = token?.onCancellationRequested(() => {
+            void client.abort().catch((err) => { logError(`runStreaming abort failed: ${(err as Error).message}`); });
+        });
+        try {
+            await client.start();
+            await client.prompt(prompt);
+            if (typeof client.waitForIdle === 'function') { await client.waitForIdle(timeoutMs); }
+        } finally {
+            cancelSub?.dispose();
+            unsubscribe();
+            await client.stop().catch((err) => { logError(`runStreaming stop failed: ${(err as Error).message}`); });
+        }
+    }
+
     private async _startClient(extensionPath: string): Promise<void> {
         const config = vscode.workspace.getConfiguration('pi-agent');
         const executable = (config.get<string>('pi.executable') || '').trim();
@@ -152,13 +212,7 @@ export class PiClientManager {
         }
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
-        const args = ['--continue', ...(config.get<string[]>('pi.arguments', []) || [])];
-        const permissionMode = config.get<string>('agent.permissionMode', 'ask');
-        if (permissionMode === 'restricted') {
-            args.push('--exclude-tools', 'bash,edit,write');
-        } else if (permissionMode === 'autoConfirm') {
-            args.push('--approve');
-        }
+        const args = ['--continue', ...(config.get<string[]>('pi.arguments', []) || []), ...permissionArgs(config)];
         const client = new sdk.RpcClient({
             cliPath: resolved.cliPath,
             cwd,

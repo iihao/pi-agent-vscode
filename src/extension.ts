@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { ChatPanel } from './chatPanel';
+import { registerChatParticipant } from './chatParticipant';
 import { initLogger, setLogLevel, buildDiagnostics, logInfo, LogLevel } from './utils/logger';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -9,6 +10,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册侧边栏聊天视图（activitybar 图标 → 聊天面板）
     ChatPanel.registerViewProvider(context, context.extensionPath);
+
+    // 注册原生 Chat 参与者（@pi）
+    registerChatParticipant(context);
 
     // ---- 打开对话（聚焦侧边栏聊天视图）----
     const openChat = vscode.commands.registerCommand('pi-agent.openChat', () => {
@@ -103,6 +107,11 @@ export function activate(context: vscode.ExtensionContext) {
         ChatPanel.openInEditor(context.extensionPath, vscode.ViewColumn.Beside);
     });
 
+    // ---- 在原生聊天中提问（@pi）----
+    const openNativeChat = vscode.commands.registerCommand('pi-agent.openNativeChat', () => {
+        void vscode.commands.executeCommand('workbench.action.chat.open', { query: '@pi ' });
+    });
+
     // ---- 附加编辑器上下文 ----
     const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', () =>
         withPanel((panel) => panel.attachFile()));
@@ -165,6 +174,7 @@ export function activate(context: vscode.ExtensionContext) {
         cloneSession,
         openInEditor,
         openInEditorToSide,
+        openNativeChat,
         attachFile,
         attachSelection,
         restartSession,
