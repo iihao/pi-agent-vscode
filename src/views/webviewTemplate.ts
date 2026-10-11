@@ -9,7 +9,7 @@
 
 import { UiStrings } from './strings';
 
-/** HTML 属性转义 */
+/** HTML 转义（属性值与文本节点通用） */
 function escapeAttr(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -61,7 +61,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
         </span>
         <button id="sessionBtn" class="pill session-pill" title="${escapeAttr(S.sessionTitle)}">
-            <span id="sessionLabel" class="pill-label">${S.currentSession}</span>
+            <span id="sessionLabel" class="pill-label">${escapeAttr(S.currentSession)}</span>
             <span class="pill-caret">▾</span>
         </button>
         <div class="msg-nav hidden" id="msgNav">
@@ -101,11 +101,11 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                 <button class="quick-action" data-q="${escapeAttr(S.quickTestQ)}">${S.quickTest}</button>
             </div>
             <div class="welcome-shortcuts">
-                <div class="shortcut-hint"><kbd>Enter</kbd> ${S.kbdSend}</div>
-                <div class="shortcut-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> ${S.kbdNewline}</div>
-                <div class="shortcut-hint"><kbd>Ctrl</kbd>+<kbd>F</kbd> ${S.kbdSearch}</div>
-                <div class="shortcut-hint"><kbd>↑</kbd><kbd>↓</kbd> ${S.kbdHistory}</div>
-                <div class="shortcut-hint"><kbd>Alt</kbd><kbd>↑</kbd><kbd>↓</kbd> ${S.kbdJump}</div>
+                <div class="shortcut-hint"><kbd>Enter</kbd> ${escapeAttr(S.kbdSend)}</div>
+                <div class="shortcut-hint"><kbd>Shift</kbd>+<kbd>Enter</kbd> ${escapeAttr(S.kbdNewline)}</div>
+                <div class="shortcut-hint"><kbd>Ctrl</kbd>+<kbd>F</kbd> ${escapeAttr(S.kbdSearch)}</div>
+                <div class="shortcut-hint"><kbd>↑</kbd><kbd>↓</kbd> ${escapeAttr(S.kbdHistory)}</div>
+                <div class="shortcut-hint"><kbd>Alt</kbd><kbd>↑</kbd><kbd>↓</kbd> ${escapeAttr(S.kbdJump)}</div>
             </div>
         </div>
         </div>
@@ -133,18 +133,18 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                         <span class="pill-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4z"></path></svg>
                         </span>
-                        <span id="modelLabel" class="pill-label">${S.notConnected}</span>
+                        <span id="modelLabel" class="pill-label">${escapeAttr(S.notConnected)}</span>
                         <span class="pill-caret">▾</span>
                     </button>
                     <button id="thinkingBtn" class="pill" title="${escapeAttr(S.thinkingTitle)}">
-                        <span id="thinkingLabel" class="pill-label">${S.thinking}</span>
+                        <span id="thinkingLabel" class="pill-label">${escapeAttr(S.thinking)}</span>
                         <span class="pill-caret">▾</span>
                     </button>
                     <button id="permBtn" class="pill" title="${escapeAttr(S.permissionTitle)}">
                         <span class="pill-icon" aria-hidden="true">
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
                         </span>
-                        <span id="permLabel" class="pill-label">${S.permission}</span>
+                        <span id="permLabel" class="pill-label">${escapeAttr(S.permission)}</span>
                         <span class="pill-caret">▾</span>
                     </button>
                 </div>

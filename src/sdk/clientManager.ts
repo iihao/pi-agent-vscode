@@ -177,6 +177,9 @@ export class PiClientManager {
         try {
             await client.start();
         } catch (startErr) {
+            // 启动失败：先摘掉刚注册的监听，避免把已废弃客户端的订阅留在管理器上
+            this._unsubscribe?.();
+            this._unsubscribe = undefined;
             const stderr = client.getStderr().trim();
             const detail = stderr
                 ? stderr.split('\n').slice(-2).join(' ').slice(0, 200)

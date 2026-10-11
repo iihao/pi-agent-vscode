@@ -68,6 +68,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Removed unused code: the state store's observer/subscribe machinery and
+  unused selectors, plus the unused filesystem and pi-sdk service modules.
 - Code blocks: a narrower line-number gutter and icon-only **Apply** /
   **Copy** actions (check / copy glyphs) with tooltips, shown on hover or
   keyboard focus.
@@ -110,6 +112,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The pi client drops its event subscription when a start attempt fails, so a
+  discarded client no longer lingers on the manager.
+- The session-file read cache is pruned to the active session directory, and
+  head/tail reads use the actual number of bytes read (no garbage tail on a
+  short file).
 - **pi discovery**: besides the bundled copy, `pi` is now resolved from `PATH`
   (covering nvm/fnm/asdf/volta/bun/pnpm and custom npm prefixes) and from
   `npm root -g`, with Windows support (`pi.cmd`/`pi.exe`, `%APPDATA%\npm`).

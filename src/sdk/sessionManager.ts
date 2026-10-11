@@ -110,8 +110,16 @@ export class SessionManager {
             }
 
             this._sessions = sessions;
+            if (sessionFile) { this._pruneFileCache(path.dirname(sessionFile)); }
         } catch (err) {
             logError(`loadSessions failed: ${(err as Error).message}`);
+        }
+    }
+
+    /** 丢弃不再属于当前会话目录的缓存条目，避免缓存随会话文件无限增长 */
+    private _pruneFileCache(dir: string): void {
+        for (const key of this._fileCache.keys()) {
+            if (path.dirname(key) !== dir) { this._fileCache.delete(key); }
         }
     }
 
@@ -208,8 +216,8 @@ export class SessionManager {
         const fd = fs.openSync(file, 'r');
         try {
             const buf = Buffer.allocUnsafe(len);
-            fs.readSync(fd, buf, 0, len, start);
-            return buf.toString('utf8');
+            const read = fs.readSync(fd, buf, 0, len, start);
+            return buf.subarray(0, read).toString('utf8');
         } finally {
             fs.closeSync(fd);
         }

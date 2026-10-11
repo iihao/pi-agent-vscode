@@ -1,60 +1,16 @@
 // ---------------------------------------------------------------------------
-// 集中式状态存储（观察者模式）
+// 共享聊天状态单例
+//
+// 没有任何订阅方，因此不保留观察者机制；读取统一走 select()。
 // ---------------------------------------------------------------------------
 
-import { ChatState, ChatStateListener, getInitialState } from './types';
-
-/** 浅比较：原始值用 ===，数组按元素比较。避免对整状态做 JSON.stringify。 */
-function shallowEqual(a: unknown, b: unknown): boolean {
-    if (a === b) { return true; }
-    if (Array.isArray(a) && Array.isArray(b)) {
-        if (a.length !== b.length) { return false; }
-        for (let i = 0; i < a.length; i++) {
-            if (a[i] !== b[i]) { return false; }
-        }
-        return true;
-    }
-    return false;
-}
+import { ChatState, getInitialState } from './types';
 
 class StateStore {
-    private state: ChatState;
-    private listeners = new Set<ChatStateListener>();
-
-    constructor() {
-        this.state = getInitialState();
-    }
-
-    public getState(): ChatState {
-        return { ...this.state };
-    }
+    private state: ChatState = getInitialState();
 
     public setState(partial: Partial<ChatState>): void {
-        // 只在状态真正变化时通知（浅比较，不做整状态序列化）
-        let changed = false;
-        for (const key of Object.keys(partial) as Array<keyof ChatState>) {
-            if (!shallowEqual(this.state[key], partial[key])) { changed = true; break; }
-        }
-        if (!changed) { return; }
-
         this.state = { ...this.state, ...partial };
-        const snapshot = this.getState();
-        this.listeners.forEach((listener) => {
-            try {
-                listener(snapshot);
-            } catch (err) {
-                console.error('State listener failed:', err);
-            }
-        });
-    }
-
-    public subscribe(listener: ChatStateListener): () => void {
-        this.listeners.add(listener);
-        // 立即通知当前状态
-        listener(this.getState());
-        return () => {
-            this.listeners.delete(listener);
-        };
     }
 
     public select<T>(selector: (state: ChatState) => T): T {
@@ -62,10 +18,6 @@ class StateStore {
     }
 }
 
-// 单例导出
 export const stateStore = new StateStore();
 
-// 便捷方法
-export const getState = (): ChatState => stateStore.getState();
 export const setState = (partial: Partial<ChatState>): void => stateStore.setState(partial);
-export const subscribeToState = (listener: ChatStateListener): (() => void) => stateStore.subscribe(listener);

@@ -1,8 +1,13 @@
 // ---------------------------------------------------------------------------
-// 状态类型定义
+// 共享聊天状态类型定义
+//
+// 说明：busy / turnHadText / contexts / lastUsage / permissionMode 由
+// chatPanel 读取；其余字段目前只被写入，保留是为了不改动正在并行开发的
+// chatPanel，后续可直接删除或改为「只下发 webview」。
 // ---------------------------------------------------------------------------
 
-import { ContextItem, SessionInfo } from './contextTypes';
+import { ContextItem } from '../utils/context';
+import { SessionInfo } from '../sdk/sessionManager';
 import { PiModelInfo, PiUsage } from '../sdk/piTypes';
 
 export interface SessionStats {
@@ -45,7 +50,6 @@ export interface ChatState {
     connecting: boolean;
 }
 
-export type ChatStateListener = (state: ChatState) => void;
 export type ChatStateSelector<T> = (state: ChatState) => T;
 
 export function getInitialState(): ChatState {
