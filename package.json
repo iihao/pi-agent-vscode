@@ -151,7 +151,10 @@
       {
         "command": "pi-agent.openNativeChat",
         "title": "%cmd.openNativeChat%",
-        "icon": "$(comment-discussion)"
+        "icon": {
+          "light": "assets/icon-menu-light.svg",
+          "dark": "assets/icon-menu-dark.svg"
+        }
       },
       {
         "command": "pi-agent.attachFile",
