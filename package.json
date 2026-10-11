@@ -333,7 +333,43 @@
           "description": "%config.sessions.autoName%"
         }
       }
-    }
+    },
+    "walkthroughs": [
+      {
+        "id": "piAgentGettingStarted",
+        "title": "%walkthrough.title%",
+        "description": "%walkthrough.description%",
+        "steps": [
+          {
+            "id": "installPi",
+            "title": "%walkthrough.installPi.title%",
+            "description": "%walkthrough.installPi.description%",
+            "media": {
+              "markdown": "docs/walkthrough/install-pi.md"
+            }
+          },
+          {
+            "id": "openChat",
+            "title": "%walkthrough.openChat.title%",
+            "description": "%walkthrough.openChat.description%",
+            "media": {
+              "markdown": "docs/walkthrough/open-chat.md"
+            },
+            "completionEvents": [
+              "onCommand:pi-agent.openChat"
+            ]
+          },
+          {
+            "id": "attachContext",
+            "title": "%walkthrough.attachContext.title%",
+            "description": "%walkthrough.attachContext.description%",
+            "media": {
+              "markdown": "docs/walkthrough/attach-context.md"
+            }
+          }
+        ]
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",

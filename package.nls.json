@@ -35,5 +35,13 @@
   "config.context.autoAttach": "Attach editor context (open file/selection) to every message",
   "config.context.includeDiagnostics": "Include editor diagnostics in automatic context",
   "config.context.includeGit": "Include Git branch/changes in automatic context",
-  "config.sessions.autoName": "Name new sessions automatically from the first message (on by default; falls back to the first question)"
+  "config.sessions.autoName": "Name new sessions automatically from the first message (on by default; falls back to the first question)",
+  "walkthrough.title": "Get started with Pi Agent",
+  "walkthrough.description": "Run your local pi coding agent inside VS Code.",
+  "walkthrough.installPi.title": "Install the pi CLI",
+  "walkthrough.installPi.description": "Install @earendil-works/pi-coding-agent and sign in once.",
+  "walkthrough.openChat.title": "Open the chat",
+  "walkthrough.openChat.description": "Describe a task, queue or steer while pi works, and use ! and /.",
+  "walkthrough.attachContext.title": "Give pi the right context",
+  "walkthrough.attachContext.description": "Mention files with @, attach a selection, paste images, or enable automatic context."
 }

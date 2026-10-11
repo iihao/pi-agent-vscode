@@ -35,5 +35,13 @@
   "config.context.autoAttach": "每条消息自动附加编辑器上下文（当前文件/选区）",
   "config.context.includeDiagnostics": "自动上下文中包含编辑器诊断信息",
   "config.context.includeGit": "自动上下文中包含 Git 分支/改动",
-  "config.sessions.autoName": "根据首条消息自动命名新会话（默认开启；失败时回退为首条提问）"
+  "config.sessions.autoName": "根据首条消息自动命名新会话（默认开启；失败时回退为首条提问）",
+  "walkthrough.title": "开始使用 Pi Agent",
+  "walkthrough.description": "在 VS Code 里运行你本地的 pi coding agent。",
+  "walkthrough.installPi.title": "安装 pi CLI",
+  "walkthrough.installPi.description": "安装 @earendil-works/pi-coding-agent 并登录一次。",
+  "walkthrough.openChat.title": "打开对话",
+  "walkthrough.openChat.description": "描述任务；pi 工作时可排队或插入；用 ! 跑命令、/ 用技能。",
+  "walkthrough.attachContext.title": "给 pi 正确的上下文",
+  "walkthrough.attachContext.description": "用 @ 提及文件、附加选区、粘贴图片，或开启自动上下文。"
 }

@@ -54,6 +54,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Compact Session**.
 - Context meter warning when the window is nearly full, with a one-click
   **Compact** action.
+- Marketplace polish: a README cover image, Marketplace install instructions, a
+  first-run **walkthrough**, a **PRIVACY.md**, and Japanese / Korean / German /
+  French manifest localizations.
 
 ### Changed
 

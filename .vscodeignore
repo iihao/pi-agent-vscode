@@ -13,6 +13,8 @@ esbuild.webview.mjs
 .vscodeignore
 tsconfig.json
 RELEASING.md
+# README cover images are served from the repo, not shipped in the VSIX
+docs/images/**
 .DS_Store
 **/.DS_Store
 **/*.map
