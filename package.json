@@ -382,6 +382,7 @@
     "lint": "eslint src --ext ts"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^1.1.0",
     "@types/node": "^18.0.0",
     "@types/vscode": "^1.80.0",
     "@typescript-eslint/eslint-plugin": "^5.0.0",
@@ -395,8 +396,5 @@
     "mermaid": "^12.1.0",
     "typescript": "^5.0.0",
     "vitest": "^2.1.9"
-  },
-  "dependencies": {
-    "@earendil-works/pi-coding-agent": "^1.1.0"
   }
 }

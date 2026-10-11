@@ -81,6 +81,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   testable seam for future work.
 - Sessions the user has not renamed now display their first question (trimmed,
   whitespace-collapsed, truncated to 60 chars) instead of the raw session id.
+- Streaming output is re-rendered once per animation frame instead of on every
+  chunk, and the chat auto-scrolls only when you are already near the bottom.
+- The question rail is rebuilt only when the number of questions changes, with
+  cached previews.
+- `@earendil-works/pi-coding-agent` moved to `devDependencies`; it is not
+  shipped in the VSIX (pi is resolved from your own install).
 
 ### Fixed
 
@@ -107,6 +113,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   or renaming a session, so **Revert** only touches the current session's files.
 - One-shot generation (commit message / PR description / session auto-name)
   cancels a pi UI request instead of hanging until it times out.
+- Pasted images are capped at 5 MB.
+- Manifest attribute values (`title`, `aria-label`, `placeholder`, `data-q`) are
+  HTML-escaped.
 
 ### Security
 

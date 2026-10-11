@@ -273,6 +273,26 @@ const vscode = acquireVsCodeApi();
     let historyIndex = -1;
 
     function scrollToBottom() { chat.scrollTop = chat.scrollHeight; }
+
+    function isNearBottom() {
+        return (chat.scrollHeight - chat.scrollTop - chat.clientHeight) < 80;
+    }
+
+    // 流式渲染：合并同一帧内的多个 chunk，避免每个 chunk 全量重渲染 markdown（O(n²)），
+    // 并只在用户本就在底部时自动滚动（不抢走向上翻阅）。
+    let streamRenderScheduled = false;
+    function flushStreamRender() {
+        streamRenderScheduled = false;
+        if (!currentBody) { return; }
+        const stick = isNearBottom();
+        currentBody.innerHTML = renderMarkdown(currentBuffer);
+        if (stick) { scrollToBottom(); }
+    }
+    function scheduleStreamRender() {
+        if (streamRenderScheduled) { return; }
+        streamRenderScheduled = true;
+        requestAnimationFrame(flushStreamRender);
+    }
     
     function updateConnectionStatus(status) {
         connectionStatus.className = 'connection-status ' + status;
@@ -417,12 +437,19 @@ const vscode = acquireVsCodeApi();
     }
 
     function messagePreview(el) {
+        // 缓存到元素上：避免每次重建导航条都克隆 DOM 取 innerText（O(n²)）
+        if (el.dataset.preview !== undefined) { return el.dataset.preview; }
         const body = el.querySelector('.message-body');
-        return (getMessageText(body) || '').replace(/\s+/g, ' ').trim();
+        const p = (getMessageText(body) || '').replace(/\s+/g, ' ').trim();
+        el.dataset.preview = p;
+        return p;
     }
 
+    let railCount = -1;
     function renderRail() {
         const users = getUserMessageEls();
+        if (users.length === railCount) { return; } // 助手消息不改变提问数，无需重建
+        railCount = users.length;
         const show = users.length >= 2;
         msgNav.classList.toggle('hidden', !show);
         if (!show) { msgRail.classList.add('hidden'); msgRail.innerHTML = ''; return; }
@@ -714,7 +741,12 @@ const vscode = acquireVsCodeApi();
 
     // ========== 图片粘贴 ==========
 
+    const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
     function readImage(file) {
+        if (file.size > MAX_IMAGE_BYTES) {
+            vscode.postMessage({ type: 'notify', text: S.imageTooLarge });
+            return;
+        }
         const reader = new FileReader();
         reader.onload = function () {
             const dataUrl = String(reader.result || '');
@@ -1305,12 +1337,19 @@ const vscode = acquireVsCodeApi();
                 currentBody.classList.add('stream-cursor');
                 break;
             case 'assistantChunk':
-                if (currentBody) { currentBuffer += m.text; currentBody.innerHTML = renderMarkdown(currentBuffer); scrollToBottom(); }
+                if (currentBody) { currentBuffer += m.text; scheduleStreamRender(); }
                 break;
             case 'assistantEnd':
-                if (currentBody) { currentBody.classList.remove('stream-cursor'); currentBody = null; currentBuffer = ''; }
+                if (currentBody) {
+                    streamRenderScheduled = false;
+                    const stick = isNearBottom();
+                    currentBody.innerHTML = renderMarkdown(currentBuffer);
+                    currentBody.classList.remove('stream-cursor');
+                    currentBody = null;
+                    currentBuffer = '';
+                    if (stick) { scrollToBottom(); }
+                }
                 renderMermaid();
-                scrollToBottom();
                 break;
             case 'notice': addNotice(m.text); break;
             case 'focusInput': input.focus(); break;

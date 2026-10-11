@@ -98,6 +98,7 @@
   "Queued": "Queued",
   "Steering": "Steering",
   "Output truncated": "Output truncated",
+  "Image is too large (max 5 MB)": "Image is too large (max 5 MB)",
   "Failed to queue message: {0}": "Failed to queue message: {0}",
   "Read-only mode: shell commands are disabled": "Read-only mode: shell commands are disabled",
   "Pi is working; wait for it to finish before compacting": "Pi is working; wait for it to finish before compacting",

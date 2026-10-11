@@ -98,6 +98,7 @@
   "Queued": "排队中",
   "Steering": "插入中",
   "Output truncated": "输出已截断",
+  "Image is too large (max 5 MB)": "图片过大（上限 5 MB）",
   "Failed to queue message: {0}": "消息排队失败：{0}",
   "Read-only mode: shell commands are disabled": "只读模式：已禁用 shell 命令",
   "Pi is working; wait for it to finish before compacting": "pi 正在工作，请等它结束后再压缩",

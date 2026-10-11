@@ -48,6 +48,7 @@ export interface UiStrings {
     queued: string;
     steering: string;
     bashTruncated: string;
+    imageTooLarge: string;
     attachTitle: string;
     modelTitle: string;
     notConnected: string;
@@ -128,6 +129,7 @@ export function getUiStrings(): UiStrings {
         queued: t('Queued'),
         steering: t('Steering'),
         bashTruncated: t('Output truncated'),
+        imageTooLarge: t('Image is too large (max 5 MB)'),
         attachTitle: t('Attach current file/selection'),
         modelTitle: t('Select model'),
         notConnected: t('Not connected'),

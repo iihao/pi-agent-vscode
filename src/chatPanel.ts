@@ -96,7 +96,7 @@ function clipDiff(diff: string, max = 12000): string {
     return diff.length > max ? diff.slice(0, max) + '\n… (truncated)' : diff;
 }
 
-function buildCommitPrompt(diff: string, branch: string): string {
+export function buildCommitPrompt(diff: string, branch: string): string {
     return [
         'Write a git commit message for the following changes.',
         'Use Conventional Commits (e.g. "feat: …", "fix: …", "docs: …").',
@@ -109,7 +109,7 @@ function buildCommitPrompt(diff: string, branch: string): string {
     ].filter(Boolean).join('\n');
 }
 
-function buildPrPrompt(branch: string, log: string): string {
+export function buildPrPrompt(branch: string, log: string): string {
     return [
         'Write a pull request description in Markdown.',
         'Include a short summary and a bullet list of notable changes.',
@@ -120,7 +120,7 @@ function buildPrPrompt(branch: string, log: string): string {
     ].filter(Boolean).join('\n');
 }
 
-function buildNamePrompt(text: string): string {
+export function buildNamePrompt(text: string): string {
     return [
         'Summarize the following user request as a short session title.',
         'Use 3 to 6 words, no quotes, no trailing punctuation. Output only the title.',
@@ -131,14 +131,14 @@ function buildNamePrompt(text: string): string {
 
 // ---- 本回合改动追踪与还原 ----
 
-interface TurnChange {
+export interface TurnChange {
     rel: string;
     existed: boolean;
     /** edit 的替换对；null 表示包含 write（覆盖写无法安全还原） */
     edits: Array<{ oldText: string; newText: string }> | null;
 }
 
-function parseEdits(args: { edits?: unknown } | undefined): Array<{ oldText: string; newText: string }> {
+export function parseEdits(args: { edits?: unknown } | undefined): Array<{ oldText: string; newText: string }> {
     const raw = args?.edits;
     if (!Array.isArray(raw)) { return []; }
     const out: Array<{ oldText: string; newText: string }> = [];
@@ -153,14 +153,14 @@ function parseEdits(args: { edits?: unknown } | undefined): Array<{ oldText: str
     return out;
 }
 
-function isRevertible(change: TurnChange): boolean {
+export function isRevertible(change: TurnChange): boolean {
     if (!change.existed) { return true; }          // 本回合新建 -> 删除
     if (!change.edits) { return false; }           // 覆盖写 -> 无法安全还原
     return change.edits.every((e) => e.newText.length > 0);
 }
 
 /** 把 newText 反向替换回 oldText（倒序），失败返回 null */
-function revertEdits(content: string, edits: Array<{ oldText: string; newText: string }>): string | null {
+export function revertEdits(content: string, edits: Array<{ oldText: string; newText: string }>): string | null {
     let out = content;
     for (let i = edits.length - 1; i >= 0; i--) {
         const { oldText, newText } = edits[i];
