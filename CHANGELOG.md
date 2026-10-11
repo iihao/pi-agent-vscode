@@ -89,6 +89,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `pi-agent.clearChat` to `activationEvents` for consistency.
 - Dropped dev/CI files (`.github/`, `.nvmrc`, `.editorconfig`, `RELEASING.md`,
   `.DS_Store`) from the packaged VSIX.
+- Dispose the pi event subscription with the panel and ignore events once the
+  panel is disposed, so a closed tab no longer reacts to pi events or
+  accumulates listeners.
+- A new chat surface no longer resets the shared state; `busy` is reconciled
+  from pi's streaming state on connect, so messages sent while pi works are
+  queued instead of bypassing the queue.
+
+### Security
+
+- Remote images in model output are no longer loaded automatically. The webview
+  CSP drops `https:` from `img-src`, and Markdown images with `http(s)` URLs
+  render as click-to-open links (opened in the system browser), preventing
+  tracking pixels and IP leaks.
 
 ## [0.1.0] - 2026-10-10
 

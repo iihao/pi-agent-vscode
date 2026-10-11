@@ -12,7 +12,7 @@ import { SessionManager } from './sdk/sessionManager';
 import { summarizeToolArgs, formatUsage, validateMessage, extractToolOutput } from './utils/formatters';
 import { buildContextBlock, stripContextBlock, ContextItem } from './utils/context';
 import { PI_INSTALL_HINT, extractMessageText, extractMessageImages, PiAgentEvent, PiImageBlock, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, PiUsage, respondExtensionUI } from './sdk/piTypes';
-import { stateStore, setState, getInitialState, selectBusy, selectTurnHadText, selectContexts, selectLastUsage, selectPermissionMode } from './state';
+import { stateStore, setState, selectBusy, selectTurnHadText, selectContexts, selectLastUsage, selectPermissionMode } from './state';
 import { logInfo, logError } from './utils/logger';
 import { getVSCodeService } from './services';
 
@@ -242,6 +242,7 @@ export class ChatPanel {
     private _turnChanges = new Map<string, TurnChange>();
     private _firstUserMessage: string | undefined;
     private _autoNaming = false;
+    private _disposed = false;
 
     // ---- 集中式状态：由 stateStore 支撑（getter/setter 代理，调用点无需改动） ----
     private get _busy(): boolean { return stateStore.select(selectBusy); }
@@ -262,8 +263,8 @@ export class ChatPanel {
         this._clientManager = sharedClientManager;
         this._sessionManager = sharedSessionManager;
         ChatPanel._instances.push(this);
-        // 每个面板实例从干净状态开始（单例 store 可能残留上一实例的值）
-        setState(getInitialState());
+        // 注意：状态 store 是全局共享的，不能在构造器里重置，否则新面板
+        // 会把 busy 置回 false，导致正在运行时的消息绕过队列。
 
         const root = mediaRoot(extensionPath);
         const scriptUri = webview.asWebviewUri(vs.uri.joinPath(root, 'main.js')).toString();
@@ -281,8 +282,9 @@ export class ChatPanel {
             this._disposables
         );
 
-        // 订阅 pi 事件
-        this._clientManager.onEvent((event: PiAgentEvent) => this._onAgentEvent(event));
+        // 订阅 pi 事件；把 unsubscribe 存入 _disposables，避免面板关闭后仍响应事件
+        const unsubscribe = this._clientManager.onEvent((event: PiAgentEvent) => this._onAgentEvent(event));
+        this._disposables.push({ dispose: unsubscribe });
     }
 
     public static registerViewProvider(context: vscode.ExtensionContext, extensionPath: string): void {
@@ -792,6 +794,8 @@ export class ChatPanel {
                 if (message.sessionId) { await this._handleRenameSession(message.sessionId, message.currentName); }
                 break;
             case 'ready':
+                // 新面板可能复用共享状态：先把已有上下文 chip 回显给 webview
+                this._postContexts();
                 await this._ensureClient();
                 break;
             case 'attachActive':
@@ -855,6 +859,13 @@ export class ChatPanel {
         this._post({ type: 'connecting' });
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
+
+            // 用 pi 的真实状态校准 busy（面板可能在运行中途被重新打开）
+            try {
+                const st = await client.getState();
+                this._busy = Boolean(st.isStreaming);
+                this._post({ type: 'setBusy', busy: this._busy });
+            } catch (err) { logError(`reconcile busy failed: ${(err as Error).message}`); }
 
             // 恢复历史消息
             await this._restoreHistory(client);
@@ -1213,6 +1224,7 @@ export class ChatPanel {
     // ---------- 事件桥接（pi → webview） ----------
 
     private _onAgentEvent(event: PiAgentEvent): void {
+        if (this._disposed) { return; }
         if (event.type === 'extension_ui_request') {
             void this._handleExtensionUI(event);
             return;
@@ -1521,10 +1533,12 @@ export class ChatPanel {
     // ---------- Webview 通信 ----------
 
     private _post(message: PostMessage) {
+        if (this._disposed) { return; }
         void this._webview.postMessage(message);
     }
 
     public dispose() {
+        this._disposed = true;
         // 不在这里停 pi 客户端：可能有其他面板仍在使用（共享）
         ChatPanel._instances = ChatPanel._instances.filter((p) => p !== this);
         if (ChatPanel.currentView === this) {

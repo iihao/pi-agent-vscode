@@ -306,6 +306,16 @@ const vscode = acquireVsCodeApi();
         tokens[idx].attrSet('rel', 'noopener noreferrer');
         return self.renderToken(tokens, idx, options);
     };
+    md.renderer.rules.image = function (tokens, idx, options, env, self) {
+        const token = tokens[idx];
+        const src = token.attrGet('src') || '';
+        // 远程图片不自动加载（防追踪像素 / 泄露 IP）；改为可点击链接，用系统浏览器打开
+        if (/^https?:\/\//i.test(src)) {
+            const alt = self.renderInlineAsText(token.children, options, env) || src;
+            return '<a href="' + escapeHtml(src) + '" target="_blank" rel="noopener noreferrer">🖼 ' + escapeHtml(alt) + '</a>';
+        }
+        return self.renderToken(tokens, idx, options);
+    };
 
     function renderMarkdown(src) {
         return md.render(src || '');
