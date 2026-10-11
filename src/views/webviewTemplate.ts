@@ -44,9 +44,6 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
             <span class="ctx-stats hidden" id="ctxStats"></span>
         </div>
         <div class="header-actions">
-            <button id="outlineBtn" class="icon-btn" title="${S.outlineTitle}" aria-label="${S.outlineTitle}">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
-            </button>
             <button id="searchBtn" class="icon-btn" title="${S.searchTitle}" aria-label="${S.searchTitle}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.5" y2="16.5"></line></svg>
             </button>
@@ -57,7 +54,6 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8z"></path><line x1="12" y1="8" x2="12" y2="16"></line><line x1="8" y1="12" x2="16" y2="12"></line></svg>
             </button>
         </div>
-        <div class="popover outline-panel hidden" id="outlinePanel"></div>
     </header>
 
     <div class="session-bar" id="sessionBar">
@@ -72,11 +68,14 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
             <button id="qPrev" class="icon-btn" title="${S.prevQuestion}" aria-label="${S.prevQuestion}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
             </button>
-            <span class="q-counter" id="qCounter">1/1</span>
+            <button id="qCounter" class="q-counter" title="${S.outlineTitle}" aria-label="${S.outlineTitle}">
+                <span id="qCount">1/1</span><span class="pill-caret">▾</span>
+            </button>
             <button id="qNext" class="icon-btn" title="${S.nextQuestion}" aria-label="${S.nextQuestion}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
             </button>
         </div>
+        <div class="popover outline-panel hidden" id="outlinePanel"></div>
         <div class="popover session-panel hidden" id="sessionPanel"></div>
     </div>
 

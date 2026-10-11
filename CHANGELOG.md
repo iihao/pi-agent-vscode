@@ -39,12 +39,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   from the editor/explorer onto the composer; mentions are inserted as
   `@path` references.
 - **Question navigator**: a right-edge rail with one tick per user question
-  (hover for a preview, click to jump), a header button that opens a jump list,
-  and `Alt+↑/↓` to step between questions. The active tick tracks scroll.
-- **Prev/Next question** buttons (`‹`/`›`) in the session bar jump between
-  questions in the current session; a `5/6` counter between them shows the
-  current position and tracks scrolling. They disable at the ends and hide when
-  there are fewer than two questions.
+  (hover for a preview, click to jump), `Alt+↑/↓` to step between questions, and
+  `‹ 5/6 ▾ ›` in the session bar. The `5/6` counter is a dropdown that opens the
+  jump list (current item highlighted) and tracks scrolling; the arrows step
+  through (disabled at the ends). Hidden with fewer than two questions.
 - **Queue & steer**: send while pi is working — Enter queues the message
   (follow-up), Ctrl/Cmd+Enter steers the running turn. Queued messages show a
   badge that clears as the queue drains.

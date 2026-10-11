@@ -188,10 +188,11 @@
     .suggest-source { font-family: var(--cx-mono); font-size: 9.5px; color: var(--cx-muted); border: 1px solid var(--cx-border-strong); border-radius: 999px; padding: 0 5px; flex-shrink: 0; }
 
     /* 问题跳转列表（头部按钮展开） */
-    .outline-panel { left: auto; right: 10px; bottom: auto; top: calc(100% + 2px); min-width: 300px; max-height: 380px; }
+    .outline-panel { left: 8px; right: 8px; bottom: auto; top: calc(100% + 4px); max-height: min(380px, 60vh); }
     .outline-item { display: flex; align-items: baseline; gap: 8px; }
     .outline-index { font-family: var(--cx-mono); font-size: 10px; color: var(--cx-accent); flex-shrink: 0; min-width: 18px; }
     .outline-text { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .outline-item.active .outline-index { color: var(--cx-accent); font-weight: 600; }
 
     .icon-btn {
         width: 26px; height: 26px;
@@ -224,13 +225,23 @@
     .msg-nav { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
     .msg-nav.hidden { display: none; }
     .q-counter {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        justify-content: center;
+        min-width: 34px;
+        padding: 2px 5px;
         font-family: var(--cx-mono);
         font-size: 10px;
         color: var(--cx-muted);
-        min-width: 30px;
-        text-align: center;
+        background: transparent;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
         user-select: none;
     }
+    .q-counter:hover { background: var(--cx-hover); color: var(--cx-fg); }
+    .q-counter .pill-caret { font-size: 8px; opacity: .7; }
     .icon-btn:disabled { opacity: .35; cursor: default; }
     .icon-btn:disabled:hover { background: transparent; color: var(--cx-muted); }
     .session-panel { top: calc(100% + 4px); bottom: auto; left: 8px; right: 8px; }

@@ -81,13 +81,13 @@ const vscode = acquireVsCodeApi();
     const searchBtn = document.getElementById('searchBtn');
     const exportBtn = document.getElementById('exportBtn');
     const newChatBtn = document.getElementById('newChatBtn');
-    const outlineBtn = document.getElementById('outlineBtn');
     const outlinePanel = document.getElementById('outlinePanel');
     const msgRail = document.getElementById('msgRail');
     const msgNav = document.getElementById('msgNav');
     const qPrev = document.getElementById('qPrev');
     const qNext = document.getElementById('qNext');
     const qCounter = document.getElementById('qCounter');
+    const qCount = document.getElementById('qCount');
     const searchBar = document.getElementById('searchBar');
     const searchInput = document.getElementById('searchInput');
     const searchResults = document.getElementById('searchResults');
@@ -457,7 +457,7 @@ const vscode = acquireVsCodeApi();
         qPrev.disabled = active <= 0;
         qNext.disabled = active < 0 || active >= users.length - 1;
         if (users.length) {
-            qCounter.textContent = (Math.max(0, active) + 1) + '/' + users.length;
+            qCount.textContent = (Math.max(0, active) + 1) + '/' + users.length;
         }
     }
 
@@ -484,10 +484,11 @@ const vscode = acquireVsCodeApi();
             outlinePanel.innerHTML = '<div class="popover-empty">' + S.noMessages + '</div>';
             return;
         }
+        const active = currentActiveIndex();
         let html = '';
         users.forEach(function (el, i) {
             const p = escapeHtml(messagePreview(el).slice(0, 200));
-            html += '<button class="popover-item outline-item" data-i="' + i + '">' +
+            html += '<button class="popover-item outline-item' + (i === active ? ' active' : '') + '" data-i="' + i + '">' +
                 '<span class="outline-index">' + (i + 1) + '</span>' +
                 '<span class="outline-text">' + p + '</span></button>';
         });
@@ -1051,7 +1052,7 @@ const vscode = acquireVsCodeApi();
     }
 
     // 问题导航事件
-    outlineBtn.addEventListener('click', function (e) {
+    qCounter.addEventListener('click', function (e) {
         e.stopPropagation();
         const willShow = outlinePanel.classList.contains('hidden');
         closePopovers();
