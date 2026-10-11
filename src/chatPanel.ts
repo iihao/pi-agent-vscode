@@ -11,8 +11,13 @@ import { PiClientManager, PiStartError, PiNotFoundError } from './sdk/clientMana
 import { SessionManager } from './sdk/sessionManager';
 import { summarizeToolArgs, formatUsage, validateMessage, extractToolOutput } from './utils/formatters';
 import { buildContextBlock, stripContextBlock, ContextItem } from './utils/context';
-import { PI_INSTALL_HINT, extractMessageText, PiAgentEvent, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, respondExtensionUI } from './sdk/piTypes';
+import { PI_INSTALL_HINT, extractMessageText, PiAgentEvent, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, PiUsage, respondExtensionUI } from './sdk/piTypes';
+import { stateStore, setState, getInitialState, selectBusy, selectTurnHadText, selectContexts, selectLastUsage, selectPermissionMode } from './state';
 import { logInfo, logError } from './utils/logger';
+import { getVSCodeService } from './services';
+
+/** VS Code 访问统一走服务容器（便于测试与替换） */
+const vs = getVSCodeService();
 
 /** 判断错误是否为「pi 进程/连接」类问题（用类型/code 判断，不依赖本地化文案） */
 function isProcessError(err: unknown): boolean {
@@ -35,7 +40,7 @@ function permissionLabel(mode: string): string {
 
 /** webview 构建产物所在目录 */
 function mediaRoot(extensionPath: string): vscode.Uri {
-    return vscode.Uri.file(path.join(extensionPath, 'media'));
+    return vs.uri.file(path.join(extensionPath, 'media'));
 }
 
 // ---- 最小化的 vscode.git API 类型（内建 Git 扩展） ----
@@ -59,7 +64,7 @@ interface GitAPI {
 interface GitExtension { getAPI(version: 1): GitAPI; }
 
 async function getGitAPI(): Promise<GitAPI | undefined> {
-    const ext = vscode.extensions.getExtension<GitExtension>('vscode.git');
+    const ext = vs.extensions.getExtension<GitExtension>('vscode.git');
     if (!ext) { return undefined; }
     try {
         const exports = ext.isActive ? ext.exports : await ext.activate();
@@ -71,7 +76,7 @@ async function getGitAPI(): Promise<GitAPI | undefined> {
 }
 
 function pickGitRepository(api: GitAPI): GitRepository | undefined {
-    const active = vscode.window.activeTextEditor?.document.uri;
+    const active = vs.activeTextEditor?.document.uri;
     if (active) {
         const repo = api.getRepository(active);
         if (repo) { return repo; }
@@ -210,28 +215,39 @@ export class ChatPanel {
     private _disposables: vscode.Disposable[] = [];
     private _clientManager: PiClientManager;
     private _sessionManager: SessionManager;
-    private _busy = false;
-    private _turnHadText = false;
-    private _contexts: ContextItem[] = [];
     private _contextWarned = false;
     private _commands: PiSlashCommand[] = [];
     private _fileList: string[] | undefined;
     private _fileListAt = 0;
     /** 本回合被 edit/write 修改的文件（绝对路径 -> 可还原信息） */
     private _turnChanges = new Map<string, TurnChange>();
-    private _lastUsage: { input?: number; output?: number; cacheRead?: number } | undefined;
+
+    // ---- 集中式状态：由 stateStore 支撑（getter/setter 代理，调用点无需改动） ----
+    private get _busy(): boolean { return stateStore.select(selectBusy); }
+    private set _busy(v: boolean) { setState({ busy: v }); }
+
+    private get _turnHadText(): boolean { return stateStore.select(selectTurnHadText); }
+    private set _turnHadText(v: boolean) { setState({ turnHadText: v }); }
+
+    private get _contexts(): ContextItem[] { return stateStore.select(selectContexts); }
+    private set _contexts(v: ContextItem[]) { setState({ contexts: v }); }
+
+    private get _lastUsage(): PiUsage | undefined { return stateStore.select(selectLastUsage); }
+    private set _lastUsage(v: PiUsage | undefined) { setState({ lastUsage: v }); }
 
     private constructor(webview: vscode.Webview, extensionPath: string, disposeEvent: vscode.Event<void>) {
         this._webview = webview;
         this._extensionPath = extensionPath;
         this._clientManager = new PiClientManager();
         this._sessionManager = new SessionManager();
+        // 每个面板实例从干净状态开始（单例 store 可能残留上一实例的值）
+        setState(getInitialState());
 
         const root = mediaRoot(extensionPath);
-        const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(root, 'main.js')).toString();
-        const styleUri = webview.asWebviewUri(vscode.Uri.joinPath(root, 'main.css')).toString();
+        const scriptUri = webview.asWebviewUri(vs.uri.joinPath(root, 'main.js')).toString();
+        const styleUri = webview.asWebviewUri(vs.uri.joinPath(root, 'main.css')).toString();
         webview.html = getWebviewHtml(
-            { cspSource: webview.cspSource, scriptUri, styleUri, locale: vscode.env.language },
+            { cspSource: webview.cspSource, scriptUri, styleUri, locale: vs.language },
             getUiStrings()
         );
 
@@ -263,7 +279,7 @@ export class ChatPanel {
     }
 
     public static async ensureView(): Promise<ChatPanel> {
-        await vscode.commands.executeCommand(`${ChatPanel.viewType}.focus`);
+        await vs.executeCommand(`${ChatPanel.viewType}.focus`);
         // 最多等待约 5s：webview 在慢机器/高负载下创建可能超过 2s
         for (let i = 0; i < 100; i++) {
             if (ChatPanel.currentView) { return ChatPanel.currentView; }
@@ -307,32 +323,32 @@ export class ChatPanel {
 
     /** 附加当前编辑器：有选区则附加选区，否则附加整个文件 */
     public attachActive(): void {
-        const editor = vscode.window.activeTextEditor;
+        const editor = vs.activeTextEditor;
         if (!editor) { this._post({ type: 'notice', text: vscode.l10n.t('No active editor') }); return; }
         if (!editor.selection.isEmpty) { this._addSelectionContext(editor); }
         else { this._addFileContext(editor); }
     }
 
     public attachFile(): void {
-        const editor = vscode.window.activeTextEditor;
+        const editor = vs.activeTextEditor;
         if (!editor) { this._post({ type: 'notice', text: vscode.l10n.t('No active editor') }); return; }
         this._addFileContext(editor);
     }
 
     public attachSelection(): void {
-        const editor = vscode.window.activeTextEditor;
+        const editor = vs.activeTextEditor;
         if (!editor || editor.selection.isEmpty) { this._post({ type: 'notice', text: vscode.l10n.t('Please select some code first') }); return; }
         this._addSelectionContext(editor);
     }
 
     private _addFileContext(editor: vscode.TextEditor): void {
-        const rel = vscode.workspace.asRelativePath(editor.document.uri);
+        const rel = vs.asRelativePath(editor.document.uri);
         this._addContext({ type: 'file', path: rel });
     }
 
     private _addSelectionContext(editor: vscode.TextEditor): void {
         const sel = editor.selection;
-        const rel = vscode.workspace.asRelativePath(editor.document.uri);
+        const rel = vs.asRelativePath(editor.document.uri);
         const lineRange = sel.start.line === sel.end.line
             ? `${sel.start.line + 1}`
             : `${sel.start.line + 1}-${sel.end.line + 1}`;
@@ -347,7 +363,7 @@ export class ChatPanel {
             return;
         }
         const id = 'ctx-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
-        this._contexts.push({ ...item, id });
+        this._contexts = [...this._contexts, { ...item, id }];
         this._postContexts();
     }
 
@@ -425,7 +441,7 @@ export class ChatPanel {
             this._post({ type: 'notice', text: vscode.l10n.t('Pi is working; wait for it to finish before compacting') });
             return;
         }
-        const confirmed = await vscode.window.showWarningMessage(
+        const confirmed = await vs.showWarningMessage(
             vscode.l10n.t('Compact this session? Older turns are summarized and cannot be undone.'),
             { modal: true },
             vscode.l10n.t('Compact')
@@ -485,8 +501,8 @@ export class ChatPanel {
         try {
             const text = await this._clientManager.runOneShot(this._extensionPath, buildPrPrompt(branch, log));
             if (!text) { this._post({ type: 'notice', text: vscode.l10n.t('Generation returned nothing') }); return; }
-            const doc = await vscode.workspace.openTextDocument({ content: text, language: 'markdown' });
-            await vscode.window.showTextDocument(doc, { preview: false });
+            const doc = await vs.openTextDocument({ content: text, language: 'markdown' });
+            await vs.showTextDocument(doc, { preview: false });
         } catch (err) {
             this._post({ type: 'notice', text: vscode.l10n.t('Generation failed: {0}', (err as Error).message) });
         }
@@ -501,7 +517,7 @@ export class ChatPanel {
         const args = event.args as { path?: unknown; edits?: unknown } | undefined;
         const p = args && typeof args.path === 'string' ? args.path : '';
         if (!p) { return; }
-        const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+        const root = vs.workspaceFolders?.[0]?.uri.fsPath;
         const abs = path.isAbsolute(p) ? p : path.join(root || process.cwd(), p);
         const rel = root ? path.relative(root, abs).split(path.sep).join('/') : p;
         const prev = this._turnChanges.get(abs);
@@ -530,7 +546,7 @@ export class ChatPanel {
             this._post({ type: 'notice', text: vscode.l10n.t('No changes to revert') });
             return;
         }
-        const ok = await vscode.window.showWarningMessage(
+        const ok = await vs.showWarningMessage(
             vscode.l10n.t('Revert {0} file(s) to their state before this turn?', this._turnChanges.size),
             { modal: true },
             vscode.l10n.t('Revert')
@@ -541,14 +557,14 @@ export class ChatPanel {
         for (const [abs, change] of this._turnChanges) {
             try {
                 if (!change.existed) {
-                    await vscode.workspace.fs.delete(vscode.Uri.file(abs), { useTrash: true });
+                    await vs.fs.delete(vs.uri.file(abs), { useTrash: true });
                     done++;
                 } else if (change.edits) {
-                    const uri = vscode.Uri.file(abs);
-                    const current = Buffer.from(await vscode.workspace.fs.readFile(uri)).toString('utf8');
+                    const uri = vs.uri.file(abs);
+                    const current = Buffer.from(await vs.fs.readFile(uri)).toString('utf8');
                     const reverted = revertEdits(current, change.edits);
                     if (reverted === null) { skipped++; continue; }
-                    await vscode.workspace.fs.writeFile(uri, Buffer.from(reverted, 'utf8'));
+                    await vs.fs.writeFile(uri, Buffer.from(reverted, 'utf8'));
                     done++;
                 } else {
                     skipped++;
@@ -569,11 +585,11 @@ export class ChatPanel {
     }
 
     private async _openWorkspaceFile(rel: string): Promise<void> {
-        const root = vscode.workspace.workspaceFolders?.[0]?.uri;
+        const root = vs.workspaceFolders?.[0]?.uri;
         if (!root) { return; }
         try {
-            const doc = await vscode.workspace.openTextDocument(vscode.Uri.joinPath(root, rel));
-            await vscode.window.showTextDocument(doc, { preview: true });
+            const doc = await vs.openTextDocument(vs.uri.joinPath(root, rel));
+            await vs.showTextDocument(doc, { preview: true });
         } catch (err) {
             this._post({ type: 'notice', text: vscode.l10n.t('Cannot open {0}: {1}', rel, (err as Error).message) });
         }
@@ -657,18 +673,18 @@ export class ChatPanel {
                 break;
             case 'copyCode':
                 if (message.code) {
-                    await vscode.env.clipboard.writeText(message.code);
-                    vscode.window.showInformationMessage(vscode.l10n.t('Code copied to clipboard'));
+                    await vs.clipboard.writeText(message.code);
+                    vs.showInformationMessage(vscode.l10n.t('Code copied to clipboard'));
                 }
                 break;
             case 'openLink':
                 if (message.href) {
-                    await vscode.env.openExternal(vscode.Uri.parse(message.href));
+                    await vs.openExternal(vs.uri.parse(message.href));
                 }
                 break;
             case 'notify':
                 if (message.text) {
-                    void vscode.window.showInformationMessage(message.text);
+                    void vs.showInformationMessage(message.text);
                 }
                 break;
             case 'exportConversation':
@@ -682,23 +698,24 @@ export class ChatPanel {
     private async _exportConversation(markdown: string): Promise<void> {
         try {
             const fileName = 'pi-conversation-' + new Date().toISOString().slice(0, 10) + '.md';
-            const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
-            const uri = await vscode.window.showSaveDialog({
-                defaultUri: folder ? vscode.Uri.joinPath(folder, fileName) : vscode.Uri.file(fileName),
+            const folder = vs.workspaceFolders?.[0]?.uri;
+            const uri = await vs.showSaveDialog({
+                defaultUri: folder ? vs.uri.joinPath(folder, fileName) : vs.uri.file(fileName),
                 filters: { 'Markdown': ['md'], 'Text': ['txt'] }
             });
             if (uri) {
-                await vscode.workspace.fs.writeFile(uri, Buffer.from(markdown, 'utf8'));
-                vscode.window.showInformationMessage(vscode.l10n.t('Conversation exported to: {0}', uri.fsPath));
+                await vs.fs.writeFile(uri, Buffer.from(markdown, 'utf8'));
+                vs.showInformationMessage(vscode.l10n.t('Conversation exported to: {0}', uri.fsPath));
             }
         } catch (err) {
-            vscode.window.showErrorMessage(vscode.l10n.t('Export failed: {0}', (err as Error).message));
+            vs.showErrorMessage(vscode.l10n.t('Export failed: {0}', (err as Error).message));
         }
     }
 
     // ---------- Pi 客户端管理 ----------
 
     private async _ensureClient(): Promise<void> {
+        setState({ connecting: true, connected: false });
         this._post({ type: 'connecting' });
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
@@ -707,7 +724,7 @@ export class ChatPanel {
             await this._restoreHistory(client);
 
             // 通知连接成功
-            let folderName = vscode.workspace.workspaceFolders?.[0]?.name;
+            let folderName = vs.workspaceFolders?.[0]?.name;
             if (!folderName) {
                 try {
                     const state = await client.getState();
@@ -731,9 +748,11 @@ export class ChatPanel {
             // 加载会话列表
             await this._sessionManager.loadSessions(client);
             this._postSessionList();
+            setState({ connected: true, connecting: false });
         } catch (err) {
             const msg = (err as Error).message || String(err);
             logError(`Connection failed: ${msg}`);
+            setState({ connected: false, connecting: false });
             this._post({ type: 'models', models: [], current: null });
             this._post({ type: 'notice', text: vscode.l10n.t('Connection failed: {0}', msg) });
             this._post({ type: 'error', text: msg });
@@ -765,18 +784,17 @@ export class ChatPanel {
                 client.getState(),
             ]) as [PiSessionStats, { autoCompactionEnabled?: boolean }];
             const t = stats.tokens || {};
-            this._post({
-                type: 'stats',
-                stats: {
-                    input: t.input || 0,
-                    output: t.output || 0,
-                    cacheRead: t.cacheRead || 0,
-                    cacheWrite: t.cacheWrite || 0,
-                    contextPercent: stats.contextUsage?.percent ?? null,
-                    contextWindow: stats.contextUsage?.contextWindow || 0,
-                    autoCompact: Boolean(state.autoCompactionEnabled),
-                },
-            });
+            const statsState = {
+                input: t.input || 0,
+                output: t.output || 0,
+                cacheRead: t.cacheRead || 0,
+                cacheWrite: t.cacheWrite || 0,
+                contextPercent: stats.contextUsage?.percent ?? null,
+                contextWindow: stats.contextUsage?.contextWindow || 0,
+                autoCompact: Boolean(state.autoCompactionEnabled),
+            };
+            setState({ stats: statsState });
+            this._post({ type: 'stats', stats: statsState });
             this._maybeWarnContext(stats.contextUsage?.percent ?? null);
         } catch (err) { logError(`_loadStats failed: ${(err as Error).message}`); }
     }
@@ -787,7 +805,7 @@ export class ChatPanel {
         if (percent === null || percent === undefined) { return; }
         if (percent >= threshold && !this._contextWarned) {
             this._contextWarned = true;
-            void vscode.window.showWarningMessage(
+            void vs.showWarningMessage(
                 vscode.l10n.t('Context is {0}% full. Compact the session to free space.', Math.round(percent)),
                 vscode.l10n.t('Compact')
             ).then((action) => {
@@ -816,17 +834,17 @@ export class ChatPanel {
                 client.getAvailableModels(),
                 client.getState(),
             ]);
-            this._post({
-                type: 'models',
-                models: models.map((m: PiModelInfo) => ({ provider: m.provider, id: m.id })),
-                current: state.model
-                    ? { provider: state.model.provider ?? '', id: state.model.id ?? '' }
-                    : null,
-            });
+            const modelList = models.map((m: PiModelInfo) => ({ provider: m.provider, id: m.id }));
+            const currentModel = state.model
+                ? { provider: state.model.provider ?? '', id: state.model.id ?? '' }
+                : null;
+            setState({ models: modelList, currentModel });
+            this._post({ type: 'models', models: modelList, current: currentModel });
             let levels: string[] = [];
             if (typeof client.getAvailableThinkingLevels === 'function') {
                 levels = await client.getAvailableThinkingLevels().catch((err) => { logError(`getAvailableThinkingLevels failed: ${(err as Error).message}`); return []; });
             }
+            setState({ thinkingLevels: levels, currentThinking: state.thinkingLevel ?? null });
             this._post({ type: 'thinking', levels, currentThinking: state.thinkingLevel ?? null });
             this._post({ type: 'permission', permissionMode: this._permissionMode() });
         } catch (err) {
@@ -846,6 +864,7 @@ export class ChatPanel {
             messageCount: s.messageCount,
             name: s.name,
         }));
+        setState({ sessions: this._sessionManager.sessions, currentSessionId: this._sessionManager.currentSessionId });
         this._post({
             type: 'sessions',
             sessions,
@@ -854,15 +873,17 @@ export class ChatPanel {
     }
 
     private _permissionMode(): string {
-        return vscode.workspace.getConfiguration('pi-agent').get<string>('agent.permissionMode', 'ask');
+        const mode = vs.getConfiguration('pi-agent').get<string>('agent.permissionMode', 'ask');
+        if (stateStore.select(selectPermissionMode) !== mode) { setState({ permissionMode: mode }); }
+        return mode;
     }
 
     private async _handleSetPermission(mode: string): Promise<void> {
-        const target = vscode.workspace.workspaceFolders?.length
-            ? vscode.ConfigurationTarget.Workspace
-            : vscode.ConfigurationTarget.Global;
+        const target = vs.workspaceFolders?.length
+            ? vs.configurationTarget.Workspace
+            : vs.configurationTarget.Global;
         try {
-            await vscode.workspace.getConfiguration('pi-agent').update('agent.permissionMode', mode, target);
+            await vs.getConfiguration('pi-agent').update('agent.permissionMode', mode, target);
             // 配置变更监听会重启会话使权限模式生效
             this._post({ type: 'permission', permissionMode: mode });
             this._post({ type: 'notice', text: vscode.l10n.t('Permission mode: {0} (restarting session…)', permissionLabel(mode)) });
@@ -883,7 +904,7 @@ export class ChatPanel {
                     this._post({ type: 'notice', text: vscode.l10n.t('Auto-confirmed: {0}', req.title || '') });
                     return;
                 }
-                const choice = await vscode.window.showWarningMessage(
+                const choice = await vs.showWarningMessage(
                     `${req.title || vscode.l10n.t('Confirmation required')}${req.message ? '\n\n' + req.message : ''}`,
                     { modal: true },
                     vscode.l10n.t('Allow'), vscode.l10n.t('Deny')
@@ -892,7 +913,7 @@ export class ChatPanel {
                 break;
             }
             case 'select': {
-                const pick = await vscode.window.showQuickPick(req.options || [], {
+                const pick = await vs.showQuickPick(req.options || [], {
                     title: req.title,
                     ignoreFocusOut: true,
                 });
@@ -901,7 +922,7 @@ export class ChatPanel {
                 break;
             }
             case 'input': {
-                const value = await vscode.window.showInputBox({
+                const value = await vs.showInputBox({
                     prompt: req.title,
                     placeHolder: req.placeholder,
                     ignoreFocusOut: true,
@@ -911,7 +932,7 @@ export class ChatPanel {
                 break;
             }
             case 'editor': {
-                const value = await vscode.window.showInputBox({
+                const value = await vs.showInputBox({
                     prompt: req.title,
                     value: req.prefill || '',
                     ignoreFocusOut: true,
@@ -922,9 +943,9 @@ export class ChatPanel {
             }
             case 'notify': {
                 const text = req.message || '';
-                if (req.notifyType === 'error') { void vscode.window.showErrorMessage(text); }
-                else if (req.notifyType === 'warning') { void vscode.window.showWarningMessage(text); }
-                else { void vscode.window.showInformationMessage(text); }
+                if (req.notifyType === 'error') { void vs.showErrorMessage(text); }
+                else if (req.notifyType === 'warning') { void vs.showWarningMessage(text); }
+                else { void vs.showInformationMessage(text); }
                 break;
             }
             default:
@@ -997,7 +1018,7 @@ export class ChatPanel {
             this._post({ type: 'notice', text: vscode.l10n.t('Not connected; cannot rename session') });
             return;
         }
-        const name = await vscode.window.showInputBox({
+        const name = await vs.showInputBox({
             prompt: vscode.l10n.t('Session name'),
             value: currentName || '',
             placeHolder: vscode.l10n.t('Enter a session name (leave empty to clear)'),
@@ -1160,10 +1181,10 @@ export class ChatPanel {
 
     /** 窗口失焦时，任务完成后弹通知 */
     private _notifySettled(): void {
-        if (vscode.window.state.focused) { return; }
-        const enabled = vscode.workspace.getConfiguration('pi-agent').get<boolean>('notifications.enabled', true);
+        if (vs.windowFocused()) { return; }
+        const enabled = vs.getConfiguration('pi-agent').get<boolean>('notifications.enabled', true);
         if (!enabled) { return; }
-        void vscode.window.showInformationMessage(vscode.l10n.t('Pi finished the current turn'));
+        void vs.showInformationMessage(vscode.l10n.t('Pi finished the current turn'));
     }
 
     /** 清空等待中的 steer / follow-up 队列 */
@@ -1179,9 +1200,9 @@ export class ChatPanel {
         if (this._fileList && now - this._fileListAt < 30000) { return this._fileList; }
         try {
             const exclude = '{**/node_modules/**,**/.git/**,**/out/**,**/dist/**,**/.vscode-test/**,**/media/**,**/.next/**,**/build/**,**/target/**}';
-            const uris = await vscode.workspace.findFiles('**/*', exclude, 5000);
+            const uris = await vs.findFiles('**/*', exclude, 5000);
             this._fileList = uris
-                .map((u) => vscode.workspace.asRelativePath(u, false))
+                .map((u) => vs.asRelativePath(u, false))
                 .sort((a, b) => a.localeCompare(b));
             this._fileListAt = now;
         } catch (err) {
@@ -1201,12 +1222,12 @@ export class ChatPanel {
             let rel: string | undefined;
             if (p.startsWith('file://')) {
                 try {
-                    const uri = vscode.Uri.parse(p);
-                    if (vscode.workspace.getWorkspaceFolder(uri)) { rel = vscode.workspace.asRelativePath(uri, false); }
+                    const uri = vs.uri.parse(p);
+                    if (vs.getWorkspaceFolder(uri)) { rel = vs.asRelativePath(uri, false); }
                 } catch { rel = undefined; }
             } else if (path.isAbsolute(p)) {
-                const uri = vscode.Uri.file(p);
-                if (vscode.workspace.getWorkspaceFolder(uri)) { rel = vscode.workspace.asRelativePath(uri, false); }
+                const uri = vs.uri.file(p);
+                if (vs.getWorkspaceFolder(uri)) { rel = vs.asRelativePath(uri, false); }
             } else {
                 rel = p.replace(/\\/g, '/');
             }
@@ -1286,13 +1307,13 @@ export class ChatPanel {
 
             const isMissing = err instanceof PiNotFoundError;
             const hint = isMissing ? vscode.l10n.t('Copy install command') : vscode.l10n.t('Retry connection');
-            void vscode.window.showErrorMessage(`Pi: ${msg}`, hint).then((action) => {
+            void vs.showErrorMessage(`Pi: ${msg}`, hint).then((action) => {
                 if (action === vscode.l10n.t('Copy install command')) {
-                    void vscode.env.clipboard.writeText(PI_INSTALL_HINT);
-                    void vscode.window.showInformationMessage(vscode.l10n.t('Install command copied; run it in a terminal, then retry'));
+                    void vs.clipboard.writeText(PI_INSTALL_HINT);
+                    void vs.showInformationMessage(vscode.l10n.t('Install command copied; run it in a terminal, then retry'));
                 } else if (action === vscode.l10n.t('Retry connection')) {
                     void this._ensureClient().catch((e: unknown) => {
-                        void vscode.window.showErrorMessage(`Pi: ${(e as Error).message}`);
+                        void vs.showErrorMessage(`Pi: ${(e as Error).message}`);
                     });
                 }
             });
@@ -1323,10 +1344,10 @@ export class ChatPanel {
     // ---------- 应用到编辑器 ----------
 
     private async _applyCode(code: string) {
-        const editor = vscode.window.activeTextEditor;
+        const editor = vs.activeTextEditor;
         if (!editor) {
-            await vscode.env.clipboard.writeText(code);
-            vscode.window.showWarningMessage(vscode.l10n.t('No active editor; code copied to clipboard'));
+            await vs.clipboard.writeText(code);
+            vs.showWarningMessage(vscode.l10n.t('No active editor; code copied to clipboard'));
             return;
         }
         const sel = editor.selection;
@@ -1336,15 +1357,15 @@ export class ChatPanel {
         } else {
             edit.insert(editor.document.uri, sel.active, code);
         }
-        const applied = await vscode.workspace.applyEdit(edit);
+        const applied = await vs.applyEdit(edit);
         if (applied) {
-            vscode.window.showInformationMessage(
+            vs.showInformationMessage(
                 sel.isEmpty
                     ? vscode.l10n.t('Code inserted at cursor (Cmd+Z to undo)')
                     : vscode.l10n.t('Selection replaced with code (Cmd+Z to undo)')
             );
         } else {
-            vscode.window.showWarningMessage(vscode.l10n.t('Failed to apply code to the editor'));
+            vs.showWarningMessage(vscode.l10n.t('Failed to apply code to the editor'));
         }
     }
 
