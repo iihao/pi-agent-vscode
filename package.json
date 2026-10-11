@@ -385,7 +385,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
-    "compile": "tsc -p ./ && npm run build:webview",
+    "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
+    "compile": "npm run clean && tsc -p ./ && npm run build:webview",
     "watch": "tsc -watch -p ./",
     "build:webview": "node esbuild.webview.mjs",
     "watch:webview": "node esbuild.webview.mjs --watch",
