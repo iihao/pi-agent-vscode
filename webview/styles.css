@@ -223,6 +223,14 @@
     .session-pill { flex: 1; min-width: 0; justify-content: flex-start; }
     .msg-nav { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
     .msg-nav.hidden { display: none; }
+    .q-counter {
+        font-family: var(--cx-mono);
+        font-size: 10px;
+        color: var(--cx-muted);
+        min-width: 30px;
+        text-align: center;
+        user-select: none;
+    }
     .icon-btn:disabled { opacity: .35; cursor: default; }
     .icon-btn:disabled:hover { background: transparent; color: var(--cx-muted); }
     .session-panel { top: calc(100% + 4px); bottom: auto; left: 8px; right: 8px; }

@@ -87,6 +87,7 @@ const vscode = acquireVsCodeApi();
     const msgNav = document.getElementById('msgNav');
     const qPrev = document.getElementById('qPrev');
     const qNext = document.getElementById('qNext');
+    const qCounter = document.getElementById('qCounter');
     const searchBar = document.getElementById('searchBar');
     const searchInput = document.getElementById('searchInput');
     const searchResults = document.getElementById('searchResults');
@@ -455,6 +456,9 @@ const vscode = acquireVsCodeApi();
         const users = getUserMessageEls();
         qPrev.disabled = active <= 0;
         qNext.disabled = active < 0 || active >= users.length - 1;
+        if (users.length) {
+            qCounter.textContent = (Math.max(0, active) + 1) + '/' + users.length;
+        }
     }
 
     function jumpToUserMessage(i) {
