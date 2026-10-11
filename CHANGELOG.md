@@ -87,6 +87,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   cached previews.
 - `@earendil-works/pi-coding-agent` moved to `devDependencies`; it is not
   shipped in the VSIX (pi is resolved from your own install).
+- Added tests for the previously untested imperative code: `PiClientManager`
+  (via an injectable SDK seam), `getSelectionContext`, and the ChatPanel
+  webview bridge (message routing, `clear`, disposed-panel guard).
 
 ### Fixed
 

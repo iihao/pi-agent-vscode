@@ -194,7 +194,7 @@ async function askAboutSelection(build: (ctx: SelectionContext) => string): Prom
     await panel.askQuestion(build(ctx));
 }
 
-interface SelectionContext {
+export interface SelectionContext {
     relPath: string;
     languageId: string;
     code: string;
@@ -202,7 +202,7 @@ interface SelectionContext {
 }
 
 /** 获取当前编辑器选区上下文（无选区时提示并返回 undefined） */
-function getSelectionContext(): SelectionContext | undefined {
+export function getSelectionContext(): SelectionContext | undefined {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.selection.isEmpty) {
         vscode.window.showWarningMessage(vscode.l10n.t('Please select some code first'));

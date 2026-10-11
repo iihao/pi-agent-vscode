@@ -8,6 +8,7 @@ import {
     PiAgentEvent,
     loadPiSdk,
     resolvePi,
+    ResolvedPi,
     PI_INSTALL_HINT,
     PiSdkModule,
     respondExtensionUI,
@@ -30,11 +31,24 @@ export class PiNotFoundError extends PiStartError {
     }
 }
 
+/** 可注入的解析/加载依赖（默认用真实实现，测试时注入假实现） */
+export interface PiClientDeps {
+    resolvePi(extensionPath: string, executable?: string): ResolvedPi | null;
+    loadPiSdk(entryPath: string): Promise<PiSdkModule>;
+}
+
+const defaultDeps: PiClientDeps = { resolvePi, loadPiSdk };
+
 export class PiClientManager {
     private _client: PiRpcClient | undefined;
     private _unsubscribe: (() => void) | undefined;
     private _starting: Promise<void> | undefined;
     private _eventListeners: Array<(event: PiAgentEvent) => void> = [];
+    private readonly _deps: PiClientDeps;
+
+    constructor(deps: PiClientDeps = defaultDeps) {
+        this._deps = deps;
+    }
 
     public get client(): PiRpcClient | undefined {
         return this._client;
@@ -84,14 +98,14 @@ export class PiClientManager {
     public async runOneShot(extensionPath: string, prompt: string, timeoutMs = 90000): Promise<string> {
         const config = vscode.workspace.getConfiguration('pi-agent');
         const executable = (config.get<string>('pi.executable') || '').trim();
-        const resolved = resolvePi(extensionPath, executable || undefined);
+        const resolved = this._deps.resolvePi(extensionPath, executable || undefined);
         if (!resolved) {
             throw new PiNotFoundError(vscode.l10n.t('pi not found; please install it and retry: {0}', PI_INSTALL_HINT));
         }
 
         let sdk: PiSdkModule;
         try {
-            sdk = await loadPiSdk(resolved.sdkEntry);
+            sdk = await this._deps.loadPiSdk(resolved.sdkEntry);
         } catch (sdkErr) {
             throw new PiStartError(vscode.l10n.t('Failed to load pi SDK: {0}', (sdkErr as Error).message));
         }
@@ -123,7 +137,7 @@ export class PiClientManager {
     private async _startClient(extensionPath: string): Promise<void> {
         const config = vscode.workspace.getConfiguration('pi-agent');
         const executable = (config.get<string>('pi.executable') || '').trim();
-        const resolved = resolvePi(extensionPath, executable || undefined);
+        const resolved = this._deps.resolvePi(extensionPath, executable || undefined);
         if (!resolved) {
             logError('pi executable not found');
             throw new PiNotFoundError(vscode.l10n.t('pi not found; please install it and retry: {0}', PI_INSTALL_HINT));
@@ -132,7 +146,7 @@ export class PiClientManager {
 
         let sdk: PiSdkModule;
         try {
-            sdk = await loadPiSdk(resolved.sdkEntry);
+            sdk = await this._deps.loadPiSdk(resolved.sdkEntry);
         } catch (sdkErr) {
             throw new PiStartError(vscode.l10n.t('Failed to load pi SDK: {0}', (sdkErr as Error).message));
         }

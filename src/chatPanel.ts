@@ -325,6 +325,11 @@ export class ChatPanel {
         await sharedClientManager.stop();
     }
 
+    /** 直接用给定 webview 创建面板（测试 / 自定义宿主用） */
+    public static create(webview: vscode.Webview, extensionPath: string, disposeEvent: vscode.Event<void>): ChatPanel {
+        return new ChatPanel(webview, extensionPath, disposeEvent);
+    }
+
     public static async ensureView(): Promise<ChatPanel> {
         await vs.executeCommand(`${ChatPanel.viewType}.focus`);
         // 最多等待约 5s：webview 在慢机器/高负载下创建可能超过 2s
