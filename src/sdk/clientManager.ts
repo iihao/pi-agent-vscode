@@ -10,6 +10,7 @@ import {
     resolvePi,
     PI_INSTALL_HINT,
     PiSdkModule,
+    respondExtensionUI,
 } from './piTypes';
 import { logInfo, logError } from '../utils/logger';
 
@@ -97,6 +98,12 @@ export class PiClientManager {
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
         const client = new sdk.RpcClient({ cliPath: resolved.cliPath, cwd, args: ['--no-session', '--no-tools'] });
+        // 一次性生成期间若 pi 请求交互（确认/选择），直接回 cancelled，避免挂起到超时
+        const unsubscribe = client.onEvent((event) => {
+            if (event.type === 'extension_ui_request' && event.id) {
+                respondExtensionUI(client, event.id, { cancelled: true });
+            }
+        });
         try {
             await client.start();
             await client.prompt(prompt);
@@ -108,6 +115,7 @@ export class PiClientManager {
                 : null;
             return (text || '').trim();
         } finally {
+            unsubscribe();
             await client.stop().catch((err) => { logError(`one-shot stop failed: ${(err as Error).message}`); });
         }
     }

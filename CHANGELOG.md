@@ -100,6 +100,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A new chat surface no longer resets the shared state; `busy` is reconciled
   from pi's streaming state on connect, so messages sent while pi works are
   queued instead of bypassing the queue.
+- Clear the previous turn's change-tracking when creating, switching, cloning,
+  or renaming a session, so **Revert** only touches the current session's files.
+- One-shot generation (commit message / PR description / session auto-name)
+  cancels a pi UI request instead of hanging until it times out.
 
 ### Security
 
@@ -107,6 +111,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   CSP drops `https:` from `img-src`, and Markdown images with `http(s)` URLs
   render as click-to-open links (opened in the system browser), preventing
   tracking pixels and IP leaks.
+- Links opened from chat are limited to the `http`, `https`, and `mailto`
+  schemes; other protocols (`command:`, `vscode:`, …) are ignored.
 
 ## [0.1.0] - 2026-10-10
 

@@ -24,6 +24,9 @@ const vs = getVSCodeService();
 const sharedClientManager = new PiClientManager();
 const sharedSessionManager = new SessionManager();
 
+/** 自动命名是全局副作用（共享会话 + 一次性生成），用模块级标志避免多面板同时触发 */
+let autoNameInFlight = false;
+
 /** 判断错误是否为「pi 进程/连接」类问题（用类型/code 判断，不依赖本地化文案） */
 function isProcessError(err: unknown): boolean {
     if (err instanceof PiStartError) { return true; }
@@ -241,7 +244,6 @@ export class ChatPanel {
     /** 本回合被 edit/write 修改的文件（绝对路径 -> 可还原信息） */
     private _turnChanges = new Map<string, TurnChange>();
     private _firstUserMessage: string | undefined;
-    private _autoNaming = false;
     /** 已尝试自动命名的会话 id（避免失败后每回合重试） */
     private _autoNameTried = new Set<string>();
     private _disposed = false;
@@ -334,14 +336,13 @@ export class ChatPanel {
     }
 
     public clear() {
-        if (this._busy) {
-            void this._clientManager.abort().catch((err) => { logError(`abort failed: ${(err as Error).message}`); });
-        }
+        void this._abortIfBusy();
         this._busy = false;
         this._turnHadText = false;
         this._contexts = [];
         this._contextWarned = false;
         this._firstUserMessage = undefined;
+        this._resetTurnChanges();
         this._post({ type: 'clear' });
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
@@ -359,6 +360,7 @@ export class ChatPanel {
         this._busy = false;
         this._turnHadText = false;
         this._contexts = [];
+        this._resetTurnChanges();
         this._post({ type: 'clear' });
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
@@ -495,6 +497,7 @@ export class ChatPanel {
             this._post({ type: 'notice', text: vscode.l10n.t('Not connected') });
             return;
         }
+        await this._abortIfBusy();
         try {
             const res = await client.clone();
             if (res.cancelled) { return; }
@@ -503,6 +506,7 @@ export class ChatPanel {
             this._busy = false;
             this._turnHadText = false;
             this._firstUserMessage = undefined;
+            this._resetTurnChanges();
             this._post({ type: 'setBusy', busy: false });
             await this._restoreHistory(client);
             this._postSessionList();
@@ -514,7 +518,7 @@ export class ChatPanel {
 
     /** 首次回合结束后，按需用一次性生成给会话命名 */
     private async _maybeAutoName(): Promise<void> {
-        if (this._autoNaming) { return; }
+        if (autoNameInFlight) { return; }
         if (!vs.getConfiguration('pi-agent').get<boolean>('sessions.autoName', true)) { return; }
         const text = this._firstUserMessage;
         if (!text) { return; }
@@ -525,7 +529,7 @@ export class ChatPanel {
         this._autoNameTried.add(id);
         const client = this._clientManager.client;
         if (!client || typeof client.setSessionName !== 'function') { return; }
-        this._autoNaming = true;
+        autoNameInFlight = true;
         try {
             const raw = await this._clientManager.runOneShot(this._extensionPath, buildNamePrompt(text));
             const clean = raw.split('\n')[0].replace(/^["'\s]+|["'\s]+$/g, '').slice(0, 60);
@@ -537,7 +541,7 @@ export class ChatPanel {
         } catch (err) {
             logError(`auto-name failed: ${(err as Error).message}`);
         } finally {
-            this._autoNaming = false;
+            autoNameInFlight = false;
         }
     }
 
@@ -649,6 +653,12 @@ export class ChatPanel {
     }
 
     // ---------- 本回合改动审阅 / 撤销 ----------
+
+    /** 丢弃本回合改动追踪（清空 / 新建 / 切换会话后不应再回滚旧会话的文件） */
+    private _resetTurnChanges(): void {
+        this._turnChanges.clear();
+        this._post({ type: 'turnChanges', files: [] });
+    }
 
     /** tool_execution_start 时记录 edit/write 目标（不读文件内容，避免读到半写入状态） */
     private _trackToolTarget(event: PiAgentEvent): void {
@@ -774,6 +784,8 @@ export class ChatPanel {
                 await this._clientManager.abort();
                 // 停止后丢弃等待中的 steer / follow-up，避免它们意外继续
                 await this._clearQueue();
+                // 同步清空 webview 上的排队/steer 徽章（不依赖 pi 是否补发 queue_update）
+                this._post({ type: 'queue', steering: [], followUp: [] });
                 break;
             case 'setModel':
                 if (message.provider && message.modelId) {
@@ -785,9 +797,6 @@ export class ChatPanel {
                 break;
             case 'setPermission':
                 if (message.mode) { await this._handleSetPermission(message.mode); }
-                break;
-            case 'clearChat':
-                this.clear();
                 break;
             case 'newSession':
                 await this._handleNewSession();
@@ -809,10 +818,6 @@ export class ChatPanel {
             case 'removeContext':
                 if (message.id) { this._removeContext(message.id); }
                 break;
-            case 'clearContexts':
-                this._contexts = [];
-                this._postContexts();
-                break;
             case 'applyCode':
                 if (message.code) { await this._applyCode(message.code); }
                 break;
@@ -824,7 +829,11 @@ export class ChatPanel {
                 break;
             case 'openLink':
                 if (message.href) {
-                    await vs.openExternal(vs.uri.parse(message.href));
+                    // 仅放行常见安全 scheme：避免把 command:/vscode:/ms-* 等自定义协议交给系统
+                    const scheme = (message.href.match(/^([a-z][a-z0-9+.-]*):/i)?.[1] || '').toLowerCase();
+                    if (scheme === 'http' || scheme === 'https' || scheme === 'mailto') {
+                        await vs.openExternal(vs.uri.parse(message.href));
+                    }
                 }
                 break;
             case 'notify':
@@ -1148,15 +1157,19 @@ export class ChatPanel {
 
     // ---------- 会话管理 ----------
 
+    /** 若正在运行则先中断当前回合（切换 / 新建 / 克隆会话前调用，避免后台继续流式） */
+    private async _abortIfBusy(): Promise<void> {
+        if (!this._busy) { return; }
+        await this._clientManager.abort().catch((err) => { logError(`abort failed: ${(err as Error).message}`); });
+    }
+
     private async _handleNewSession(): Promise<void> {
         const client = this._clientManager.client;
         if (!client) {
             this._post({ type: 'notice', text: vscode.l10n.t('Not connected; cannot create session') });
             return;
         }
-        if (this._busy) {
-            await this._clientManager.abort().catch((err) => { logError(`abort failed: ${(err as Error).message}`); });
-        }
+        await this._abortIfBusy();
         const success = await this._sessionManager.createNewSession(client);
         if (success) {
             this._post({ type: 'clear' });
@@ -1164,6 +1177,7 @@ export class ChatPanel {
             this._turnHadText = false;
             this._contextWarned = false;
             this._firstUserMessage = undefined;
+            this._resetTurnChanges();
             this._post({ type: 'setBusy', busy: false });
             this._postContexts();
             this._postSessionList();
@@ -1186,6 +1200,8 @@ export class ChatPanel {
             ignoreFocusOut: true,
         });
         if (name === undefined) { return; }
+        // 重命名非当前会话需要先切过去；若正在运行则先中断，避免中途切换会话
+        if (sessionId !== this._sessionManager.currentSessionId) { await this._abortIfBusy(); }
         const before = this._sessionManager.currentSessionId;
         const ok = await this._sessionManager.renameSession(client, sessionId, name);
         if (ok) {
@@ -1194,6 +1210,7 @@ export class ChatPanel {
                 this._post({ type: 'clear' });
                 this._busy = false;
                 this._turnHadText = false;
+                this._resetTurnChanges();
                 this._post({ type: 'setBusy', busy: false });
                 await this._restoreHistory(client);
             }
@@ -1210,6 +1227,7 @@ export class ChatPanel {
             this._post({ type: 'notice', text: vscode.l10n.t('Not connected; cannot switch session') });
             return;
         }
+        await this._abortIfBusy();
         const success = await this._sessionManager.switchSession(client, sessionId);
         if (success) {
             this._post({ type: 'clear' });
@@ -1217,6 +1235,7 @@ export class ChatPanel {
             this._turnHadText = false;
             this._contextWarned = false;
             this._firstUserMessage = undefined;
+            this._resetTurnChanges();
             this._post({ type: 'setBusy', busy: false });
             // 恢复该会话的历史记录
             await this._restoreHistory(client);
