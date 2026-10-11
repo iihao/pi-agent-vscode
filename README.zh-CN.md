@@ -18,6 +18,10 @@
 > ⚠️ **Pi Agent 只是前端。** 它会启动你本机安装的 `pi` CLI，而 `pi` 可以
 > **读写工作区文件、执行 shell 命令**。仅在你的**受信任工作区**中激活，请自行判断风险。
 
+<div align="center">
+  <img src="https://raw.githubusercontent.com/iihao/pi-agent-vscode/main/docs/images/pi-vscode-main.png" alt="Pi Agent 侧边栏聊天面板：流式回答、代码块、问题导航，以及带模型 / 思考级别 / 权限控制的输入栏" width="440">
+</div>
+
 ---
 
 ## 安装

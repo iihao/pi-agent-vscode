@@ -19,6 +19,10 @@ coding agent — a Claude Code / Codex-style chat UI that runs entirely on
 > machine, which can **read/write workspace files and run shell commands**. It
 > activates **only in trusted workspaces**. Use at your own discretion.
 
+<div align="center">
+  <img src="https://raw.githubusercontent.com/iihao/pi-agent-vscode/main/docs/images/pi-vscode-main.png" alt="Pi Agent chat panel in the VS Code sidebar: streaming answers, code blocks, question navigator and the composer with model / thinking / permission controls" width="440">
+</div>
+
 ---
 
 ## Install
