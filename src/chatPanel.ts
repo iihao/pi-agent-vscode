@@ -200,7 +200,7 @@ interface PostMessage {
     tool?: string;
     detail?: string;
     isError?: boolean;
-    sessions?: Array<{ id: string; file: string; createdAt: number; messageCount: number; name?: string }>;
+    sessions?: Array<{ id: string; file: string; createdAt: number; messageCount: number; name?: string; preview?: string }>;
     code?: string;
     toolCallId?: string;
     output?: string;
@@ -1017,6 +1017,7 @@ export class ChatPanel {
             createdAt: s.createdAt,
             messageCount: s.messageCount,
             name: s.name,
+            preview: s.preview,
         }));
         setState({ sessions: this._sessionManager.sessions, currentSessionId: this._sessionManager.currentSessionId });
         this._post({

@@ -4,7 +4,8 @@
 
 import * as path from 'path';
 import * as fs from 'fs';
-import { PiRpcClient } from './piTypes';
+import { PiRawMessage, PiRpcClient, extractMessageText } from './piTypes';
+import { stripContextBlock } from '../utils/context';
 import { logError } from '../utils/logger';
 
 export interface SessionInfo {
@@ -13,17 +14,38 @@ export interface SessionInfo {
     createdAt: number;
     messageCount: number;
     name?: string;
+    /** 未命名时的默认显示名：第一条用户提问（已截断） */
+    preview?: string;
 }
 
 /** 读取会话元数据时的读取上限，避免把大文件整体读入内存 */
-const HEAD_BYTES = 64 * 1024;
+const HEAD_BYTES = 256 * 1024;
+const PREVIEW_MAX_CHARS = 60;
+
+/** 从会话文件头部的行中提取第一条用户提问（去除 context 块、压缩空白、截断） */
+function firstUserPreview(lines: string[]): string | undefined {
+    for (const line of lines) {
+        const t = line.trim();
+        if (!t || t.indexOf('"message"') === -1) { continue; }
+        let entry: { type?: string; message?: PiRawMessage };
+        try { entry = JSON.parse(t); } catch { continue; }
+        if (entry.type !== 'message' || !entry.message || entry.message.role !== 'user') { continue; }
+        const text = extractMessageText(entry.message);
+        if (!text) { continue; }
+        const clean = stripContextBlock(text).replace(/\s+/g, ' ').trim();
+        if (clean) {
+            return clean.length > PREVIEW_MAX_CHARS ? clean.slice(0, PREVIEW_MAX_CHARS) + '…' : clean;
+        }
+    }
+    return undefined;
+}
 const TAIL_CHUNK_BYTES = 256 * 1024;
 const MAX_TAIL_SCAN_BYTES = 8 * 1024 * 1024;
 
 export class SessionManager {
     private _sessions: SessionInfo[] = [];
     private _currentSessionId: string | undefined;
-    private _fileCache = new Map<string, { mtimeMs: number; id: string; name?: string }>();
+    private _fileCache = new Map<string, { mtimeMs: number; id: string; name?: string; preview?: string }>();
 
     public get sessions(): SessionInfo[] {
         return this._sessions;
@@ -54,6 +76,7 @@ export class SessionManager {
                                 return {
                                     id: meta.id,
                                     name: meta.name,
+                                    preview: meta.preview,
                                     file: full,
                                     createdAt: stat.mtimeMs,
                                     messageCount: 0,
@@ -139,18 +162,20 @@ export class SessionManager {
 
     /** 读取会话文件元数据：真实 id（首行 header）与名称（最后一个 session_info）。
      *  只读取文件头部与尾部，避免把大文件整体读入内存、阻塞扩展宿主。 */
-    private _readMeta(file: string, mtimeMs: number): { id: string; name?: string } {
+    private _readMeta(file: string, mtimeMs: number): { id: string; name?: string; preview?: string } {
         const cached = this._fileCache.get(file);
         if (cached && cached.mtimeMs === mtimeMs) {
-            return { id: cached.id, name: cached.name };
+            return { id: cached.id, name: cached.name, preview: cached.preview };
         }
         let id = path.basename(file, '.jsonl');
         let name: string | undefined;
+        let preview: string | undefined;
         try {
             const stat = fs.statSync(file);
             if (stat.size > 0) {
                 const head = this._readRange(file, 0, Math.min(HEAD_BYTES, stat.size));
-                const first = head.split('\n').find((l) => l.trim());
+                const lines = head.split('\n');
+                const first = lines.find((l) => l.trim());
                 if (first) {
                     try {
                         const o = JSON.parse(first);
@@ -159,13 +184,14 @@ export class SessionManager {
                         logError(`_readMeta: bad header in ${file}: ${(err as Error).message}`);
                     }
                 }
+                preview = firstUserPreview(lines);
                 name = this._readLastName(file, stat.size);
             }
         } catch (err) {
             logError(`_readMeta failed for ${file}: ${(err as Error).message}`);
         }
-        this._fileCache.set(file, { mtimeMs, id, name });
-        return { id, name };
+        this._fileCache.set(file, { mtimeMs, id, name, preview });
+        return { id, name, preview };
     }
 
     /** 读取 [start, start+len) 区间的文本 */

@@ -228,6 +228,11 @@ const vscode = acquireVsCodeApi();
         permPanel.innerHTML = html;
     }
 
+    function sessionDisplayName(s) {
+        // 用户重命名 > 自动命名 > 首条提问预览 > id 前 8 位
+        return s.name || s.preview || shortId(s.id);
+    }
+
     function renderSessionPanel() {
         if (!sessionsList.length) {
             sessionLabel.textContent = S.currentSession;
@@ -235,15 +240,16 @@ const vscode = acquireVsCodeApi();
             return;
         }
         const cur = sessionsList.find(function (s) { return s.id === currentSessionId; });
-        sessionLabel.textContent = cur ? (cur.name || shortId(cur.id)) : S.currentSession;
+        sessionLabel.textContent = cur ? sessionDisplayName(cur) : S.currentSession;
         let html = '';
         sessionsList.forEach(function (s) {
             const date = new Date(s.createdAt);
             const dateStr = (date.getMonth() + 1) + '/' + date.getDate() + ' ' + date.getHours() + ':' + String(date.getMinutes()).padStart(2, '0');
             const active = s.id === currentSessionId;
+            const label = sessionDisplayName(s);
             html += '<div class="session-row' + (active ? ' active' : '') + '" data-id="' + escapeHtml(s.id) + '" data-name="' + escapeHtml(s.name || '') + '">' +
                 '<button class="session-row-main">' +
-                    '<span class="session-row-title">' + escapeHtml(s.name || shortId(s.id)) + '</span>' +
+                    '<span class="session-row-title" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
                     '<span class="session-row-meta">' + dateStr + '</span>' +
                 '</button>' +
                 '<button class="session-row-act" data-act="rename" title="' + S.rename + '">✎</button>' +

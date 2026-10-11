@@ -73,6 +73,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Internally, chat state is now centralized in a state store (`src/state`) and
   VS Code access goes through a service container (`src/services`) — a
   testable seam for future work.
+- Sessions the user has not renamed now display their first question (trimmed,
+  whitespace-collapsed, truncated to 60 chars) instead of the raw session id.
 
 ### Fixed
 

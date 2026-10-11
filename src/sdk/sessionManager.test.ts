@@ -8,6 +8,7 @@ import type { PiRpcClient } from './piTypes';
 const ID_A = '01a0f11c-aaaa-72ae-bab0-000000000001';
 const ID_B = '01a0f11c-bbbb-72ae-bab0-000000000002';
 const ID_C = '01a0f11c-cccc-72ae-bab0-000000000003';
+const ID_D = '01a0f11c-dddd-72ae-bab0-000000000004';
 
 let dir: string;
 let fileA: string;
@@ -82,6 +83,33 @@ describe('SessionManager.loadSessions', () => {
         const s = sm.sessions.find((x) => x.id === ID_C);
         expect(s).toBeDefined();
         expect(s?.name).toBe('Deep Name');
+    });
+
+    it('derives a preview from the first user message (trimmed)', async () => {
+        const file = path.join(dir, `2026-10-10T04-00-00-000Z_${ID_D}.jsonl`);
+        const header = JSON.stringify({ type: 'session', version: 3, id: ID_D });
+        const user = JSON.stringify({ type: 'message', id: 'm1', parentId: null, timestamp: 't', message: { role: 'user', content: '   How do I   fix the parser?  ' } });
+        fs.writeFileSync(file, [header, user].join('\n') + '\n');
+
+        const { client } = makeClient(fileA, ID_A);
+        const sm = new SessionManager();
+        await sm.loadSessions(client);
+
+        expect(sm.sessions.find((x) => x.id === ID_D)?.preview).toBe('How do I fix the parser?');
+    });
+
+    it('strips the context block and truncates a long preview', async () => {
+        const file = path.join(dir, `2026-10-10T05-00-00-000Z_${ID_D}.jsonl`);
+        const header = JSON.stringify({ type: 'session', version: 3, id: ID_D });
+        const content = '--- pi-extension-context:start ---\n<file-context>\n@a.ts\n</file-context>\n--- pi-extension-context:end ---\n\n' + 'x'.repeat(200);
+        const user = JSON.stringify({ type: 'message', id: 'm1', parentId: null, timestamp: 't', message: { role: 'user', content } });
+        fs.writeFileSync(file, [header, user].join('\n') + '\n');
+
+        const { client } = makeClient(fileA, ID_A);
+        const sm = new SessionManager();
+        await sm.loadSessions(client);
+
+        expect(sm.sessions.find((x) => x.id === ID_D)?.preview).toBe('x'.repeat(60) + '…');
     });
 });
 
