@@ -54,11 +54,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **Compact Session**.
 - Context meter warning when the window is nearly full, with a one-click
   **Compact** action.
-- **Native chat participant** (optional): use **`@pi`** in VS Code's own Chat
-  view (with an `/explain` command). pi runs in a temporary session per request
-  so it never disturbs the sidebar chat. Requires VS Code 1.90+.
 - The editor title bar shows a single Pi (`>_`) icon that opens the plugin's
-  own chat as an editor tab (content area) — not the native chat.
+  own chat as an editor tab (content area).
 - Marketplace polish: a README cover image, Marketplace install instructions, a
   first-run **walkthrough**, a **PRIVACY.md**, and Japanese / Korean / German /
   French manifest localizations.

@@ -19,8 +19,6 @@
   "cmd.cloneSession": "Pi: Clone Session",
   "cmd.openInEditor": "Pi: Open Chat in Editor Tab",
   "cmd.openInEditorToSide": "Pi: Open Chat Beside",
-  "chatParticipant.description": "Ask your local pi coding agent",
-  "chatParticipant.explain.description": "Explain the selected code",
   "cmd.attachFile": "Pi: Attach Current File to Chat",
   "cmd.attachSelection": "Pi: Attach Selection to Chat",
   "cmd.restartSession": "Pi: Restart Session",

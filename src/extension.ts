@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { ChatPanel } from './chatPanel';
-import { registerChatParticipant } from './chatParticipant';
 import { initLogger, setLogLevel, buildDiagnostics, logInfo, LogLevel } from './utils/logger';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -10,9 +9,6 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册侧边栏聊天视图（activitybar 图标 → 聊天面板）
     ChatPanel.registerViewProvider(context, context.extensionPath);
-
-    // 注册原生 Chat 参与者（@pi）
-    registerChatParticipant(context);
 
     // ---- 打开对话（聚焦侧边栏聊天视图）----
     const openChat = vscode.commands.registerCommand('pi-agent.openChat', () => {

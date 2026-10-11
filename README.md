@@ -6,7 +6,7 @@
 
 [![CI](https://github.com/iihao/pi-agent-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/iihao/pi-agent-vscode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
-[![VS Code](https://img.shields.io/badge/VS%20Code-1.90%2B-007ACC.svg)](https://code.visualstudio.com/)
+[![VS Code](https://img.shields.io/badge/VS%20Code-1.80%2B-007ACC.svg)](https://code.visualstudio.com/)
 [![Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-Pi%20Agent-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=iihao.pi-agent-assistant)
 
 **English** · [简体中文](./README.zh-CN.md)
@@ -63,8 +63,6 @@ configuration (models, sessions, skills, prompts).
 ## Highlights
 
 - 💬 **Streaming chat** with thinking display and live tool activity cards.
-- 🧠 **Native chat** — use **`@pi`** in VS Code's own Chat view, or click the
-  chat icon in the editor title bar (**Pi: Ask in Chat**) to jump straight in.
 - ⏯️ **Queue & steer** — keep typing while pi works: **Enter** queues a
   follow-up, **Ctrl/⌘+Enter** steers the running turn.
 - 🧰 **Run shell commands** straight from the composer with a leading `!`.
@@ -96,7 +94,6 @@ configuration (models, sessions, skills, prompts).
 | Action | How |
 |--------|-----|
 | Open chat | `⌥⌘P` / `Ctrl+Alt+P`, status bar ✨Pi, or **Pi: Open Chat** |
-| Ask in native chat | `@pi` in the Chat view, or **Pi: Ask in Chat** (editor title bar) |
 | New chat | `⌘⇧N` / `Ctrl+Shift+N` in the sidebar, or **Pi: New Chat** |
 | Open in editor tab / beside | **Pi: Open Chat in Editor Tab** / **Pi: Open Chat Beside** |
 | Jump between questions | `Alt+↑` / `Alt+↓`, or the `‹ ›` buttons and rail |
