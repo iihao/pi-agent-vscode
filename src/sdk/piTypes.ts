@@ -346,4 +346,25 @@ export function extractMessageText(m: PiRawMessage): string | null {
     return null;
 }
 
+export interface PiImageBlock {
+    data?: string;
+    mimeType?: string;
+}
+
+/** 从消息内容中提取图片块（用于在聊天里回显用户粘贴的图片） */
+export function extractMessageImages(m: PiRawMessage): PiImageBlock[] {
+    const c = m.content;
+    if (!Array.isArray(c)) { return []; }
+    const out: PiImageBlock[] = [];
+    for (const block of c) {
+        if (block && typeof block === 'object') {
+            const b = block as { type?: string; data?: string; mimeType?: string };
+            if (b.type === 'image' && typeof b.data === 'string') {
+                out.push({ data: b.data, mimeType: b.mimeType });
+            }
+        }
+    }
+    return out;
+}
+
 export const PI_INSTALL_HINT = 'npm install -g @earendil-works/pi-coding-agent';

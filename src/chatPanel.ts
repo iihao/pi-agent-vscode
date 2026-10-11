@@ -11,7 +11,7 @@ import { PiClientManager, PiStartError, PiNotFoundError } from './sdk/clientMana
 import { SessionManager } from './sdk/sessionManager';
 import { summarizeToolArgs, formatUsage, validateMessage, extractToolOutput } from './utils/formatters';
 import { buildContextBlock, stripContextBlock, ContextItem } from './utils/context';
-import { PI_INSTALL_HINT, extractMessageText, PiAgentEvent, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, PiUsage, respondExtensionUI } from './sdk/piTypes';
+import { PI_INSTALL_HINT, extractMessageText, extractMessageImages, PiAgentEvent, PiImageBlock, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, PiUsage, respondExtensionUI } from './sdk/piTypes';
 import { stateStore, setState, getInitialState, selectBusy, selectTurnHadText, selectContexts, selectLastUsage, selectPermissionMode } from './state';
 import { logInfo, logError } from './utils/logger';
 import { getVSCodeService } from './services';
@@ -194,7 +194,7 @@ interface PostMessage {
     type: string;
     text?: string;
     busy?: boolean;
-    messages?: Array<{ role: string; text: string }>;
+    messages?: Array<{ role: string; text: string; images?: PiImageBlock[] }>;
     models?: Array<{ provider: string; id: string }>;
     current?: { provider: string; id: string } | string | null;
     tool?: string;
@@ -898,11 +898,18 @@ export class ChatPanel {
     private async _restoreHistory(client: PiRpcClient): Promise<void> {
         try {
             const messages = await client.getMessages();
-            const items: Array<{ role: string; text: string }> = [];
+            const items: Array<{ role: string; text: string; images?: PiImageBlock[] }> = [];
             for (const m of messages) {
                 const text = extractMessageText(m);
+                const images = extractMessageImages(m);
                 // 历史里用户消息带 context 块，展示时剥离
-                if (text) { items.push({ role: m.role ?? 'assistant', text: stripContextBlock(text) }); }
+                if (text || images.length) {
+                    items.push({
+                        role: m.role ?? 'assistant',
+                        text: text ? stripContextBlock(text) : '',
+                        images: images.length ? images : undefined,
+                    });
+                }
             }
             const recent = items.slice(-30);
             if (recent.length > 0) {
@@ -1414,7 +1421,7 @@ export class ChatPanel {
             return;
         }
 
-        this._post({ type: 'addUserMessage', text: userText });
+        this._post({ type: 'addUserMessage', text: userText, images: images && images.length ? images : undefined });
         this._busy = true;
         this._post({ type: 'setBusy', busy: true });
 
@@ -1477,7 +1484,7 @@ export class ChatPanel {
                 await client.prompt(message, images, steering ? 'steer' : 'followUp');
             }
             this._clearContexts();
-            this._post({ type: 'addUserMessage', text: userText, pending: steering ? 'steering' : 'queued' });
+            this._post({ type: 'addUserMessage', text: userText, pending: steering ? 'steering' : 'queued', images: images && images.length ? images : undefined });
         } catch (err) {
             this._post({ type: 'notice', text: vscode.l10n.t('Failed to queue message: {0}', (err as Error).message) });
         }

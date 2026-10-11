@@ -444,6 +444,14 @@
         background: var(--cx-panel);
     }
     .pending-badge.steering { color: var(--cx-accent); border-color: var(--cx-accent); background: var(--cx-accent-soft); }
+    .message-images { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+    .message-images img {
+        max-width: 180px;
+        max-height: 180px;
+        border-radius: 8px;
+        border: 1px solid var(--cx-border);
+        display: block;
+    }
     .message-actions { display: flex; gap: 2px; margin-left: auto; opacity: 0; transition: opacity .15s; }
     .message:hover .message-actions { opacity: 1; }
     .msg-action-btn {

@@ -466,7 +466,22 @@ const vscode = acquireVsCodeApi();
         outlinePanel.innerHTML = html;
     }
 
-    function addMessage(role, markdown, isError, pending) {
+    function renderMessageImages(images) {
+        const wrap = document.createElement('div');
+        wrap.className = 'message-images';
+        images.forEach(function (img) {
+            const src = img.dataUrl || (img.data && img.mimeType ? 'data:' + img.mimeType + ';base64,' + img.data : '');
+            if (!src) { return; }
+            const im = document.createElement('img');
+            im.src = src;
+            im.alt = '';
+            im.loading = 'lazy';
+            wrap.appendChild(im);
+        });
+        return wrap;
+    }
+
+    function addMessage(role, markdown, isError, pending, images) {
         welcome.style.display = 'none';
         const el = document.createElement('div');
         el.className = 'message ' + (isError ? 'error' : role);
@@ -496,7 +511,8 @@ const vscode = acquireVsCodeApi();
         }
         el.innerHTML = '<div class="message-header"><span class="role-label">' + label + '</span>' + badge + '<span class="message-time">' + time + '</span>' + actions + '</div><div class="message-body"></div>';
         const body = el.querySelector('.message-body');
-        body.innerHTML = renderMarkdown(markdown);
+        if (images && images.length) { body.appendChild(renderMessageImages(images)); }
+        body.insertAdjacentHTML('beforeend', renderMarkdown(markdown));
         chat.appendChild(el);
         scrollToBottom();
         updateMessageCount();
@@ -1226,12 +1242,12 @@ const vscode = acquireVsCodeApi();
     window.addEventListener('message', function (e) {
         const m = e.data;
         switch (m.type) {
-            case 'addUserMessage': addMessage('user', m.text, false, m.pending); break;
+            case 'addUserMessage': addMessage('user', m.text, false, m.pending, m.images); break;
             case 'history':
                 // 空会话保留欢迎/引导页，只有真的有历史消息时才隐藏
                 if (m.messages && m.messages.length) {
                     welcome.style.display = 'none';
-                    m.messages.forEach(function (msg) { addMessage(msg.role, msg.text); });
+                    m.messages.forEach(function (msg) { addMessage(msg.role, msg.text, false, undefined, msg.images); });
                     (function () {
                         const div = document.createElement('div');
                         div.className = 'history-divider';
