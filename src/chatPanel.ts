@@ -14,6 +14,7 @@ import { buildContextBlock, stripContextBlock, ContextItem } from './utils/conte
 import { PI_INSTALL_HINT, extractMessageText, extractMessageImages, PiAgentEvent, PiImageBlock, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, PiUsage, respondExtensionUI } from './sdk/piTypes';
 import { stateStore, setState, selectBusy, selectTurnHadText, selectContexts, selectLastUsage, selectPermissionMode } from './state';
 import { logInfo, logError } from './utils/logger';
+import { getRecentFiles, addRecentFile } from './utils/recentFiles';
 import { getVSCodeService } from './services';
 
 /** VS Code 访问统一走服务容器（便于测试与替换） */
@@ -187,6 +188,7 @@ interface WebviewMessage {
     mode?: string;
     paths?: string[];
     path?: string;
+    range?: string;
     images?: ImageAttachment[];
 }
 
@@ -409,9 +411,48 @@ export class ChatPanel {
 
     /** 把选中的 Uri 作为路径引用附加（工作区内用相对路径） */
     private _addUriContext(uri: vscode.Uri): void {
-        const inWorkspace = Boolean(vs.getWorkspaceFolder(uri));
-        const path = inWorkspace ? vs.asRelativePath(uri, false) : uri.fsPath;
-        this._addContext({ type: 'file', path });
+        this._addContext({ type: 'file', path: this._displayPath(uri) });
+    }
+
+    /** 构建「+ 添加上下文」弹出菜单数据并下发 */
+    private _postAttachMenu(): void {
+        const seen = new Set<string>();
+        const openEditors: Array<{ path: string; label: string; range?: string }> = [];
+        const active = vs.activeTextEditor;
+        if (active && active.document.uri.scheme === 'file') {
+            const file = this._displayPath(active.document.uri);
+            seen.add(file);
+            if (!active.selection.isEmpty) {
+                const sel = active.selection;
+                const range = sel.start.line === sel.end.line
+                    ? `${sel.start.line + 1}`
+                    : `${sel.start.line + 1}–${sel.end.line + 1}`;
+                openEditors.push({ path: file, label: this._baseName(file), range });
+            }
+            openEditors.push({ path: file, label: this._baseName(file) });
+        }
+        for (const uri of vs.openEditorUris()) {
+            if (uri.scheme !== 'file') { continue; }
+            const file = this._displayPath(uri);
+            if (seen.has(file)) { continue; }
+            seen.add(file);
+            openEditors.push({ path: file, label: this._baseName(file) });
+        }
+        const recentFiles = getRecentFiles()
+            .filter((p) => !seen.has(p))
+            .slice(0, 6)
+            .map((p) => ({ path: p, label: this._baseName(p) }));
+        this._post({ type: 'attachMenu', openEditors, recentFiles });
+    }
+
+    /** 路径展示：工作区内用相对路径，否则绝对路径 */
+    private _displayPath(uri: vscode.Uri): string {
+        return vs.getWorkspaceFolder(uri) ? vs.asRelativePath(uri, false) : uri.fsPath;
+    }
+
+    private _baseName(file: string): string {
+        const parts = file.split(/[\\/]/);
+        return parts[parts.length - 1] || file;
     }
 
     private _addFileContext(editor: vscode.TextEditor): void {
@@ -437,6 +478,7 @@ export class ChatPanel {
         }
         const id = 'ctx-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
         this._contexts = [...this._contexts, { ...item, id }];
+        addRecentFile(item.path);
         this._postContexts();
     }
 
@@ -840,14 +882,17 @@ export class ChatPanel {
             case 'attachActive':
                 this.attachActive();
                 break;
-            case 'attachFile':
-                this.attachFile();
-                break;
-            case 'attachSelection':
-                this.attachSelection();
-                break;
             case 'attachWorkspace':
                 await this.attachFiles();
+                break;
+            case 'requestAttachMenu':
+                this._postAttachMenu();
+                break;
+            case 'attachPath':
+                if (message.path) {
+                    if (message.range && vs.activeTextEditor) { this.attachSelection(); }
+                    else { this._addContext({ type: 'file', path: message.path }); }
+                }
                 break;
             case 'removeContext':
                 if (message.id) { this._removeContext(message.id); }

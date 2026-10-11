@@ -69,6 +69,9 @@ const vscode = acquireVsCodeApi();
     const permLabel = document.getElementById('permLabel');
     const permPanel = document.getElementById('permPanel');
     const attachPanel = document.getElementById('attachPanel');
+    let attachOpenEditors = [];
+    let attachRecent = [];
+    let attachPending = false;
     const sessionBtn = document.getElementById('sessionBtn');
     const sessionLabel = document.getElementById('sessionLabel');
     const sessionPanel = document.getElementById('sessionPanel');
@@ -222,16 +225,24 @@ const vscode = acquireVsCodeApi();
     }
 
     function renderAttachPanel() {
-        const items = [
-            { action: 'workspace', label: S.attachFilesFolders },
-            { action: 'file', label: S.attachCurrentFile },
-            { action: 'selection', label: S.attachCurrentSelection },
-        ];
-        let html = '';
-        items.forEach(function (it) {
-            html += '<button class="popover-item" data-action="' + it.action + '">' +
-                '<span class="popover-item-main">' + escapeHtml(it.label) + '</span></button>';
-        });
+        let html = '<button class="popover-item" data-action="workspace">' +
+            '<span class="popover-item-main">' + escapeHtml(S.attachFilesFolders) + '</span></button>';
+        if (attachOpenEditors.length) {
+            html += '<div class="popover-label">' + escapeHtml(S.attachOpenEditors) + '</div>';
+            attachOpenEditors.forEach(function (f) {
+                html += '<button class="popover-item" data-action="path" data-path="' + escapeAttr(f.path) + '"' +
+                    (f.range ? ' data-range="' + escapeAttr(f.range) + '"' : '') + '>' +
+                    '<span class="popover-item-main">' + escapeHtml(f.label) + '</span>' +
+                    (f.range ? '<span class="popover-item-meta">' + escapeHtml(f.range) + '</span>' : '') + '</button>';
+            });
+        }
+        if (attachRecent.length) {
+            html += '<div class="popover-label">' + escapeHtml(S.attachRecent) + '</div>';
+            attachRecent.forEach(function (f) {
+                html += '<button class="popover-item" data-action="path" data-path="' + escapeAttr(f.path) + '">' +
+                    '<span class="popover-item-main">' + escapeHtml(f.label) + '</span></button>';
+            });
+        }
         attachPanel.innerHTML = html;
     }
 
@@ -388,6 +399,10 @@ const vscode = acquireVsCodeApi();
             if (!lib) return;
             return lib.run({ nodes: nodes, suppressErrors: true }).catch(function () {});
         });
+    }
+
+    function escapeAttr(s) {
+        return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
     function escapeHtml(s) {
@@ -1264,15 +1279,17 @@ const vscode = acquireVsCodeApi();
         e.stopPropagation();
         const willShow = attachPanel.classList.contains('hidden');
         closePopovers();
-        if (willShow) { renderAttachPanel(); attachPanel.classList.remove('hidden'); }
+        if (willShow) { attachPending = true; vscode.postMessage({ type: 'requestAttachMenu' }); }
+        else { attachPending = false; }
     });
     attachPanel.addEventListener('click', function (e) {
         const item = e.target.closest('.popover-item');
         if (!item) { return; }
         const action = item.dataset.action;
         if (action === 'workspace') { vscode.postMessage({ type: 'attachWorkspace' }); }
-        else if (action === 'file') { vscode.postMessage({ type: 'attachFile' }); }
-        else if (action === 'selection') { vscode.postMessage({ type: 'attachSelection' }); }
+        else if (action === 'path') {
+            vscode.postMessage({ type: 'attachPath', path: item.dataset.path, range: item.dataset.range || undefined });
+        }
         closePopovers();
     });
     chipRow.addEventListener('click', function (e) {
@@ -1452,6 +1469,16 @@ const vscode = acquireVsCodeApi();
             case 'contexts': {
                 contexts = m.contexts || [];
                 renderChips();
+                break;
+            }
+            case 'attachMenu': {
+                attachOpenEditors = m.openEditors || [];
+                attachRecent = m.recentFiles || [];
+                if (attachPending) {
+                    renderAttachPanel();
+                    attachPanel.classList.remove('hidden');
+                    attachPending = false;
+                }
                 break;
             }
             case 'sessions': {

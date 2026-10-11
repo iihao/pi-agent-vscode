@@ -1,10 +1,12 @@
 import * as vscode from 'vscode';
 import { ChatPanel } from './chatPanel';
 import { initLogger, setLogLevel, buildDiagnostics, logInfo, LogLevel } from './utils/logger';
+import { initRecentFiles } from './utils/recentFiles';
 
 export function activate(context: vscode.ExtensionContext) {
     const output = initLogger();
     applyLogLevel();
+    initRecentFiles(context);
     logInfo('Pi Agent activated');
 
     // 注册侧边栏聊天视图（activitybar 图标 → 聊天面板）

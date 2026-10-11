@@ -45,6 +45,8 @@ export interface UiStrings {
     attachFilesFolders: string;
     attachCurrentFile: string;
     attachCurrentSelection: string;
+    attachOpenEditors: string;
+    attachRecent: string;
     modelTitle: string;
     notConnected: string;
     connecting: string;
@@ -121,6 +123,8 @@ export function getUiStrings(): UiStrings {
         attachFilesFolders: t('Files & folders…'),
         attachCurrentFile: t('Current file'),
         attachCurrentSelection: t('Current selection'),
+        attachOpenEditors: t('Open files'),
+        attachRecent: t('Recent'),
         modelTitle: t('Select model'),
         notConnected: t('Not connected'),
         connecting: t('Connecting…'),

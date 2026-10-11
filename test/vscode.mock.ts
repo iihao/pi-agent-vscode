@@ -32,6 +32,7 @@ export const window = {
     showOpenDialog: (_opts?: unknown) => Promise.resolve([] as unknown[]),
     showTextDocument: (doc: unknown) => Promise.resolve({ document: doc }),
     activeTextEditor: undefined,
+    tabGroups: { all: [] },
     state: { focused: true },
 };
 

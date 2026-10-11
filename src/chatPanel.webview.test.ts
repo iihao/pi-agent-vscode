@@ -84,6 +84,21 @@ describe('ChatPanel webview bridge', () => {
         expect(webview.posted.some((m) => m.type === 'notice')).toBe(true);
     });
 
+    it('requestAttachMenu posts the add-context menu data', () => {
+        const { webview } = make();
+        webview.emit({ type: 'requestAttachMenu' });
+        const msg = webview.posted.filter((m) => m.type === 'attachMenu').pop();
+        expect(Array.isArray(msg?.openEditors)).toBe(true);
+        expect(Array.isArray(msg?.recentFiles)).toBe(true);
+    });
+
+    it('attachPath adds the given file as context', () => {
+        const { webview } = make();
+        webview.emit({ type: 'attachPath', path: 'src/a.ts' });
+        const ctx = webview.posted.filter((m) => m.type === 'contexts').pop();
+        expect((ctx?.contexts as Array<{ path: string }>)).toContainEqual(expect.objectContaining({ path: 'src/a.ts' }));
+    });
+
     it('attachFiles() adds selected workspace files as context', async () => {
         const original = vscodeMock.window.showOpenDialog;
         (vscodeMock.window as { showOpenDialog: unknown }).showOpenDialog = () => Promise.resolve([{ fsPath: '/x/a.ts' }]);
@@ -91,7 +106,7 @@ describe('ChatPanel webview bridge', () => {
             const { webview, panel } = make();
             await panel.attachFiles();
             const ctx = webview.posted.filter((m) => m.type === 'contexts').pop();
-            expect((ctx?.contexts as Array<{ path: string }>)).toEqual([expect.objectContaining({ path: '/x/a.ts' })]);
+            expect((ctx?.contexts as Array<{ path: string }>)).toContainEqual(expect.objectContaining({ path: '/x/a.ts' }));
         } finally {
             (vscodeMock.window as { showOpenDialog: unknown }).showOpenDialog = original;
         }

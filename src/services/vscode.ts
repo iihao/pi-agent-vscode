@@ -20,6 +20,7 @@ export interface IVSCodeService {
     showTextDocument(document: vscode.TextDocument, options?: vscode.TextDocumentShowOptions): Thenable<vscode.TextEditor>;
     openTextDocument(options: any): Thenable<vscode.TextDocument>;
     activeTextEditor: vscode.TextEditor | undefined;
+    openEditorUris(): vscode.Uri[];
     applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean>;
 
     // 配置 / 命令
@@ -88,6 +89,18 @@ export class VSCodeService implements IVSCodeService {
 
     public get activeTextEditor(): vscode.TextEditor | undefined {
         return vscode.window.activeTextEditor;
+    }
+
+    /** 当前已打开（含各编辑器分组）的文本文件 Uri，按标签顺序 */
+    public openEditorUris(): vscode.Uri[] {
+        const uris: vscode.Uri[] = [];
+        for (const group of vscode.window.tabGroups.all) {
+            for (const tab of group.tabs) {
+                const input = tab.input;
+                if (input instanceof vscode.TabInputText) { uris.push(input.uri); }
+            }
+        }
+        return uris;
     }
 
     public applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean> {
