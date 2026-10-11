@@ -61,6 +61,8 @@
   "Connection status": "连接状态",
   "Jump to a question": "跳转到某个提问",
   "No questions yet": "还没有提问",
+  "Previous question": "上一个提问",
+  "Next question": "下一个提问",
   "Search messages (Ctrl+F)": "搜索消息 (Ctrl+F)",
   "Export conversation as Markdown": "导出对话为 Markdown",
   "New chat": "新对话",

@@ -11,6 +11,8 @@ export interface UiStrings {
     connStatus: string;
     outlineTitle: string;
     noMessages: string;
+    prevQuestion: string;
+    nextQuestion: string;
     searchTitle: string;
     exportTitle: string;
     newChatTitle: string;
@@ -89,6 +91,8 @@ export function getUiStrings(): UiStrings {
         connStatus: t('Connection status'),
         outlineTitle: t('Jump to a question'),
         noMessages: t('No questions yet'),
+        prevQuestion: t('Previous question'),
+        nextQuestion: t('Next question'),
         searchTitle: t('Search messages (Ctrl+F)'),
         exportTitle: t('Export conversation as Markdown'),
         newChatTitle: t('New chat'),

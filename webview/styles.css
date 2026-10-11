@@ -221,6 +221,10 @@
     .session-bar > .git-icon { display: grid; place-items: center; color: var(--cx-muted); flex-shrink: 0; }
     .session-bar > .git-icon svg { width: 13px; height: 13px; }
     .session-pill { flex: 1; min-width: 0; justify-content: flex-start; }
+    .msg-nav { display: flex; align-items: center; gap: 2px; flex-shrink: 0; }
+    .msg-nav.hidden { display: none; }
+    .icon-btn:disabled { opacity: .35; cursor: default; }
+    .icon-btn:disabled:hover { background: transparent; color: var(--cx-muted); }
     .session-panel { top: calc(100% + 4px); bottom: auto; left: 8px; right: 8px; }
     .session-row { display: flex; align-items: center; gap: 2px; border-radius: 6px; }
     .session-row:hover { background: var(--cx-hover); }

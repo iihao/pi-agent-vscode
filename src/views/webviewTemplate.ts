@@ -68,6 +68,14 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
             <span id="sessionLabel" class="pill-label">${S.currentSession}</span>
             <span class="pill-caret">▾</span>
         </button>
+        <div class="msg-nav hidden" id="msgNav">
+            <button id="qPrev" class="icon-btn" title="${S.prevQuestion}" aria-label="${S.prevQuestion}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
+            </button>
+            <button id="qNext" class="icon-btn" title="${S.nextQuestion}" aria-label="${S.nextQuestion}">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
+            </button>
+        </div>
         <div class="popover session-panel hidden" id="sessionPanel"></div>
     </div>
 

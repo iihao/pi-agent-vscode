@@ -84,6 +84,9 @@ const vscode = acquireVsCodeApi();
     const outlineBtn = document.getElementById('outlineBtn');
     const outlinePanel = document.getElementById('outlinePanel');
     const msgRail = document.getElementById('msgRail');
+    const msgNav = document.getElementById('msgNav');
+    const qPrev = document.getElementById('qPrev');
+    const qNext = document.getElementById('qNext');
     const searchBar = document.getElementById('searchBar');
     const searchInput = document.getElementById('searchInput');
     const searchResults = document.getElementById('searchResults');
@@ -419,7 +422,9 @@ const vscode = acquireVsCodeApi();
 
     function renderRail() {
         const users = getUserMessageEls();
-        if (users.length < 2) { msgRail.classList.add('hidden'); msgRail.innerHTML = ''; return; }
+        const show = users.length >= 2;
+        msgNav.classList.toggle('hidden', !show);
+        if (!show) { msgRail.classList.add('hidden'); msgRail.innerHTML = ''; return; }
         msgRail.classList.remove('hidden');
         let html = '';
         users.forEach(function (el, i) {
@@ -447,6 +452,9 @@ const vscode = acquireVsCodeApi();
         msgRail.querySelectorAll('.rail-dot').forEach(function (d, i) {
             d.classList.toggle('active', i === active);
         });
+        const users = getUserMessageEls();
+        qPrev.disabled = active <= 0;
+        qNext.disabled = active < 0 || active >= users.length - 1;
     }
 
     function jumpToUserMessage(i) {
@@ -788,8 +796,11 @@ const vscode = acquireVsCodeApi();
         const all = (steering || []).concat(followUp || []);
         chat.querySelectorAll('.message.user[data-pending]').forEach(function (el) {
             const raw = el.dataset.pendingText || '';
-            // 队列里的文本带 context 块，用包含匹配
-            const stillQueued = all.some(function (q) { return q === raw || q.indexOf(raw) !== -1; });
+            // 队列里的文本带 context 块，用包含匹配；纯图片消息没有文本可匹配，
+            // 只能在队列清空时一并清除，避免徽章永久残留。
+            const stillQueued = raw
+                ? all.some(function (q) { return q === raw || q.indexOf(raw) !== -1; })
+                : all.length > 0;
             if (!stillQueued) { clearPending(el); }
         });
     }
@@ -1052,6 +1063,8 @@ const vscode = acquireVsCodeApi();
         const dot = e.target.closest('.rail-dot');
         if (dot) { jumpToUserMessage(Number(dot.dataset.i)); }
     });
+    qPrev.addEventListener('click', function () { navigateUserMessage(-1); });
+    qNext.addEventListener('click', function () { navigateUserMessage(1); });
     let railRaf = 0;
     chat.addEventListener('scroll', function () {
         if (railRaf) { return; }
