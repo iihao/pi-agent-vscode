@@ -19,7 +19,6 @@
   "cmd.cloneSession": "Pi: 克隆会话",
   "cmd.openInEditor": "Pi: 在编辑器标签打开对话",
   "cmd.openInEditorToSide": "Pi: 在侧边打开对话",
-  "cmd.openNativeChat": "Pi: 在聊天中提问",
   "chatParticipant.description": "向本地 pi coding agent 提问",
   "chatParticipant.explain.description": "解释选中的代码",
   "cmd.attachFile": "Pi: 附加当前文件到对话",

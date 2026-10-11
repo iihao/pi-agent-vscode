@@ -92,7 +92,6 @@
   "Output truncated": "Output truncated",
   "Image is too large (max 5 MB)": "Image is too large (max 5 MB)",
   "Open in Pi panel": "Open in Pi panel",
-  "Could not open the VS Code chat (requires VS Code 1.90+).": "Could not open the VS Code chat (requires VS Code 1.90+).",
   "Pi returned no output.": "Pi returned no output.",
   "Pi failed: {0}": "Pi failed: {0}",
   "Failed to queue message: {0}": "Failed to queue message: {0}",

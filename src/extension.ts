@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { ChatPanel } from './chatPanel';
 import { registerChatParticipant } from './chatParticipant';
-import { initLogger, setLogLevel, buildDiagnostics, logInfo, logError, LogLevel } from './utils/logger';
+import { initLogger, setLogLevel, buildDiagnostics, logInfo, LogLevel } from './utils/logger';
 
 export function activate(context: vscode.ExtensionContext) {
     const output = initLogger();
@@ -107,17 +107,6 @@ export function activate(context: vscode.ExtensionContext) {
         ChatPanel.openInEditor(context.extensionPath, vscode.ViewColumn.Beside);
     });
 
-    // ---- 在原生聊天中提问（@pi）----
-    const openNativeChat = vscode.commands.registerCommand('pi-agent.openNativeChat', async () => {
-        try {
-            // 打开 VS Code 原生 Chat 视图并预填 @pi
-            await vscode.commands.executeCommand('workbench.action.chat.open', { query: '@pi ' });
-        } catch (err) {
-            logError(`open native chat failed: ${(err as Error).message}`);
-            void vscode.window.showErrorMessage(vscode.l10n.t('Could not open the VS Code chat (requires VS Code 1.90+).'));
-        }
-    });
-
     // ---- 附加编辑器上下文 ----
     const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', () =>
         withPanel((panel) => panel.attachFile()));
@@ -180,7 +169,6 @@ export function activate(context: vscode.ExtensionContext) {
         cloneSession,
         openInEditor,
         openInEditorToSide,
-        openNativeChat,
         attachFile,
         attachSelection,
         restartSession,

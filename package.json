@@ -63,7 +63,6 @@
     "onCommand:pi-agent.cloneSession",
     "onCommand:pi-agent.openInEditor",
     "onCommand:pi-agent.openInEditorToSide",
-    "onCommand:pi-agent.openNativeChat",
     "onChatParticipant:pi-agent.pi",
     "onCommand:pi-agent.restartSession",
     "onCommand:pi-agent.exportDiagnostics",
@@ -141,20 +140,15 @@
       {
         "command": "pi-agent.openInEditor",
         "title": "%cmd.openInEditor%",
-        "icon": "$(link-external)"
+        "icon": {
+          "light": "assets/icon-menu-light.svg",
+          "dark": "assets/icon-menu-dark.svg"
+        }
       },
       {
         "command": "pi-agent.openInEditorToSide",
         "title": "%cmd.openInEditorToSide%",
         "icon": "$(split-horizontal)"
-      },
-      {
-        "command": "pi-agent.openNativeChat",
-        "title": "%cmd.openNativeChat%",
-        "icon": {
-          "light": "assets/icon-menu-light.svg",
-          "dark": "assets/icon-menu-dark.svg"
-        }
       },
       {
         "command": "pi-agent.attachFile",
@@ -222,12 +216,7 @@
       ],
       "editor/title": [
         {
-          "command": "pi-agent.openInEditorToSide",
-          "when": "activeWebviewPanelId != 'pi-agent.chatEditor'",
-          "group": "navigation@100"
-        },
-        {
-          "command": "pi-agent.openNativeChat",
+          "command": "pi-agent.openInEditor",
           "group": "navigation@99"
         }
       ],
