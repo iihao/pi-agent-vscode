@@ -10,7 +10,7 @@ import { getUiStrings } from './views/strings';
 import { PiClientManager, PiStartError, PiNotFoundError } from './sdk/clientManager';
 import { SessionManager } from './sdk/sessionManager';
 import { summarizeToolArgs, formatUsage, validateMessage, extractToolOutput } from './utils/formatters';
-import { buildContextBlock, stripContextBlock } from './utils/context';
+import { buildContextBlock, stripContextBlock, ContextItem } from './utils/context';
 import { PI_INSTALL_HINT, extractMessageText, PiAgentEvent, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, respondExtensionUI } from './sdk/piTypes';
 import { logInfo, logError } from './utils/logger';
 
@@ -199,13 +199,6 @@ interface PostMessage {
     contexts?: Array<{ id: string; type: string; path: string; lineRange?: string }>;
     toolCalls?: Array<{ tool: string; detail: string; isError?: boolean }>;
     [key: string]: unknown;
-}
-
-interface ContextItem {
-    id: string;
-    type: 'file' | 'selection';
-    path: string;
-    lineRange?: string;
 }
 
 export class ChatPanel {

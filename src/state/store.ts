@@ -5,6 +5,19 @@
 import { EventEmitter } from 'events';
 import { ChatState, ChatStateListener, getInitialState } from './types';
 
+/** 浅比较：原始值用 ===，数组按元素比较。避免对整状态做 JSON.stringify。 */
+function shallowEqual(a: unknown, b: unknown): boolean {
+    if (a === b) { return true; }
+    if (Array.isArray(a) && Array.isArray(b)) {
+        if (a.length !== b.length) { return false; }
+        for (let i = 0; i < a.length; i++) {
+            if (a[i] !== b[i]) { return false; }
+        }
+        return true;
+    }
+    return false;
+}
+
 class StateStore extends EventEmitter {
     private state: ChatState;
     private stateListeners: Set<ChatStateListener> = new Set();
@@ -19,14 +32,15 @@ class StateStore extends EventEmitter {
     }
 
     public setState(partial: Partial<ChatState>): void {
-        const prevState = this.state;
-        this.state = { ...this.state, ...partial };
-        
-        // 只在状态真正变化时通知
-        if (JSON.stringify(prevState) !== JSON.stringify(this.state)) {
-            this.emit('change', this.state);
-            this.notifyListeners();
+        // 只在状态真正变化时通知（浅比较，不做整状态序列化）
+        let changed = false;
+        for (const key of Object.keys(partial) as Array<keyof ChatState>) {
+            if (!shallowEqual(this.state[key], partial[key])) { changed = true; break; }
         }
+        if (!changed) { return; }
+        this.state = { ...this.state, ...partial };
+        this.emit('change', this.state);
+        this.notifyListeners();
     }
 
     public subscribe(listener: ChatStateListener): () => void {

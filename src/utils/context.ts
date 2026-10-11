@@ -9,6 +9,11 @@ export interface ContextRef {
     lineRange?: string;
 }
 
+/** 已附加的上下文条目（引用 + 稳定 id） */
+export interface ContextItem extends ContextRef {
+    id: string;
+}
+
 const BLOCK_START = '--- pi-extension-context:start ---';
 const BLOCK_END = '--- pi-extension-context:end ---';
 

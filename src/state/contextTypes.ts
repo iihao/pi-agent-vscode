@@ -1,20 +1,6 @@
 // ---------------------------------------------------------------------------
-// 上下文和会话类型定义（独立文件，避免循环依赖）
+// 上下文 / 会话类型：复用 sdk 与 utils 中的权威定义，避免重复与分叉。
 // ---------------------------------------------------------------------------
 
-export interface ContextItem {
-    id: string;
-    type: 'file' | 'selection';
-    path: string;
-    languageId?: string;
-    code?: string;
-    lineRange?: string;
-}
-
-export interface SessionInfo {
-    id: string;
-    file: string;
-    createdAt: number;
-    messageCount: number;
-    name?: string;
-}
+export type { ContextItem } from '../utils/context';
+export type { SessionInfo } from '../sdk/sessionManager';
