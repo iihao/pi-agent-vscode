@@ -145,6 +145,8 @@ export interface PiRpcClient {
     cycleThinkingLevel?(): Promise<{ level?: string } | null>;
     /** 压缩会话上下文 */
     compact?(customInstructions?: string): Promise<{ summary?: string; tokensBefore?: number; estimatedTokensAfter?: number }>;
+    /** 克隆当前分支为一个新会话 */
+    clone?(): Promise<{ cancelled: boolean }>;
     /** 直接执行 shell 命令（不经过模型回合） */
     bash?(command: string): Promise<{ output: string; exitCode?: number; cancelled: boolean; truncated: boolean; fullOutputPath?: string }>;
     abort(): Promise<void>;

@@ -72,4 +72,8 @@ export const extensions = {
     getExtension: (_id: string) => undefined,
 };
 
+export const languages = {
+    getDiagnostics: (_uri?: unknown) => [] as unknown[],
+};
+
 export const ConfigurationTarget = { Workspace: 2, Global: 1 };

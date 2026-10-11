@@ -124,6 +124,12 @@ export function activate(context: vscode.ExtensionContext) {
         await panel.revertLastTurn();
     });
 
+    // ---- 克隆当前会话 ----
+    const cloneSession = vscode.commands.registerCommand('pi-agent.cloneSession', async () => {
+        const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
+        await panel.cloneSession();
+    });
+
     // ---- 附加编辑器上下文 ----
     const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', async () => {
         const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
@@ -189,6 +195,7 @@ export function activate(context: vscode.ExtensionContext) {
         generateCommitMessage,
         generatePullRequestDescription,
         revertLastTurn,
+        cloneSession,
         attachFile,
         attachSelection,
         restartSession,

@@ -29,6 +29,12 @@ describe('buildContextBlock', () => {
         expect(out).toContain('<file-context>\n@src/a.ts\n@src/b.ts:3-9\n</file-context>');
         expect(out.endsWith('--- pi-extension-context:end ---\n\nWhy?')).toBe(true);
     });
+
+    it('includes extra blocks (auto context) even without file refs', () => {
+        const out = buildContextBlock([], 'Do it', ['<git-context>\nBranch: main\n</git-context>']);
+        expect(out).toContain('<git-context>\nBranch: main\n</git-context>');
+        expect(out.endsWith('--- pi-extension-context:end ---\n\nDo it')).toBe(true);
+    });
 });
 
 describe('stripContextBlock', () => {

@@ -60,6 +60,7 @@
     "onCommand:pi-agent.generateCommitMessage",
     "onCommand:pi-agent.generatePullRequestDescription",
     "onCommand:pi-agent.revertLastTurn",
+    "onCommand:pi-agent.cloneSession",
     "onCommand:pi-agent.restartSession",
     "onCommand:pi-agent.exportDiagnostics",
     "onCommand:pi-agent.attachFile",
@@ -128,6 +129,10 @@
       {
         "command": "pi-agent.revertLastTurn",
         "title": "%cmd.revertLastTurn%"
+      },
+      {
+        "command": "pi-agent.cloneSession",
+        "title": "%cmd.cloneSession%"
       },
       {
         "command": "pi-agent.attachFile",
@@ -278,6 +283,30 @@
           "default": "info",
           "scope": "window",
           "description": "%config.diagnostics.level%"
+        },
+        "pi-agent.context.autoAttach": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%config.context.autoAttach%"
+        },
+        "pi-agent.context.includeDiagnostics": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%config.context.includeDiagnostics%"
+        },
+        "pi-agent.context.includeGit": {
+          "type": "boolean",
+          "default": false,
+          "scope": "resource",
+          "description": "%config.context.includeGit%"
+        },
+        "pi-agent.sessions.autoName": {
+          "type": "boolean",
+          "default": false,
+          "scope": "window",
+          "description": "%config.sessions.autoName%"
         }
       }
     }

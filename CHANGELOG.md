@@ -11,6 +11,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Automatic context**: optionally attach the open file and selection to every
+  message, plus diagnostics and Git branch/changes (`pi-agent.context.autoAttach`,
+  `includeDiagnostics`, `includeGit`). Sent as a `<editor-context>` /
+  `<git-context>` block alongside manual references.
+- **Session auto-naming**: name a new session from its first message
+  (`pi-agent.sessions.autoName`), using a one-shot ephemeral pi run.
+- **Clone Session**: fork the current session branch into a new one.
 - **Git integration**: generate a commit message from the current diff
   (button in the Source Control title bar) and a pull request description from
   the branch's commits. Both run a one-shot, ephemeral pi process

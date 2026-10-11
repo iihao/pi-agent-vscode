@@ -44,6 +44,7 @@ export interface IVSCodeService {
     uri: typeof vscode.Uri;
     fs: typeof vscode.workspace.fs;
     extensions: typeof vscode.extensions;
+    languages: typeof vscode.languages;
     configurationTarget: typeof vscode.ConfigurationTarget;
 }
 
@@ -150,6 +151,10 @@ export class VSCodeService implements IVSCodeService {
 
     public get extensions(): typeof vscode.extensions {
         return vscode.extensions;
+    }
+
+    public get languages(): typeof vscode.languages {
+        return vscode.languages;
     }
 
     public get configurationTarget(): typeof vscode.ConfigurationTarget {

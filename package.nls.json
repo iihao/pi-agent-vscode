@@ -16,6 +16,7 @@
   "cmd.generateCommitMessage": "Pi: Generate Commit Message",
   "cmd.generatePullRequestDescription": "Pi: Generate Pull Request Description",
   "cmd.revertLastTurn": "Pi: Revert Changes From Last Turn",
+  "cmd.cloneSession": "Pi: Clone Session",
   "cmd.attachFile": "Pi: Attach Current File to Chat",
   "cmd.attachSelection": "Pi: Attach Selection to Chat",
   "cmd.restartSession": "Pi: Restart Session",
@@ -28,5 +29,9 @@
   "config.permissionMode.autoConfirm": "Auto-trust project-local files (--approve)",
   "config.permissionMode.restricted": "Read-only: disable bash / edit / write tools",
   "config.notifications": "Notify on task completion/failure while the window is unfocused",
-  "config.diagnostics.level": "Output channel log level"
+  "config.diagnostics.level": "Output channel log level",
+  "config.context.autoAttach": "Attach editor context (open file/selection) to every message",
+  "config.context.includeDiagnostics": "Include editor diagnostics in automatic context",
+  "config.context.includeGit": "Include Git branch/changes in automatic context",
+  "config.sessions.autoName": "Name new sessions automatically from the first message"
 }

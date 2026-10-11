@@ -112,6 +112,15 @@ function buildPrPrompt(branch: string, log: string): string {
     ].filter(Boolean).join('\n');
 }
 
+function buildNamePrompt(text: string): string {
+    return [
+        'Summarize the following user request as a short session title.',
+        'Use 3 to 6 words, no quotes, no trailing punctuation. Output only the title.',
+        '',
+        text.slice(0, 1000),
+    ].join('\n');
+}
+
 // ---- 本回合改动追踪与还原 ----
 
 interface TurnChange {
@@ -221,6 +230,8 @@ export class ChatPanel {
     private _fileListAt = 0;
     /** 本回合被 edit/write 修改的文件（绝对路径 -> 可还原信息） */
     private _turnChanges = new Map<string, TurnChange>();
+    private _firstUserMessage: string | undefined;
+    private _autoNaming = false;
 
     // ---- 集中式状态：由 stateStore 支撑（getter/setter 代理，调用点无需改动） ----
     private get _busy(): boolean { return stateStore.select(selectBusy); }
@@ -296,6 +307,7 @@ export class ChatPanel {
         this._turnHadText = false;
         this._contexts = [];
         this._contextWarned = false;
+        this._firstUserMessage = undefined;
         this._post({ type: 'clear' });
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
@@ -380,10 +392,51 @@ export class ChatPanel {
     }
 
     /** 把附加的上下文以「引用」形式拼到 prompt 前（只给路径/行号，内容由 pi 读取） */
-    private _withContext(text: string): string {
+    private _withContext(text: string, extraBlocks: string[] = []): string {
         // 斜杠命令必须位于消息开头，不能前置 context 块
         if (text.startsWith('/')) { return text; }
-        return buildContextBlock(this._contexts, text);
+        return buildContextBlock(this._contexts, text, extraBlocks);
+    }
+
+    /** 根据设置构建自动上下文块（编辑器 / 诊断 / Git） */
+    private async _buildAutoContext(): Promise<string[]> {
+        const cfg = vs.getConfiguration('pi-agent');
+        if (!cfg.get<boolean>('context.autoAttach', false)) { return []; }
+        const blocks: string[] = [];
+        const editor = vs.activeTextEditor;
+        if (editor) {
+            const doc = editor.document;
+            const rel = vs.asRelativePath(doc.uri, false);
+            const lines: string[] = [
+                `Active file: ${rel} (${doc.languageId}, ${doc.lineCount} lines${doc.isDirty ? ', modified' : ''})`,
+                `Cursor: line ${editor.selection.active.line + 1}, col ${editor.selection.active.character + 1}`,
+            ];
+            if (!editor.selection.isEmpty) {
+                lines.push(`Selection: lines ${editor.selection.start.line + 1}-${editor.selection.end.line + 1}`);
+                lines.push('```' + doc.languageId, doc.getText(editor.selection), '```');
+            }
+            if (cfg.get<boolean>('context.includeDiagnostics', false)) {
+                const diags = vs.languages.getDiagnostics(doc.uri);
+                if (diags.length) {
+                    lines.push('Diagnostics:');
+                    for (const d of diags.slice(0, 20)) {
+                        const sev = vscode.DiagnosticSeverity[d.severity] ?? 'info';
+                        lines.push(`  ${rel}:${d.range.start.line + 1} - ${sev}: ${d.message}`);
+                    }
+                }
+            }
+            blocks.push('<editor-context>\n' + lines.join('\n') + '\n</editor-context>');
+        }
+        if (cfg.get<boolean>('context.includeGit', false)) {
+            const api = await getGitAPI();
+            const repo = api ? pickGitRepository(api) : undefined;
+            if (repo) {
+                const branch = repo.state.HEAD?.name || '(detached)';
+                const changes = repo.state.workingTreeChanges.length + repo.state.indexChanges.length;
+                blocks.push(`<git-context>\nBranch: ${branch}\nChanges: ${changes}\n</git-context>`);
+            }
+        }
+        return blocks;
     }
 
     private _clearContexts(): void {
@@ -400,6 +453,56 @@ export class ChatPanel {
     public focusInput(): void { this._post({ type: 'focusInput' }); }
     public editLastMessage(): void { this._post({ type: 'editLast' }); }
     public async revertLastTurn(): Promise<void> { await this._revertTurn(); }
+
+    /** 克隆当前会话分支为一个新会话 */
+    public async cloneSession(): Promise<void> {
+        const client = this._clientManager.client;
+        if (!client || typeof client.clone !== 'function') {
+            this._post({ type: 'notice', text: vscode.l10n.t('Not connected') });
+            return;
+        }
+        try {
+            const res = await client.clone();
+            if (res.cancelled) { return; }
+            await this._sessionManager.loadSessions(client);
+            this._post({ type: 'clear' });
+            this._busy = false;
+            this._turnHadText = false;
+            this._firstUserMessage = undefined;
+            this._post({ type: 'setBusy', busy: false });
+            await this._restoreHistory(client);
+            this._postSessionList();
+            this._post({ type: 'notice', text: vscode.l10n.t('Session cloned') });
+        } catch (err) {
+            this._post({ type: 'notice', text: vscode.l10n.t('Clone failed: {0}', (err as Error).message) });
+        }
+    }
+
+    /** 首次回合结束后，按需用一次性生成给会话命名 */
+    private async _maybeAutoName(): Promise<void> {
+        if (this._autoNaming) { return; }
+        if (!vs.getConfiguration('pi-agent').get<boolean>('sessions.autoName', false)) { return; }
+        const text = this._firstUserMessage;
+        if (!text) { return; }
+        const current = this._sessionManager.sessions.find((s) => s.id === this._sessionManager.currentSessionId);
+        if (current?.name) { return; }
+        const client = this._clientManager.client;
+        if (!client || typeof client.setSessionName !== 'function') { return; }
+        this._autoNaming = true;
+        try {
+            const raw = await this._clientManager.runOneShot(this._extensionPath, buildNamePrompt(text));
+            const clean = raw.split('\n')[0].replace(/^["'\s]+|["'\s]+$/g, '').slice(0, 60);
+            if (clean) {
+                await client.setSessionName(clean);
+                await this._sessionManager.loadSessions(client);
+                this._postSessionList();
+            }
+        } catch (err) {
+            logError(`auto-name failed: ${(err as Error).message}`);
+        } finally {
+            this._autoNaming = false;
+        }
+    }
 
     public async cycleModel(): Promise<void> {
         const client = this._clientManager.client;
@@ -1003,6 +1106,7 @@ export class ChatPanel {
             this._busy = false;
             this._turnHadText = false;
             this._contextWarned = false;
+            this._firstUserMessage = undefined;
             this._post({ type: 'setBusy', busy: false });
             this._postContexts();
             this._postSessionList();
@@ -1055,6 +1159,7 @@ export class ChatPanel {
             this._busy = false;
             this._turnHadText = false;
             this._contextWarned = false;
+            this._firstUserMessage = undefined;
             this._post({ type: 'setBusy', busy: false });
             // 恢复该会话的历史记录
             await this._restoreHistory(client);
@@ -1168,6 +1273,7 @@ export class ChatPanel {
                 this._post({ type: 'setBusy', busy: false });
                 if (!event.aborted) { this._notifySettled(); }
                 this._postTurnChanges();
+                void this._maybeAutoName();
                 // 统计刷新与是否 abort 无关，刷新后反映最新会话状态
                 const settledClient = this._clientManager.client;
                 if (settledClient) { void this._loadStats(settledClient); }
@@ -1269,6 +1375,7 @@ export class ChatPanel {
     // ---------- 用户消息 ----------
 
     private async _handleUserMessage(userText: string, mode?: string) {
+        if (!this._firstUserMessage) { this._firstUserMessage = userText; }
         if (this._busy) {
             await this._enqueueWhileBusy(userText, mode);
             return;
@@ -1280,7 +1387,8 @@ export class ChatPanel {
 
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
-            const disposition = await client.prompt(this._withContext(userText));
+            const extra = await this._buildAutoContext();
+            const disposition = await client.prompt(this._withContext(userText, extra));
             this._clearContexts();
             if (disposition === 'handled') {
                 // pi 未启动新一轮（如扩展命令已处理），立即结束 busy
@@ -1324,7 +1432,8 @@ export class ChatPanel {
     private async _enqueueWhileBusy(userText: string, mode?: string): Promise<void> {
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
-            const message = this._withContext(userText);
+            const extra = await this._buildAutoContext();
+            const message = this._withContext(userText, extra);
             const steering = mode === 'steer';
             if (steering && typeof client.steer === 'function') {
                 await client.steer(message);

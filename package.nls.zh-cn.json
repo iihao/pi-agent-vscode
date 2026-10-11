@@ -16,6 +16,7 @@
   "cmd.generateCommitMessage": "Pi: 生成提交信息",
   "cmd.generatePullRequestDescription": "Pi: 生成 PR 描述",
   "cmd.revertLastTurn": "Pi: 撤销本回合改动",
+  "cmd.cloneSession": "Pi: 克隆会话",
   "cmd.attachFile": "Pi: 附加当前文件到对话",
   "cmd.attachSelection": "Pi: 附加选中代码到对话",
   "cmd.restartSession": "Pi: 重启会话",
@@ -28,5 +29,9 @@
   "config.permissionMode.autoConfirm": "自动信任项目本地文件（--approve）",
   "config.permissionMode.restricted": "只读：禁用 bash / edit / write 工具",
   "config.notifications": "窗口失焦时，任务完成/失败弹出通知",
-  "config.diagnostics.level": "输出通道日志级别"
+  "config.diagnostics.level": "输出通道日志级别",
+  "config.context.autoAttach": "每条消息自动附加编辑器上下文（当前文件/选区）",
+  "config.context.includeDiagnostics": "自动上下文中包含编辑器诊断信息",
+  "config.context.includeGit": "自动上下文中包含 Git 分支/改动",
+  "config.sessions.autoName": "根据首条消息自动命名新会话"
 }

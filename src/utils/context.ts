@@ -26,16 +26,15 @@ export function contextRef(c: ContextRef): string {
  * 把上下文引用拼到消息前面，形成 pi 可读的 context 块。
  * 无引用时原样返回。
  */
-export function buildContextBlock(contexts: ContextRef[], text: string): string {
-    if (contexts.length === 0) { return text; }
-    const refs = contexts.map(contextRef);
-    return [
-        BLOCK_START,
-        '<file-context>',
-        ...refs,
-        '</file-context>',
-        BLOCK_END,
-    ].join('\n') + '\n\n' + text;
+export function buildContextBlock(contexts: ContextRef[], text: string, extraBlocks: string[] = []): string {
+    if (contexts.length === 0 && extraBlocks.length === 0) { return text; }
+    const parts: string[] = [BLOCK_START];
+    if (contexts.length) {
+        parts.push('<file-context>', ...contexts.map(contextRef), '</file-context>');
+    }
+    parts.push(...extraBlocks);
+    parts.push(BLOCK_END);
+    return parts.join('\n') + '\n\n' + text;
 }
 
 /** 从消息文本中剥离 context 块（用于展示历史消息，避免暴露内部格式） */
