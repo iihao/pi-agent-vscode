@@ -328,7 +328,7 @@
         },
         "pi-agent.sessions.autoName": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "scope": "window",
           "description": "%config.sessions.autoName%"
         }

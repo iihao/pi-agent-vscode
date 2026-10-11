@@ -242,6 +242,8 @@ export class ChatPanel {
     private _turnChanges = new Map<string, TurnChange>();
     private _firstUserMessage: string | undefined;
     private _autoNaming = false;
+    /** 已尝试自动命名的会话 id（避免失败后每回合重试） */
+    private _autoNameTried = new Set<string>();
     private _disposed = false;
 
     // ---- 集中式状态：由 stateStore 支撑（getter/setter 代理，调用点无需改动） ----
@@ -513,11 +515,14 @@ export class ChatPanel {
     /** 首次回合结束后，按需用一次性生成给会话命名 */
     private async _maybeAutoName(): Promise<void> {
         if (this._autoNaming) { return; }
-        if (!vs.getConfiguration('pi-agent').get<boolean>('sessions.autoName', false)) { return; }
+        if (!vs.getConfiguration('pi-agent').get<boolean>('sessions.autoName', true)) { return; }
         const text = this._firstUserMessage;
         if (!text) { return; }
         const current = this._sessionManager.sessions.find((s) => s.id === this._sessionManager.currentSessionId);
         if (current?.name) { return; }
+        const id = this._sessionManager.currentSessionId;
+        if (!id || this._autoNameTried.has(id)) { return; }
+        this._autoNameTried.add(id);
         const client = this._clientManager.client;
         if (!client || typeof client.setSessionName !== 'function') { return; }
         this._autoNaming = true;

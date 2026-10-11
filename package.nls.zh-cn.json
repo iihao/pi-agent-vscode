@@ -35,5 +35,5 @@
   "config.context.autoAttach": "每条消息自动附加编辑器上下文（当前文件/选区）",
   "config.context.includeDiagnostics": "自动上下文中包含编辑器诊断信息",
   "config.context.includeGit": "自动上下文中包含 Git 分支/改动",
-  "config.sessions.autoName": "根据首条消息自动命名新会话"
+  "config.sessions.autoName": "根据首条消息自动命名新会话（默认开启；失败时回退为首条提问）"
 }

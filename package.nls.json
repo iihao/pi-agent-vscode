@@ -35,5 +35,5 @@
   "config.context.autoAttach": "Attach editor context (open file/selection) to every message",
   "config.context.includeDiagnostics": "Include editor diagnostics in automatic context",
   "config.context.includeGit": "Include Git branch/changes in automatic context",
-  "config.sessions.autoName": "Name new sessions automatically from the first message"
+  "config.sessions.autoName": "Name new sessions automatically from the first message (on by default; falls back to the first question)"
 }
