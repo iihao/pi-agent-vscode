@@ -181,5 +181,8 @@
   "Node: {0}": "Node: {0}",
   "Extension path: {0}": "Extension path: {0}",
   "Log level: {0}": "Log level: {0}",
-  "## Log": "## Log"
+  "## Log": "## Log",
+  "Context usage — click to compact": "Context usage — click to compact",
+  "Window": "Window",
+  "Click to compact": "Click to compact"
 }

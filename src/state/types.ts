@@ -10,6 +10,12 @@ import { ContextItem } from '../utils/context';
 import { SessionInfo } from '../sdk/sessionManager';
 import { PiModelInfo, PiUsage } from '../sdk/piTypes';
 
+export interface TurnChange {
+    rel: string;
+    existed: boolean;
+    edits: Array<{ oldText: string; newText: string }> | null;
+}
+
 export interface SessionStats {
     input: number;
     output: number;
@@ -24,6 +30,12 @@ export interface ChatState {
     // UI 状态
     busy: boolean;
     turnHadText: boolean;
+
+    // 本回合改动追踪（共享：多面板事件广播需要同步）
+    turnChanges: TurnChange[];
+
+    // clear() 时若未连接，标记连接后需创建新会话
+    pendingNewSession: boolean;
 
     // 上下文状态
     contexts: ContextItem[];
@@ -56,6 +68,8 @@ export function getInitialState(): ChatState {
     return {
         busy: false,
         turnHadText: false,
+        turnChanges: [],
+        pendingNewSession: false,
         contexts: [],
         lastUsage: undefined,
         stats: undefined,

@@ -1,0 +1,101 @@
+// ---------------------------------------------------------------------------
+// Webview 共享上下文
+// ---------------------------------------------------------------------------
+
+import type { ChatElements, UiStrings, WebviewContext } from './types';
+
+function collectElements(): ChatElements {
+    return {
+        chat: document.getElementById('chat')!,
+        welcome: document.getElementById('welcome')!,
+        input: document.getElementById('input') as HTMLTextAreaElement,
+        sendBtn: document.getElementById('send') as HTMLButtonElement,
+        attachBtn: document.getElementById('attachBtn') as HTMLButtonElement,
+        chipRow: document.getElementById('chipRow')!,
+        imageRow: document.getElementById('imageRow')!,
+        suggest: document.getElementById('suggest')!,
+        modelBtn: document.getElementById('modelBtn') as HTMLButtonElement,
+        modelLabel: document.getElementById('modelLabel')!,
+        modelPanel: document.getElementById('modelPanel')!,
+        thinkingBtn: document.getElementById('thinkingBtn') as HTMLButtonElement,
+        thinkingLabel: document.getElementById('thinkingLabel')!,
+        thinkingPanel: document.getElementById('thinkingPanel')!,
+        permBtn: document.getElementById('permBtn') as HTMLButtonElement,
+        permLabel: document.getElementById('permLabel')!,
+        permPanel: document.getElementById('permPanel')!,
+        attachPanel: document.getElementById('attachPanel')!,
+        sessionBtn: document.getElementById('sessionBtn') as HTMLButtonElement,
+        sessionLabel: document.getElementById('sessionLabel')!,
+        sessionPanel: document.getElementById('sessionPanel')!,
+        connectionStatus: document.getElementById('connectionStatus')!,
+        messageCount: document.getElementById('messageCount')!,
+        ctxStats: document.getElementById('ctxStats')!,
+        searchBtn: document.getElementById('searchBtn') as HTMLButtonElement,
+        exportBtn: document.getElementById('exportBtn') as HTMLButtonElement,
+        newChatBtn: document.getElementById('newChatBtn') as HTMLButtonElement,
+        outlinePanel: document.getElementById('outlinePanel')!,
+        msgRail: document.getElementById('msgRail')!,
+        msgNav: document.getElementById('msgNav')!,
+        qPrev: document.getElementById('qPrev') as HTMLButtonElement,
+        qNext: document.getElementById('qNext') as HTMLButtonElement,
+        qCounter: document.getElementById('qCounter')!,
+        qCount: document.getElementById('qCount')!,
+        qCurrent: document.getElementById('qCurrent')!,
+        searchBar: document.getElementById('searchBar')!,
+        searchInput: document.getElementById('searchInput') as HTMLInputElement,
+        searchResults: document.getElementById('searchResults')!,
+        searchPrev: document.getElementById('searchPrev') as HTMLButtonElement,
+        searchNext: document.getElementById('searchNext') as HTMLButtonElement,
+        searchClose: document.getElementById('searchClose') as HTMLButtonElement,
+        ctxUsage: document.getElementById('ctxUsage')!,
+        ctxUsageRing: document.getElementById('ctxUsageRing') as unknown as SVGCircleElement,
+        ctxUsagePct: document.getElementById('ctxUsagePct')!,
+    };
+}
+
+export function createContext(): WebviewContext {
+    const vscode = acquireVsCodeApi();
+    const S: UiStrings = JSON.parse(document.getElementById('pi-i18n')!.dataset.strings || '{}');
+    const els = collectElements();
+
+    return {
+        vscode,
+        S,
+        els,
+        busy: false,
+        currentBody: null,
+        currentBuffer: '',
+        streamRenderScheduled: false,
+        thinkingLine: null,
+        thinkingContent: '',
+        runningTools: {},
+        editingMessageEl: null,
+        modelsList: [],
+        currentModel: null,
+        thinkingLevels: [],
+        currentThinking: null,
+        permissionMode: 'ask',
+        sessionsList: [],
+        currentSessionId: null,
+        contexts: [],
+        pendingImages: [],
+        searchQuery: '',
+        searchMatches: [],
+        searchIndex: 0,
+        allMessages: [],
+        messageHistory: [],
+        historyIndex: -1,
+        slashCommands: [],
+        filesList: null,
+        suggestItems: [],
+        suggestIndex: 0,
+        suggestMode: null,
+        suggestStart: 0,
+        suggestEnd: 0,
+        attachOpenEditors: [],
+        attachRecent: [],
+        attachPending: false,
+        railCount: -1,
+        mermaidLoading: null,
+    };
+}

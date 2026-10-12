@@ -79,6 +79,10 @@ export interface UiStrings {
     context: string;
     cumulative: string;
     autoCompact: string;
+    ctxUsageTitle: string;
+    ctxUsageWindow: string;
+    ctxUsageHint: string;
+    compact: string;
     thinkingLevels: Record<string, string>;
     permissionOptions: Record<string, string>;
     permissionDescs: Record<string, string>;
@@ -157,6 +161,10 @@ export function getUiStrings(): UiStrings {
         context: t('Context'),
         cumulative: t('Cumulative'),
         autoCompact: t('auto-compact'),
+        ctxUsageTitle: t('Context usage — click to compact'),
+        ctxUsageWindow: t('Window'),
+        ctxUsageHint: t('Click to compact'),
+        compact: t('Compact'),
         thinkingLevels: {
             off: t('Off'), minimal: t('Minimal'), low: t('Low'),
             medium: t('Medium'), high: t('High'), xhigh: t('Very high'), max: t('Max'),

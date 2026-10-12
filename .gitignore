@@ -4,3 +4,15 @@ node_modules
 *.vsix
 media
 .DS_Store
+
+# AI agent / planning documents — never publish to GitHub
+.claude/
+.cursor/
+.codex/
+.windsurf/
+.continue/
+plans/
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+*.plan.md

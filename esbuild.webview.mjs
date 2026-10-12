@@ -36,7 +36,7 @@ const watch = process.argv.includes('--watch');
 rmSync('media', { recursive: true, force: true });
 
 const options = {
-    entryPoints: ['webview/main.js'],
+    entryPoints: ['webview/main.ts'],
     bundle: true,
     outdir: 'media',
     entryNames: 'main',

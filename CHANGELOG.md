@@ -5,6 +5,52 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.2] - 2026-10-12
+
+### Added
+
+- **Composer context gauge**: a compact ring next to the composer's `+` button
+  shows live context-window usage; hover for a tooltip (used %, window size,
+  auto-compact) and click to start the `/compact` flow.
+- **Built-in slash commands**: typing `/` now lists the panel's built-ins next
+  to pi's own commands — `/model`, `/thinking`, `/permission`, `/sessions`,
+  `/compact`, `/clear`, `/new`, `/clone`, `/export`, `/search`, `/help`.
+- **Current-question preview**: the session bar's `5/6` counter shows a
+  truncated preview of the question you are on, updating as you scroll.
+
+### Changed
+
+- The webview was rewritten as focused TypeScript modules (a shared context plus
+  13 feature modules), replacing the single ~1,570-line `main.js`.
+- Session bar: the session selector is now a bordered chip with an integrated
+  icon and sizes to its content (instead of filling the row); its dropdown opens
+  on the left, while the question list opens on the right.
+- User questions render as right-aligned chat bubbles with a flat accent tint
+  and no border (the redundant “You” label is gone); assistant answers stay
+  left-aligned, and the question-navigator flash highlights the bubble.
+- Code-block **Apply** / **Copy** actions are localized.
+- Thinking output stays collapsed while pi is working; a spinner sits on the
+  header next to the token count and elapsed time, and a one-line live preview of
+  the reasoning scrolls beneath it. When the turn ends the spinner stops and the
+  line can be expanded to read the full reasoning.
+- Assistant replies type out smoothly via a time-driven reveal, independent of how
+  the model chunks its output (no more whole-response dumps).
+- A pulsing indicator at the bottom of the chat keeps the run visibly active
+  during the gaps between phases (for example after a shell command finishes and
+  before the next step), so a turn no longer looks stalled.
+- Shell/bash tool cards start expanded so their output is visible as it runs, and
+  the output spans the full card width.
+
+### Fixed
+
+- The per-turn usage notice no longer has an oversized gap above it: a message
+  that is immediately followed by a notice drops its full bottom margin.
+- Expanded shell/tool cards now keep the chat scrolled to the bottom as their
+  output grows, instead of waiting for the next step to jump down.
+- `/clear` now clears the conversation and starts a fresh session (the message
+  had no handler in the extension host).
+- Localized the context-usage tooltip (`Window`, `Click to compact`).
+
 ## [0.1.1] - 2026-10-11
 
 ### Added
@@ -183,6 +229,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   language.
 - Trusted-workspace gating and a settings namespace (`pi-agent.*`).
 
-[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/iihao/pi-agent-vscode/releases/tag/v0.1.0

@@ -2,7 +2,7 @@
   "name": "pi-agent-assistant",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "iihao",
   "license": "MIT",
   "author": {
@@ -386,7 +386,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "clean": "node -e \"require('fs').rmSync('out',{recursive:true,force:true})\"",
-    "compile": "npm run clean && tsc -p ./ && npm run build:webview",
+    "compile": "npm run clean && tsc -p ./ && npm run typecheck:webview && npm run build:webview",
+    "typecheck:webview": "tsc -p webview --noEmit",
     "watch": "tsc -watch -p ./",
     "build:webview": "node esbuild.webview.mjs",
     "watch:webview": "node esbuild.webview.mjs --watch",

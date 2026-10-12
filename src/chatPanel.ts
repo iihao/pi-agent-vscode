@@ -12,10 +12,15 @@ import { SessionManager } from './sdk/sessionManager';
 import { summarizeToolArgs, formatUsage, validateMessage, extractToolOutput } from './utils/formatters';
 import { buildContextBlock, stripContextBlock, ContextItem } from './utils/context';
 import { PI_INSTALL_HINT, extractMessageText, extractMessageImages, PiAgentEvent, PiImageBlock, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, PiUsage, respondExtensionUI } from './sdk/piTypes';
-import { stateStore, setState, selectBusy, selectTurnHadText, selectContexts, selectLastUsage, selectPermissionMode } from './state';
+import { stateStore, setState, selectBusy, selectTurnHadText, selectContexts, selectLastUsage, selectPermissionMode, selectTurnChanges, selectPendingNewSession } from './state';
+import { TurnChange } from './state/types';
 import { logInfo, logError } from './utils/logger';
 import { getRecentFiles, addRecentFile } from './utils/recentFiles';
 import { getVSCodeService } from './services';
+import { WebviewMessage, PostMessage, ImageAttachment } from './chatPanel/types';
+import { getGitAPI, pickGitRepository } from './chatPanel/git';
+import { buildCommitPrompt, buildPrPrompt, buildNamePrompt } from './chatPanel/prompts';
+import { parseEdits, isRevertible, revertEdits } from './chatPanel/turnChanges';
 
 /** VS Code 访问统一走服务容器（便于测试与替换） */
 const vs = getVSCodeService();
@@ -52,181 +57,7 @@ function mediaRoot(extensionPath: string): vscode.Uri {
     return vs.uri.file(path.join(extensionPath, 'media'));
 }
 
-// ---- 最小化的 vscode.git API 类型（内建 Git 扩展） ----
-interface GitChange { uri: vscode.Uri; }
-interface GitRepository {
-    rootUri: vscode.Uri;
-    inputBox: { value: string };
-    state: {
-        HEAD?: { name?: string; commit?: string };
-        workingTreeChanges: GitChange[];
-        indexChanges: GitChange[];
-    };
-    diff(cached?: boolean): Promise<string>;
-    diffWithHEAD(): Promise<string>;
-    log(options?: { maxEntries?: number }): Promise<Array<{ hash: string; message: string }>>;
-}
-interface GitAPI {
-    repositories: GitRepository[];
-    getRepository(uri: vscode.Uri): GitRepository | null;
-}
-interface GitExtension { getAPI(version: 1): GitAPI; }
-
-async function getGitAPI(): Promise<GitAPI | undefined> {
-    const ext = vs.extensions.getExtension<GitExtension>('vscode.git');
-    if (!ext) { return undefined; }
-    try {
-        const exports = ext.isActive ? ext.exports : await ext.activate();
-        return exports?.getAPI(1);
-    } catch (err) {
-        logError(`git extension activation failed: ${(err as Error).message}`);
-        return undefined;
-    }
-}
-
-function pickGitRepository(api: GitAPI): GitRepository | undefined {
-    const active = vs.activeTextEditor?.document.uri;
-    if (active) {
-        const repo = api.getRepository(active);
-        if (repo) { return repo; }
-    }
-    return api.repositories[0];
-}
-
-function clipDiff(diff: string, max = 12000): string {
-    return diff.length > max ? diff.slice(0, max) + '\n… (truncated)' : diff;
-}
-
-export function buildCommitPrompt(diff: string, branch: string): string {
-    return [
-        'Write a git commit message for the following changes.',
-        'Use Conventional Commits (e.g. "feat: …", "fix: …", "docs: …").',
-        'Keep the subject under 72 characters. Output ONLY the commit message.',
-        branch ? `Branch: ${branch}` : '',
-        '',
-        '```diff',
-        clipDiff(diff),
-        '```',
-    ].filter(Boolean).join('\n');
-}
-
-export function buildPrPrompt(branch: string, log: string): string {
-    return [
-        'Write a pull request description in Markdown.',
-        'Include a short summary and a bullet list of notable changes.',
-        branch ? `Branch: ${branch}` : '',
-        '',
-        'Commits:',
-        log || '(no commits found)',
-    ].filter(Boolean).join('\n');
-}
-
-export function buildNamePrompt(text: string): string {
-    return [
-        'Summarize the following user request as a short session title.',
-        'Use 3 to 6 words, no quotes, no trailing punctuation. Output only the title.',
-        '',
-        text.slice(0, 1000),
-    ].join('\n');
-}
-
-// ---- 本回合改动追踪与还原 ----
-
-export interface TurnChange {
-    rel: string;
-    existed: boolean;
-    /** edit 的替换对；null 表示包含 write（覆盖写无法安全还原） */
-    edits: Array<{ oldText: string; newText: string }> | null;
-}
-
-export function parseEdits(args: { edits?: unknown } | undefined): Array<{ oldText: string; newText: string }> {
-    const raw = args?.edits;
-    if (!Array.isArray(raw)) { return []; }
-    const out: Array<{ oldText: string; newText: string }> = [];
-    for (const e of raw) {
-        if (e && typeof e === 'object') {
-            const o = e as { oldText?: unknown; newText?: unknown };
-            if (typeof o.oldText === 'string' && typeof o.newText === 'string') {
-                out.push({ oldText: o.oldText, newText: o.newText });
-            }
-        }
-    }
-    return out;
-}
-
-export function isRevertible(change: TurnChange): boolean {
-    if (!change.existed) { return true; }          // 本回合新建 -> 删除
-    if (!change.edits) { return false; }           // 覆盖写 -> 无法安全还原
-    return change.edits.every((e) => e.newText.length > 0);
-}
-
-/** 把 newText 反向替换回 oldText（倒序），失败返回 null */
-export function revertEdits(content: string, edits: Array<{ oldText: string; newText: string }>): string | null {
-    let out = content;
-    for (let i = edits.length - 1; i >= 0; i--) {
-        const { oldText, newText } = edits[i];
-        const idx = out.indexOf(newText);
-        if (idx === -1) { return null; }
-        out = out.slice(0, idx) + oldText + out.slice(idx + newText.length);
-    }
-    return out;
-}
-
-// 消息类型定义
-interface WebviewMessage {
-    type: string;
-    text?: string;
-    code?: string;
-    provider?: string;
-    modelId?: string;
-    sessionId?: string;
-    markdown?: string;
-    href?: string;
-    level?: string;
-    currentName?: string;
-    id?: string;
-    mode?: string;
-    paths?: string[];
-    path?: string;
-    range?: string;
-    images?: ImageAttachment[];
-}
-
-type ImageAttachment = { type?: string; data?: string; mimeType?: string };
-
-// 发送给 webview 的消息类型
-interface PostMessage {
-    type: string;
-    text?: string;
-    busy?: boolean;
-    messages?: Array<{ role: string; text: string; images?: PiImageBlock[] }>;
-    models?: Array<{ provider: string; id: string }>;
-    current?: { provider: string; id: string } | string | null;
-    tool?: string;
-    detail?: string;
-    isError?: boolean;
-    sessions?: Array<{ id: string; file: string; createdAt: number; messageCount: number; name?: string; preview?: string }>;
-    code?: string;
-    toolCallId?: string;
-    output?: string;
-    diff?: string;
-    durationMs?: number;
-    levels?: string[];
-    currentThinking?: string | null;
-    permissionMode?: string;
-    stats?: {
-        input: number;
-        output: number;
-        cacheRead: number;
-        cacheWrite: number;
-        contextPercent: number | null;
-        contextWindow: number;
-        autoCompact: boolean;
-    };
-    contexts?: Array<{ id: string; type: string; path: string; lineRange?: string }>;
-    toolCalls?: Array<{ tool: string; detail: string; isError?: boolean }>;
-    [key: string]: unknown;
-}
+// ---- Git 集成、Prompt 构建、改动追踪、消息类型已解耦到 chatPanel/ 目录 ----
 
 export class ChatPanel {
     public static currentView: ChatPanel | undefined;
@@ -243,8 +74,6 @@ export class ChatPanel {
     private _commands: PiSlashCommand[] = [];
     private _fileList: string[] | undefined;
     private _fileListAt = 0;
-    /** 本回合被 edit/write 修改的文件（绝对路径 -> 可还原信息） */
-    private _turnChanges = new Map<string, TurnChange>();
     private _firstUserMessage: string | undefined;
     /** 已尝试自动命名的会话 id（避免失败后每回合重试） */
     private _autoNameTried = new Set<string>();
@@ -256,6 +85,14 @@ export class ChatPanel {
 
     private get _turnHadText(): boolean { return stateStore.select(selectTurnHadText); }
     private set _turnHadText(v: boolean) { setState({ turnHadText: v }); }
+
+    /** 本回合改动追踪（共享状态，多面板事件广播时保持同步） */
+    private get _turnChanges(): TurnChange[] { return stateStore.select(selectTurnChanges); }
+    private set _turnChanges(v: TurnChange[]) { setState({ turnChanges: v }); }
+
+    /** clear() 时若未连接，标记连接后需创建新会话 */
+    private get _pendingNewSession(): boolean { return stateStore.select(selectPendingNewSession); }
+    private set _pendingNewSession(v: boolean) { setState({ pendingNewSession: v }); }
 
     private get _contexts(): ContextItem[] { return stateStore.select(selectContexts); }
     private set _contexts(v: ContextItem[]) { setState({ contexts: v }); }
@@ -339,7 +176,7 @@ export class ChatPanel {
             if (ChatPanel.currentView) { return ChatPanel.currentView; }
             await new Promise((resolve) => setTimeout(resolve, 50));
         }
-        throw new Error(vscode.l10n.t('Pi chat view could not be created, please retry'));
+        throw new Error(vscode.l10n.t('Pi chat view could not be created within 5 seconds. Please check if the extension is properly activated and try again.'));
     }
 
     public async clear(): Promise<void> {
@@ -361,7 +198,12 @@ export class ChatPanel {
                 if (ok) { this._postSessionList(); }
             } catch (err) {
                 logError(`clear/newSession failed: ${(err as Error).message}`);
+                this._post({ type: 'notice', text: vscode.l10n.t('Failed to create new session: {0}', (err as Error).message) });
             }
+        } else {
+            // 未连接时标记待建会话，连接后 _ensureClient 会自动创建
+            this._pendingNewSession = true;
+            this._post({ type: 'notice', text: vscode.l10n.t('Not connected; will create a new session when Pi connects') });
         }
     }
 
@@ -727,7 +569,7 @@ export class ChatPanel {
 
     /** 丢弃本回合改动追踪（清空 / 新建 / 切换会话后不应再回滚旧会话的文件） */
     private _resetTurnChanges(): void {
-        this._turnChanges.clear();
+        this._turnChanges = [];
         this._post({ type: 'turnChanges', files: [] });
     }
 
@@ -741,7 +583,9 @@ export class ChatPanel {
         const root = vs.workspaceFolders?.[0]?.uri.fsPath;
         const abs = path.isAbsolute(p) ? p : path.join(root || process.cwd(), p);
         const rel = root ? path.relative(root, abs).split(path.sep).join('/') : p;
-        const prev = this._turnChanges.get(abs);
+        const list = [...this._turnChanges];
+        const idx = list.findIndex((c) => c.rel === rel);
+        const prev = idx >= 0 ? list[idx] : undefined;
         const existed = prev ? prev.existed : fs.existsSync(abs);
         let edits = prev ? prev.edits : [];
         if (tool === 'write') {
@@ -749,11 +593,13 @@ export class ChatPanel {
         } else if (edits) {
             edits = edits.concat(parseEdits(args));
         }
-        this._turnChanges.set(abs, { rel, existed, edits });
+        const entry: TurnChange = { rel, existed, edits };
+        if (idx >= 0) { list[idx] = entry; } else { list.push(entry); }
+        this._turnChanges = list;
     }
 
     private _postTurnChanges(): void {
-        const files = [...this._turnChanges.values()].map((v) => ({
+        const files = this._turnChanges.map((v) => ({
             path: v.rel,
             status: v.existed ? 'modified' : 'created',
             revertible: isRevertible(v),
@@ -763,19 +609,21 @@ export class ChatPanel {
 
     /** 把本回合改动的文件恢复到改动前状态（新建的文件移到回收站） */
     private async _revertTurn(): Promise<void> {
-        if (this._turnChanges.size === 0) {
+        if (this._turnChanges.length === 0) {
             this._post({ type: 'notice', text: vscode.l10n.t('No changes to revert') });
             return;
         }
         const ok = await vs.showWarningMessage(
-            vscode.l10n.t('Revert {0} file(s) to their state before this turn?', this._turnChanges.size),
+            vscode.l10n.t('Revert {0} file(s) to their state before this turn?', this._turnChanges.length),
             { modal: true },
             vscode.l10n.t('Revert')
         );
         if (ok !== vscode.l10n.t('Revert')) { return; }
         let done = 0;
         let skipped = 0;
-        for (const [abs, change] of this._turnChanges) {
+        const root = vs.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+        for (const change of this._turnChanges) {
+            const abs = path.isAbsolute(change.rel) ? change.rel : path.join(root, change.rel);
             try {
                 if (!change.existed) {
                     await vs.fs.delete(vs.uri.file(abs), { useTrash: true });
@@ -795,7 +643,7 @@ export class ChatPanel {
                 skipped++;
             }
         }
-        this._turnChanges.clear();
+        this._turnChanges = [];
         this._post({ type: 'turnChanges', files: [] });
         this._post({
             type: 'notice',
@@ -930,6 +778,21 @@ export class ChatPanel {
                     await this._exportConversation(message.markdown);
                 }
                 break;
+            case 'compact':
+                await this.compact();
+                break;
+            case 'clear':
+                await this.clear();
+                break;
+            case 'cloneSession':
+                await this.cloneSession();
+                break;
+            case 'focusSearch':
+                this._post({ type: 'focusSearch' });
+                break;
+            case 'showHelp':
+                this._post({ type: 'showHelp' });
+                break;
         }
     }
 
@@ -955,6 +818,8 @@ export class ChatPanel {
     private async _ensureClient(): Promise<void> {
         setState({ connecting: true, connected: false });
         this._post({ type: 'connecting' });
+        // 清空现有聊天内容，避免重连时历史消息重复追加
+        this._post({ type: 'clear' });
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
 
@@ -964,6 +829,17 @@ export class ChatPanel {
                 this._busy = Boolean(st.isStreaming);
                 this._post({ type: 'setBusy', busy: this._busy });
             } catch (err) { logError(`reconcile busy failed: ${(err as Error).message}`); }
+
+            // clear() 时若未连接，连接后自动创建新会话
+            if (this._pendingNewSession) {
+                this._pendingNewSession = false;
+                try {
+                    const ok = await this._sessionManager.createNewSession(client);
+                    if (ok) { this._postSessionList(); }
+                } catch (err) {
+                    logError(`pending new session failed: ${(err as Error).message}`);
+                }
+            }
 
             // 恢复历史消息
             await this._restoreHistory(client);
@@ -1241,10 +1117,23 @@ export class ChatPanel {
 
     // ---------- 会话管理 ----------
 
+    /** abort 恢复超时：agent_settled 未到达时强制解锁 */
+    private static readonly ABORT_RECOVERY_MS = 30 * 1000; // 30 秒
+
     /** 若正在运行则先中断当前回合（切换 / 新建 / 克隆会话前调用，避免后台继续流式） */
     private async _abortIfBusy(): Promise<void> {
         if (!this._busy) { return; }
         await this._clientManager.abort().catch((err) => { logError(`abort failed: ${(err as Error).message}`); });
+        // abort 后 busy 状态由 agent_settled 事件处理；若事件未到达，强制恢复超时兜底
+        this._clearBusyTimeout();
+        this._busyTimeout = setTimeout(() => {
+            if (this._busy) {
+                logError('Abort recovery timeout reached; force resetting busy state');
+                this._busy = false;
+                this._post({ type: 'setBusy', busy: false });
+                this._post({ type: 'error', text: vscode.l10n.t('Pi turn was aborted and did not settle within {0} seconds; you can send a new message', ChatPanel.ABORT_RECOVERY_MS / 1000) });
+            }
+        }, ChatPanel.ABORT_RECOVERY_MS);
     }
 
     private async _handleNewSession(): Promise<void> {
@@ -1283,7 +1172,10 @@ export class ChatPanel {
             placeHolder: vscode.l10n.t('Enter a session name (leave empty to clear)'),
             ignoreFocusOut: true,
         });
-        if (name === undefined) { return; }
+        if (name === undefined) {
+            void vs.showInformationMessage(vscode.l10n.t('Rename cancelled'));
+            return;
+        }
         // 重命名非当前会话需要先切过去；若正在运行则先中断，避免中途切换会话
         if (sessionId !== this._sessionManager.currentSessionId) { await this._abortIfBusy(); }
         const before = this._sessionManager.currentSessionId;
@@ -1293,6 +1185,7 @@ export class ChatPanel {
             if (this._sessionManager.currentSessionId !== before) {
                 this._post({ type: 'clear' });
                 this._busy = false;
+                this._clearBusyTimeout();
                 this._turnHadText = false;
                 this._resetTurnChanges();
                 this._post({ type: 'setBusy', busy: false });
@@ -1301,7 +1194,7 @@ export class ChatPanel {
             this._postSessionList();
             this._post({ type: 'notice', text: vscode.l10n.t('Session renamed') });
         } else {
-            this._post({ type: 'notice', text: vscode.l10n.t('Rename failed') });
+            this._post({ type: 'notice', text: vscode.l10n.t('Rename failed. Please check the session file permissions and try again.') });
         }
     }
 
@@ -1316,6 +1209,7 @@ export class ChatPanel {
         if (success) {
             this._post({ type: 'clear' });
             this._busy = false;
+            this._clearBusyTimeout();
             this._turnHadText = false;
             this._contextWarned = false;
             this._firstUserMessage = undefined;
@@ -1326,7 +1220,7 @@ export class ChatPanel {
             this._postSessionList();
             this._post({ type: 'notice', text: vscode.l10n.t('Switched to session: {0}', sessionId) });
         } else {
-            this._post({ type: 'notice', text: vscode.l10n.t('Failed to switch session') });
+            this._post({ type: 'notice', text: vscode.l10n.t('Failed to switch session. The session may no longer exist or the file may be corrupted.') });
         }
     }
 
@@ -1343,7 +1237,7 @@ export class ChatPanel {
                 this._busy = true;
                 this._turnHadText = false;
                 this._lastUsage = undefined;
-                this._turnChanges.clear();
+                this._turnChanges = [];
                 this._post({ type: 'turnChanges', files: [] });
                 this._post({ type: 'setBusy', busy: true });
                 break;
@@ -1425,6 +1319,7 @@ export class ChatPanel {
 
             case 'agent_settled': {
                 this._busy = false;
+                this._clearBusyTimeout();
                 this._turnHadText = false;
                 this._post({ type: 'thinkingEnd' });
                 const u = this._lastUsage;
@@ -1535,6 +1430,29 @@ export class ChatPanel {
 
     // ---------- 用户消息 ----------
 
+    /** busy 状态超时保护：pi 进程异常时自动解锁，避免用户永久无法发送消息 */
+    private _busyTimeout: NodeJS.Timeout | undefined;
+    private static readonly BUSY_TIMEOUT_MS = 10 * 60 * 1000; // 10 分钟
+
+    private _startBusyTimeout(): void {
+        this._clearBusyTimeout();
+        this._busyTimeout = setTimeout(() => {
+            if (this._busy) {
+                logError('Busy timeout reached; force resetting busy state');
+                this._busy = false;
+                this._post({ type: 'setBusy', busy: false });
+                this._post({ type: 'error', text: vscode.l10n.t('Pi turn timed out after 10 minutes; you can send a new message') });
+            }
+        }, ChatPanel.BUSY_TIMEOUT_MS);
+    }
+
+    private _clearBusyTimeout(): void {
+        if (this._busyTimeout) {
+            clearTimeout(this._busyTimeout);
+            this._busyTimeout = undefined;
+        }
+    }
+
     private async _handleUserMessage(userText: string, mode?: string, images?: ImageAttachment[]) {
         if (userText && !this._firstUserMessage) { this._firstUserMessage = userText; }
         if (this._busy) {
@@ -1544,6 +1462,7 @@ export class ChatPanel {
 
         this._post({ type: 'addUserMessage', text: userText, images: images && images.length ? images : undefined });
         this._busy = true;
+        this._startBusyTimeout();
         this._post({ type: 'setBusy', busy: true });
 
         try {
@@ -1554,6 +1473,7 @@ export class ChatPanel {
             if (disposition === 'handled') {
                 // pi 未启动新一轮（如扩展命令已处理），立即结束 busy
                 this._busy = false;
+                this._clearBusyTimeout();
                 this._post({ type: 'setBusy', busy: false });
             } else if (disposition === 'queued') {
                 // 已排队：当前回合结束后 pi 会自动处理，busy 保持到 agent_settled
@@ -1561,6 +1481,7 @@ export class ChatPanel {
             }
         } catch (err) {
             this._busy = false;
+            this._clearBusyTimeout();
             this._post({ type: 'thinkingEnd' });
             this._post({ type: 'setBusy', busy: false });
 
@@ -1591,11 +1512,13 @@ export class ChatPanel {
 
     /** 忙碌时：steer 立刻插入当前回合；否则排队为 follow-up */
     private async _enqueueWhileBusy(userText: string, mode?: string, images?: ImageAttachment[]): Promise<void> {
+        const steering = mode === 'steer';
+        // 先展示用户消息（带 pending 状态），避免排队失败时消息丢失
+        this._post({ type: 'addUserMessage', text: userText, pending: steering ? 'steering' : 'queued', images: images && images.length ? images : undefined });
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath);
             const extra = await this._buildAutoContext();
             const message = this._withContext(userText, extra);
-            const steering = mode === 'steer';
             if (steering && typeof client.steer === 'function') {
                 await client.steer(message, images);
             } else if (typeof client.followUp === 'function') {
@@ -1605,7 +1528,6 @@ export class ChatPanel {
                 await client.prompt(message, images, steering ? 'steer' : 'followUp');
             }
             this._clearContexts();
-            this._post({ type: 'addUserMessage', text: userText, pending: steering ? 'steering' : 'queued', images: images && images.length ? images : undefined });
         } catch (err) {
             this._post({ type: 'notice', text: vscode.l10n.t('Failed to queue message: {0}', (err as Error).message) });
         }

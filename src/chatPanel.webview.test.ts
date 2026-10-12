@@ -10,7 +10,7 @@ function makeWebview() {
     return {
         cspSource: 'vscode-resource://',
         html: '',
-        asWebviewUri: (_uri: unknown) => ({ toString: () => 'vscode-resource://media/main.js' }),
+        asWebviewUri: (_uri: unknown) => ({ toString: () => 'vscode-resource://media/main.js' }), // media/main.js (esbuild output from main.ts)
         onDidReceiveMessage: (cb: (m: unknown) => void) => { onMessage = cb; return { dispose() { /* noop */ } }; },
         postMessage: (m: Posted) => { posted.push(m); return Promise.resolve(true); },
         posted,

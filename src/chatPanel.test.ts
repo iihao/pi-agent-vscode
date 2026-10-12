@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { parseEdits, isRevertible, revertEdits, buildNamePrompt, buildCommitPrompt, buildPrPrompt } from './chatPanel';
+import { parseEdits, isRevertible, revertEdits } from './chatPanel/turnChanges';
+import { buildNamePrompt, buildCommitPrompt, buildPrPrompt } from './chatPanel/prompts';
 
 describe('revertEdits', () => {
     it('reverses non-overlapping edits back to the original', () => {

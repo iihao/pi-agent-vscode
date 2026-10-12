@@ -181,5 +181,8 @@
   "Node: {0}": "Node: {0}",
   "Extension path: {0}": "扩展路径: {0}",
   "Log level: {0}": "日志级别: {0}",
-  "## Log": "## 日志"
+  "## Log": "## 日志",
+  "Context usage — click to compact": "上下文占用 — 点击可压缩",
+  "Window": "窗口",
+  "Click to compact": "点击可压缩"
 }

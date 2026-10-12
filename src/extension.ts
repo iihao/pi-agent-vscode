@@ -41,6 +41,7 @@ export function activate(context: vscode.ExtensionContext) {
             ignoreFocusOut: true,
         });
         if (!description) {
+            void vscode.window.showInformationMessage(vscode.l10n.t('Code generation cancelled'));
             return;
         }
         const editor = vscode.window.activeTextEditor;
@@ -140,7 +141,14 @@ export function activate(context: vscode.ExtensionContext) {
         if (e.affectsConfiguration('pi-agent.pi.executable') ||
             e.affectsConfiguration('pi-agent.pi.arguments') ||
             e.affectsConfiguration('pi-agent.agent.permissionMode')) {
-            void ChatPanel.currentView?.restartClient();
+            // 提示用户配置变更会导致会话重启
+            const panel = ChatPanel.currentView;
+            if (panel) {
+                void vscode.window.showInformationMessage(
+                    vscode.l10n.t('Configuration changed; restarting Pi session…')
+                );
+            }
+            void panel?.restartClient();
         }
     });
 

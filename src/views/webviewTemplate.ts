@@ -3,15 +3,15 @@
 //
 // 结构（body）保留在这里；样式与脚本已抽离为独立资源：
 //   webview/styles.css  -> media/main.css
-//   webview/main.js     -> media/main.js（esbuild 打包，含 markdown-it/highlight.js）
+//   webview/main.ts      -> media/main.js（esbuild 打包，含 markdown-it/highlight.js）
 // 由 ChatPanel 通过 webview.asWebviewUri 引用。
 // ---------------------------------------------------------------------------
 
 import { UiStrings } from './strings';
 
 /** HTML 转义（属性值与文本节点通用） */
-function escapeAttr(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+function escapeAttr(s: unknown): string {
+    return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 export interface WebviewAssets {
@@ -57,10 +57,10 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
     </header>
 
     <div class="session-bar" id="sessionBar">
-        <span class="git-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
-        </span>
         <button id="sessionBtn" class="pill session-pill" title="${escapeAttr(S.sessionTitle)}">
+            <span class="pill-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path></svg>
+            </span>
             <span id="sessionLabel" class="pill-label">${escapeAttr(S.currentSession)}</span>
             <span class="pill-caret">▾</span>
         </button>
@@ -69,7 +69,9 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"></polyline></svg>
             </button>
             <button id="qCounter" class="q-counter" title="${escapeAttr(S.outlineTitle)}" aria-label="${escapeAttr(S.outlineTitle)}">
-                <span id="qCount">1/1</span><span class="pill-caret">▾</span>
+                <span id="qCount" class="q-count">1/1</span>
+                <span id="qCurrent" class="q-current"></span>
+                <span class="pill-caret">▾</span>
             </button>
             <button id="qNext" class="icon-btn" title="${escapeAttr(S.nextQuestion)}" aria-label="${escapeAttr(S.nextQuestion)}">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"></polyline></svg>
@@ -129,9 +131,16 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
                         </span>
                     </button>
+                    <div class="ctx-usage hidden" id="ctxUsage">
+                        <svg viewBox="0 0 36 36" class="ctx-usage-svg">
+                            <circle class="ctx-usage-bg" cx="18" cy="18" r="15.5"></circle>
+                            <circle class="ctx-usage-ring" id="ctxUsageRing" cx="18" cy="18" r="15.5"></circle>
+                        </svg>
+                        <span class="ctx-usage-pct" id="ctxUsagePct"></span>
+                    </div>
                     <button id="modelBtn" class="pill" title="${escapeAttr(S.modelTitle)}">
                         <span class="pill-icon" aria-hidden="true">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 4.6L18.5 9l-4.6 1.9L12 15l-1.9-4.1L5.5 9l4.6-1.4z"></path></svg>
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 6l1.9 4.6L18.5 12l-4.6 1.9L12 18l-1.9-4.1L5.5 12l4.6-1.4z"></path></svg>
                         </span>
                         <span id="modelLabel" class="pill-label">${escapeAttr(S.notConnected)}</span>
                         <span class="pill-caret">▾</span>
