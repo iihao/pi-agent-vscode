@@ -1,9 +1,10 @@
 // ---------------------------------------------------------------------------
-// 共享聊天状态类型定义
+// 会话运行时状态类型定义
 //
-// 说明：busy / turnHadText / contexts / lastUsage / permissionMode 由
-// chatPanel 读取；其余字段目前只被写入，保留是为了不改动正在并行开发的
-// chatPanel，后续可直接删除或改为「只下发 webview」。
+// 一个会话（ChatRuntime）持有一份 ChatState：绑定同一会话的多个面板共享它，
+// 从而「同一会话 → 镜像」；不同会话之间状态完全隔离（busy / contexts /
+// sessions / stats / models …）。渲染台账（已下发给某个 webview 的内容）
+// 才是面板私有的，不在这里。
 // ---------------------------------------------------------------------------
 
 import { ContextItem } from '../utils/context';
@@ -14,6 +15,12 @@ export interface TurnChange {
     rel: string;
     existed: boolean;
     edits: Array<{ oldText: string; newText: string }> | null;
+    /** 本回合首次触碰该文件前的内容快照（write 的 diff / 还原用） */
+    before?: string;
+    /** write 写入的内容（用于从快照生成 diff） */
+    written?: string;
+    /** 已算好的整回合 diff（缓存，避免重复计算） */
+    diff?: string;
 }
 
 export interface SessionStats {
@@ -29,7 +36,6 @@ export interface SessionStats {
 export interface ChatState {
     // UI 状态
     busy: boolean;
-    turnHadText: boolean;
 
     // 本回合改动追踪（共享：多面板事件广播需要同步）
     turnChanges: TurnChange[];
@@ -67,7 +73,6 @@ export type ChatStateSelector<T> = (state: ChatState) => T;
 export function getInitialState(): ChatState {
     return {
         busy: false,
-        turnHadText: false,
         turnChanges: [],
         pendingNewSession: false,
         contexts: [],

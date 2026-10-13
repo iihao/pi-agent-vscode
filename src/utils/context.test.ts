@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildContextBlock, contextRef, stripContextBlock } from './context';
+import { buildContextBlock, contextRef, stripContextBlock, parseContextRefs } from './context';
 
 describe('contextRef', () => {
     it('renders a file as @path', () => {
@@ -45,5 +45,36 @@ describe('stripContextBlock', () => {
 
     it('leaves plain text untouched', () => {
         expect(stripContextBlock('plain')).toBe('plain');
+    });
+});
+
+describe('parseContextRefs', () => {
+    it('parses file and selection refs back out of a context block', () => {
+        const wrapped = buildContextBlock(
+            [{ type: 'file', path: 'src/a.ts' }, { type: 'selection', path: 'src/b.ts', lineRange: '3-9' }],
+            'Why?'
+        );
+        expect(parseContextRefs(wrapped)).toEqual([
+            { type: 'file', path: 'src/a.ts' },
+            { type: 'selection', path: 'src/b.ts', lineRange: '3-9' },
+        ]);
+    });
+
+    it('treats a trailing single line number as a selection', () => {
+        const wrapped = buildContextBlock([{ type: 'selection', path: 'src/a.ts', lineRange: '7' }], 'x');
+        expect(parseContextRefs(wrapped)).toEqual([{ type: 'selection', path: 'src/a.ts', lineRange: '7' }]);
+    });
+
+    it('returns [] when there is no context block', () => {
+        expect(parseContextRefs('plain text')).toEqual([]);
+    });
+
+    it('ignores a context block with no file refs', () => {
+        expect(parseContextRefs(buildContextBlock([], 'x', ['<git-context>\nBranch: main\n</git-context>']))).toEqual([]);
+    });
+
+    it('de-duplicates repeated refs', () => {
+        const text = '--- pi-extension-context:start ---\n<file-context>\n@src/a.ts\n@src/a.ts\n</file-context>\n--- pi-extension-context:end ---\n\nx';
+        expect(parseContextRefs(text)).toEqual([{ type: 'file', path: 'src/a.ts' }]);
     });
 });

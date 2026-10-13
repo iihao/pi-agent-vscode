@@ -37,6 +37,11 @@ export function logError(msg: string): void {
     write('error', msg);
 }
 
+/** 显示输出通道（错误气泡里的「查看日志」） */
+export function showLogs(): void {
+    channel?.show(true);
+}
+
 /** 导出诊断文本（日志 + 基本环境信息） */
 export function buildDiagnostics(extensionPath: string): string {
     const header = [

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEdits, isRevertible, revertEdits } from './chatPanel/turnChanges';
+import { parseEdits, isRevertible, revertEdits, editsToDiff, lineDiff } from './chatPanel/turnChanges';
 import { buildNamePrompt, buildCommitPrompt, buildPrPrompt } from './chatPanel/prompts';
 
 describe('revertEdits', () => {
@@ -23,8 +23,12 @@ describe('isRevertible', () => {
         expect(isRevertible({ rel: 'a.ts', existed: false, edits: [] })).toBe(true);
     });
 
-    it('is false for overwritten files (write)', () => {
+    it('is false for overwritten files (write) without a snapshot', () => {
         expect(isRevertible({ rel: 'a.ts', existed: true, edits: null })).toBe(false);
+    });
+
+    it('is true for overwritten files when we have a pre-turn snapshot', () => {
+        expect(isRevertible({ rel: 'a.ts', existed: true, edits: null, before: 'old' })).toBe(true);
     });
 
     it('is false when an edit removes text (empty newText)', () => {
@@ -45,6 +49,36 @@ describe('parseEdits', () => {
     it('returns [] for missing or non-array edits', () => {
         expect(parseEdits(undefined)).toEqual([]);
         expect(parseEdits({ edits: 'nope' })).toEqual([]);
+    });
+});
+
+describe('editsToDiff', () => {
+    it('renders old lines as - and new lines as +', () => {
+        expect(editsToDiff([{ oldText: 'a\nb', newText: 'c' }])).toBe('-a\n-b\n+c');
+    });
+
+    it('truncates very long diffs with a marker', () => {
+        const big = [{ oldText: 'x\n'.repeat(80), newText: 'y' }];
+        const out = editsToDiff(big, 10);
+        expect(out.split('\n').length).toBe(11);
+        expect(out).toContain('more lines');
+    });
+});
+
+describe('lineDiff', () => {
+    it('keeps common lines as context and marks the change', () => {
+        const out = lineDiff('a\nb\nc', 'a\nB\nc');
+        expect(out).toBe(' a\n-b\n+B\n c');
+    });
+
+    it('treats an empty before as all additions (new file)', () => {
+        expect(lineDiff('', 'x\ny')).toBe('+x\n+y');
+    });
+
+    it('truncates very long diffs', () => {
+        const out = lineDiff('', Array.from({ length: 300 }, (_, i) => 'l' + i).join('\n'), 20);
+        expect(out.split('\n').length).toBe(21);
+        expect(out).toContain('more lines');
     });
 });
 

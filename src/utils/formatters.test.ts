@@ -58,9 +58,16 @@ describe('extractToolOutput', () => {
         expect(extractToolOutput(undefined)).toBe('');
     });
 
-    it('truncates long output with a notice', () => {
-        const out = extractToolOutput({ content: [{ type: 'text', text: 'x'.repeat(25000) }] });
+    it('truncates output with a notice when it exceeds the cap', () => {
+        // 显式传入上限，验证「只在真的超过上限时才截断，且必须写明」
+        const out = extractToolOutput({ content: [{ type: 'text', text: 'x'.repeat(2500) }] }, 1000);
         expect(out).toContain('output truncated');
-        expect(out.length).toBeLessThan(20100);
+        expect(out.length).toBeLessThan(1100);
+    });
+
+    it('keeps realistically long tool output intact (no second truncation)', () => {
+        // 实测最长工具输出约 5 万字符：扩展不应再截断一次，避免丢内容
+        const text = 'x'.repeat(60000);
+        expect(extractToolOutput({ content: [{ type: 'text', text }] })).toBe(text);
     });
 });

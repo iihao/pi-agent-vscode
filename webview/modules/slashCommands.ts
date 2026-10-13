@@ -99,21 +99,6 @@ export function setSuggestIndex(i: number): void {
     ctx.suggestIndex = i;
 }
 
-/** 程序化打开 suggest 弹窗（不依赖文本扫描） */
-export function openCustomSuggest(
-    items: SuggestItem[],
-    mode: 'slash' | 'file' = 'slash',
-    suggestStart: number = 0,
-    suggestEnd: number = 0
-): void {
-    ctx.suggestMode = mode;
-    ctx.suggestStart = suggestStart;
-    ctx.suggestEnd = suggestEnd;
-    ctx.suggestItems = items;
-    ctx.suggestIndex = 0;
-    renderSuggest();
-}
-
 /** 内置斜杠命令列表（用于 suggest 展示） */
 export interface BuiltinCommand {
     name: string;
@@ -139,14 +124,4 @@ export function builtinSuggestItems(): SuggestItem[] {
     return BUILTIN_COMMANDS.map(function (c) {
         return { label: '/' + c.name, detail: c.description, source: '', insert: '/' + c.name + ' ' };
     });
-}
-
-/** /compact 命令的 suggest 项 */
-export function compactSuggestItems(): SuggestItem[] {
-    return [{
-        label: '/compact',
-        detail: 'Compact session (summarize older turns)',
-        source: '',
-        insert: '/compact '
-    }];
 }

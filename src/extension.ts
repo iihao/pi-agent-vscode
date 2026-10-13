@@ -3,6 +3,18 @@ import { ChatPanel } from './chatPanel';
 import { initLogger, setLogLevel, buildDiagnostics, logInfo, LogLevel } from './utils/logger';
 import { initRecentFiles } from './utils/recentFiles';
 
+/** 自动附件同步的防抖定时器 */
+let autoContextTimer: NodeJS.Timeout | undefined;
+
+/** 防抖调用 syncAutoContext（每次选区变化都触发，需要节流） */
+function scheduleSyncAutoContext(): void {
+    if (autoContextTimer) { clearTimeout(autoContextTimer); }
+    autoContextTimer = setTimeout(() => {
+        autoContextTimer = undefined;
+        ChatPanel.syncAutoContext();
+    }, 150);
+}
+
 export function activate(context: vscode.ExtensionContext) {
     const output = initLogger();
     applyLogLevel();
@@ -11,6 +23,18 @@ export function activate(context: vscode.ExtensionContext) {
 
     // 注册侧边栏聊天视图（activitybar 图标 → 聊天面板）
     ChatPanel.registerViewProvider(context, context.extensionPath);
+
+    // 当前编辑器/选区变化 → 同步输入框的自动文件附件（默认开启）
+    ChatPanel.syncAutoContext();
+    context.subscriptions.push(
+        vscode.window.onDidChangeActiveTextEditor(() => scheduleSyncAutoContext()),
+        vscode.window.onDidChangeTextEditorSelection(() => scheduleSyncAutoContext()),
+        vscode.workspace.onDidChangeConfiguration((e) => {
+            if (e.affectsConfiguration('pi-agent.context.autoAttachActiveEditor')) {
+                ChatPanel.syncAutoContext();
+            }
+        }),
+    );
 
     // ---- 打开对话（聚焦侧边栏聊天视图）----
     const openChat = vscode.commands.registerCommand('pi-agent.openChat', () => {
@@ -106,6 +130,13 @@ export function activate(context: vscode.ExtensionContext) {
         ChatPanel.openInEditor(context.extensionPath, vscode.ViewColumn.Beside);
     });
 
+    // ---- 在辅助侧边栏（右侧）打开 ----
+    const openInSecondarySideBar = vscode.commands.registerCommand('pi-agent.openInSecondarySideBar', () => {
+        void ChatPanel.openInSecondarySideBar().catch((err: unknown) => {
+            void vscode.window.showErrorMessage(`Pi: ${(err as Error).message}`);
+        });
+    });
+
     // ---- 附加编辑器上下文 ----
     const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', () =>
         withPanel((panel) => panel.attachFile()));
@@ -138,17 +169,20 @@ export function activate(context: vscode.ExtensionContext) {
         if (e.affectsConfiguration('pi-agent.diagnostics.level')) {
             applyLogLevel();
         }
+        if (e.affectsConfiguration('pi-agent.context.autoAttachActiveEditor')) {
+            ChatPanel.syncAutoContext();
+        }
         if (e.affectsConfiguration('pi-agent.pi.executable') ||
             e.affectsConfiguration('pi-agent.pi.arguments') ||
             e.affectsConfiguration('pi-agent.agent.permissionMode')) {
             // 提示用户配置变更会导致会话重启
-            const panel = ChatPanel.currentView;
-            if (panel) {
+            if (ChatPanel.currentView) {
                 void vscode.window.showInformationMessage(
                     vscode.l10n.t('Configuration changed; restarting Pi session…')
                 );
             }
-            void panel?.restartClient();
+            // 所有会话运行时都重启，而不只当前面板绑定的那个
+            void ChatPanel.restartAllClients();
         }
     });
 
@@ -177,6 +211,7 @@ export function activate(context: vscode.ExtensionContext) {
         cloneSession,
         openInEditor,
         openInEditorToSide,
+        openInSecondarySideBar,
         attachFile,
         attachSelection,
         attachFiles,
@@ -237,5 +272,9 @@ export function getSelectionContext(): SelectionContext | undefined {
 
 export function deactivate() {
     // 视图由 VSCode 自动销毁；停掉共享的 pi 客户端
+    if (autoContextTimer) {
+        clearTimeout(autoContextTimer);
+        autoContextTimer = undefined;
+    }
     void ChatPanel.stopSharedClient();
 }

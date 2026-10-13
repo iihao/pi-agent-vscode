@@ -31,6 +31,7 @@ export const window = {
     showSaveDialog: (_opts?: unknown) => Promise.resolve(undefined),
     showOpenDialog: (_opts?: unknown) => Promise.resolve([] as unknown[]),
     showTextDocument: (doc: unknown) => Promise.resolve({ document: doc }),
+    createTerminal: (_opts?: unknown) => ({ show: () => { /* noop */ }, sendText: (_t: string) => { /* noop */ }, dispose: () => { /* noop */ } }),
     activeTextEditor: undefined,
     tabGroups: { all: [] },
     state: { focused: true },
@@ -39,6 +40,7 @@ export const window = {
 export const workspace = {
     getConfiguration: (_section?: string) => ({ get: (_k: string, d: unknown) => d }),
     workspaceFolders: [] as unknown[],
+    isTrusted: true,
     asRelativePath: (p: unknown) => (typeof p === 'string' ? p : (p as { fsPath?: string }).fsPath ?? ''),
     getWorkspaceFolder: (_uri: unknown) => undefined,
     findFiles: (_include: unknown, _exclude?: unknown, _max?: unknown) => Promise.resolve([]),

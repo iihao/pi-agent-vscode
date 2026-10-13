@@ -9,6 +9,16 @@ const t = vscode.l10n.t;
 export interface UiStrings {
     [key: string]: unknown;
     connStatus: string;
+    setupTitle: string;
+    setupTrust: string;
+    setupTrustAction: string;
+    setupPi: string;
+    setupPiAction: string;
+    setupConnect: string;
+    setupConnectAction: string;
+    setupModel: string;
+    setupModelAction: string;
+    setupLogs: string;
     outlineTitle: string;
     noMessages: string;
     prevQuestion: string;
@@ -17,6 +27,7 @@ export interface UiStrings {
     exportTitle: string;
     newChatTitle: string;
     sessionTitle: string;
+    sessionSearch: string;
     currentSession: string;
     searchPlaceholder: string;
     prev: string;
@@ -40,6 +51,8 @@ export interface UiStrings {
     queued: string;
     steering: string;
     bashTruncated: string;
+    outputTruncated: string;
+    openFullOutput: string;
     imageTooLarge: string;
     attachTitle: string;
     attachFilesFolders: string;
@@ -57,6 +70,11 @@ export interface UiStrings {
     permission: string;
     sendTitle: string;
     stopTitle: string;
+    queueTitle: string;
+    steerTitle: string;
+    modeTitle: string;
+    modeQueue: string;
+    modeSteer: string;
     historyDivider: string;
     exportHeader: string;
     exportTime: string;
@@ -74,7 +92,14 @@ export interface UiStrings {
     noResults: string;
     messages: string;
     changedFiles: string;
+    showDiff: string;
     revert: string;
+    revertOne: string;
+    revertLocked: string;
+    undoRevert: string;
+    undoRevertHint: string;
+    allRestored: string;
+    someRestoreFailed: string;
     you: string;
     context: string;
     cumulative: string;
@@ -91,6 +116,16 @@ export interface UiStrings {
 export function getUiStrings(): UiStrings {
     return {
         connStatus: t('Connection status'),
+        setupTitle: t('Set up Pi'),
+        setupTrust: t('Workspace trusted'),
+        setupTrustAction: t('Manage trust'),
+        setupPi: t('pi CLI installed'),
+        setupPiAction: t('Install pi'),
+        setupConnect: t('Connected to pi'),
+        setupConnectAction: t('Retry'),
+        setupModel: t('Model available'),
+        setupModelAction: t('Sign in to pi'),
+        setupLogs: t('Show logs'),
         outlineTitle: t('Jump to a question'),
         noMessages: t('No questions yet'),
         prevQuestion: t('Previous question'),
@@ -99,6 +134,7 @@ export function getUiStrings(): UiStrings {
         exportTitle: t('Export conversation as Markdown'),
         newChatTitle: t('New chat'),
         sessionTitle: t('Sessions'),
+        sessionSearch: t('Search sessions…'),
         currentSession: t('Current session'),
         searchPlaceholder: t('Search messages…'),
         prev: t('Previous'),
@@ -118,10 +154,12 @@ export function getUiStrings(): UiStrings {
         kbdHistory: t('history'),
         kbdJump: t('jump questions'),
         inputPlaceholder: t('Describe a task for pi… (@ file, / command, ! shell)'),
-        inputBusyPlaceholder: t('Pi is working — Enter to queue, Ctrl/Cmd+Enter to steer'),
+        inputBusyPlaceholder: t('Pi is working — press Enter to send'),
         queued: t('Queued'),
         steering: t('Steering'),
         bashTruncated: t('Output truncated'),
+        outputTruncated: t('Output truncated by pi'),
+        openFullOutput: t('Open full output'),
         imageTooLarge: t('Image is too large (max 5 MB)'),
         attachTitle: t('Add context'),
         attachFilesFolders: t('Files & folders…'),
@@ -139,6 +177,11 @@ export function getUiStrings(): UiStrings {
         permission: t('Permission'),
         sendTitle: t('Send'),
         stopTitle: t('Stop'),
+        queueTitle: t('Queue for after the current turn'),
+        steerTitle: t('Steer the running turn (insert now)'),
+        modeTitle: t('How to send while pi is working'),
+        modeQueue: t('Queue'),
+        modeSteer: t('Steer'),
         historyDivider: t('History above'),
         exportHeader: t('# Pi Agent Conversation'),
         exportTime: t('Exported: '),
@@ -156,7 +199,16 @@ export function getUiStrings(): UiStrings {
         noResults: t('No results'),
         messages: t('messages'),
         changedFiles: t('Changed files'),
-        revert: t('Revert'),
+        showDiff: t('Show diff'),
+        revert: t('Revert all'),
+        revertOne: t('Undo this file\u2019s changes'),
+        revertLocked: process.platform === 'darwin'
+            ? t('Overwritten — undo in your editor (⌘Z)')
+            : t('Overwritten — undo in your editor (Ctrl+Z)'),
+        undoRevert: t('Undo'),
+        undoRevertHint: t('Restore the changes you just reverted'),
+        allRestored: t('All changes undone'),
+        someRestoreFailed: t('{0} of {1} undone'),
         you: t('You'),
         context: t('Context'),
         cumulative: t('Cumulative'),

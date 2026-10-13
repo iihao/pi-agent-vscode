@@ -11,8 +11,18 @@ export interface PiUsage {
 
 export interface PiAssistantMessageEvent {
     type: string;
+    /** 增量文本（text_delta / thinking_delta） */
     delta?: string;
     toolName?: string;
+    /** 内容块下标：text_* / thinking_* / toolcall_* 事件都会携带 */
+    contentIndex?: number;
+    /** text_end 携带的该文本块完整内容（增量缺失时的权威来源） */
+    content?: string;
+    /**
+     * thinking_end 携带的该思考块完整内容。
+     * 各 provider 适配器用 `content`，pi-messages 通道用 `thinking`，两者都要兜住。
+     */
+    thinking?: string;
 }
 
 export interface PiToolResultBlock {
@@ -26,8 +36,22 @@ export interface PiToolResultDetails {
     /** 编辑工具：unified patch */
     patch?: string;
     firstChangedLine?: number;
+    /** 输出被 pi 截断时，完整输出的落盘路径 */
     fullOutputPath?: string;
-    truncation?: unknown;
+    /** pi 自身的截断信息（注意：这是 pi 的截断，扩展不应再截断一次） */
+    truncation?: PiToolTruncation;
+}
+
+/** pi 对超长工具输出的截断信息 */
+export interface PiToolTruncation {
+    truncated?: boolean;
+    truncatedBy?: string;
+    totalLines?: number;
+    totalBytes?: number;
+    outputLines?: number;
+    outputBytes?: number;
+    maxLines?: number;
+    maxBytes?: number;
 }
 
 export interface PiToolResult {
@@ -57,7 +81,8 @@ export interface PiAgentEvent {
     id?: string;
     method?: string;
     title?: string;
-    message?: string;
+    /** extension_ui_request 的提示文本；message_start / message_end 时是完整消息 */
+    message?: string | PiRawMessage;
     options?: string[];
     placeholder?: string;
     prefill?: string;
@@ -82,6 +107,89 @@ export function respondExtensionUI(
         logError(`respondExtensionUI failed: ${(err as Error).message}`);
         return false;
     }
+}
+
+// ---------------------------------------------------------------------------
+// 长任务超时补丁
+// ---------------------------------------------------------------------------
+
+/**
+ * pi SDK 的 `RpcClient.send` 内部硬编码了 30s 响应超时，且 RpcClientOptions
+ * 没有提供配置项。`compact`（模型总结长会话）与 `bash`（长命令）很容易超过，
+ * 于是抛「Timeout waiting for response to ...」。
+ *
+ * 这里在实例上包一层 `send`：长任务命令使用更长的超时，其余命令仍走原实现。
+ * 依赖 SDK 的私有字段（process / pendingRequests / requestId / ...），
+ * 结构不符时安全回退（不改动 send）。
+ */
+const LONG_RUNNING_COMMAND_TIMEOUT_MS: Record<string, number> = {
+    compact: 10 * 60 * 1000,
+    bash: 10 * 60 * 1000,
+};
+
+interface PatchedRpcClient {
+    send?: (command: { type: string }) => Promise<unknown>;
+    pendingRequests?: Map<string, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>;
+    requestId?: number;
+    process?: {
+        stdin?: { write(data: string): boolean; destroyed?: boolean; writable?: boolean };
+        exitCode?: number | null;
+        signalCode?: string | null;
+    };
+    stderr?: string;
+    exitError?: unknown;
+    createProcessExitError?: (code: number | null, signal: string | null) => Error;
+    __piTimeoutPatched?: boolean;
+}
+
+export function patchLongRunningTimeouts(client: PiRpcClient): void {
+    const c = client as unknown as PatchedRpcClient;
+    if (c.__piTimeoutPatched) { return; }
+    const originalSend = c.send;
+    const pendingRequests = c.pendingRequests;
+    if (typeof originalSend !== 'function' || !(pendingRequests instanceof Map)) { return; }
+
+    c.send = function sendWithLongTimeout(command: { type: string }): Promise<unknown> {
+        const timeoutMs = LONG_RUNNING_COMMAND_TIMEOUT_MS[command?.type];
+        if (!timeoutMs) { return originalSend.call(this, command); }
+
+        const proc = c.process;
+        const stdin = proc?.stdin;
+        if (!proc || !stdin) { return Promise.reject(new Error('Pi client not started')); }
+        if (c.exitError) { return Promise.reject(c.exitError); }
+        if (proc.exitCode !== null && proc.exitCode !== undefined) {
+            const error = c.createProcessExitError?.(proc.exitCode, proc.signalCode ?? null)
+                ?? new Error(`Agent process exited (code=${proc.exitCode} signal=${proc.signalCode ?? ''})`);
+            c.exitError = error;
+            return Promise.reject(error);
+        }
+        if (stdin.destroyed || !stdin.writable) {
+            return Promise.reject(new Error('Agent process stdin is not writable'));
+        }
+
+        c.requestId = (c.requestId ?? 0) + 1;
+        const id = `req_${c.requestId}`;
+        const fullCommand = { ...command, id };
+        return new Promise<unknown>((resolve, reject) => {
+            const timer = setTimeout(() => {
+                pendingRequests.delete(id);
+                reject(new Error(`Timeout waiting for response to ${command.type} after ${timeoutMs}ms. Stderr: ${c.stderr ?? ''}`));
+            }, timeoutMs);
+            pendingRequests.set(id, {
+                resolve: (value) => { clearTimeout(timer); resolve(value); },
+                reject: (error) => { clearTimeout(timer); reject(error); },
+            });
+            try {
+                // SDK 的 serializeJsonLine 即 `${JSON.stringify(value)}\n`，这里等价实现
+                stdin.write(JSON.stringify(fullCommand) + '\n');
+            } catch (error) {
+                const writeError = error instanceof Error ? error : new Error(String(error));
+                pendingRequests.delete(id);
+                reject(writeError);
+            }
+        });
+    };
+    c.__piTimeoutPatched = true;
 }
 
 export interface PiSessionState {
@@ -126,6 +234,35 @@ export interface PiModelInfo {
 export interface PiRawMessage {
     role?: string;
     content?: unknown;
+    /** assistant：stop / toolUse / length / error / aborted */
+    stopReason?: string;
+    /** assistant：本回合失败原因（pi 用一条空消息承载错误） */
+    errorMessage?: string;
+    /** toolResult：对应的 toolCallId */
+    toolCallId?: string;
+    /** toolResult：工具名 */
+    toolName?: string;
+    /** toolResult：是否失败 */
+    isError?: boolean;
+    /** toolResult：耗时 */
+    durationMs?: number;
+}
+
+/** 助手消息里的工具调用块 */
+export interface PiToolCallBlock {
+    id?: string;
+    name?: string;
+    arguments?: unknown;
+}
+
+/** 工具结果消息（role: 'toolResult'） */
+export interface PiToolResultMessage {
+    toolCallId: string;
+    toolName: string;
+    isError: boolean;
+    durationMs?: number;
+    content?: PiToolResultBlock[] | string;
+    details?: PiToolResultDetails;
 }
 
 export interface PiRpcClient {
@@ -436,6 +573,45 @@ export function extractMessageText(m: PiRawMessage): string | null {
         return joined || null;
     }
     return null;
+}
+
+export interface PiMessageParts {
+    /** 所有 text 块按顺序原样拼接（不加分隔符，便于与流式增量做前缀比对） */
+    text: string;
+    /** 所有 thinking 块按顺序原样拼接 */
+    thinking: string;
+    toolCalls: PiToolCallBlock[];
+}
+
+/** 拆解助手消息内容块（text / thinking / toolCall），用于漏内容补齐 */
+export function extractMessageParts(m: PiRawMessage): PiMessageParts {
+    const out: PiMessageParts = { text: '', thinking: '', toolCalls: [] };
+    const c = m.content;
+    if (typeof c === 'string') { out.text = c; return out; }
+    if (!Array.isArray(c)) { return out; }
+    for (const block of c) {
+        if (!block || typeof block !== 'object') { continue; }
+        const b = block as { type?: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: unknown };
+        if (b.type === 'text' && typeof b.text === 'string') { out.text += b.text; }
+        else if (b.type === 'thinking' && typeof b.thinking === 'string') { out.thinking += b.thinking; }
+        else if (b.type === 'toolCall') {
+            out.toolCalls.push({ id: b.id, name: b.name, arguments: b.arguments });
+        }
+    }
+    return out;
+}
+
+/** 读取工具结果消息（role: 'toolResult'），非工具结果返回 null */
+export function extractToolResult(m: PiRawMessage): PiToolResultMessage | null {
+    if (m.role !== 'toolResult' || !m.toolCallId) { return null; }
+    return {
+        toolCallId: m.toolCallId,
+        toolName: m.toolName || 'tool',
+        isError: Boolean(m.isError),
+        durationMs: m.durationMs,
+        content: m.content as PiToolResultBlock[] | string | undefined,
+        details: (m as { details?: PiToolResultDetails }).details,
+    };
 }
 
 export interface PiImageBlock {

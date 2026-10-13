@@ -16,16 +16,23 @@ import { fileURLToPath } from 'node:url';
  *  如需完整的 ELK 布局，删除下面 alias 即可。 */
 const elkStub = fileURLToPath(new URL('./webview/elk-stub.js', import.meta.url));
 
-/** katex 的 CSS 同时引用了 woff2/woff/ttf，现代 VSCode 只需 woff2：
- *  在打包时去掉 woff/ttf 的 src，避免把三类字体都复制进 media/。 */
+/**
+ * KaTeX 的 CSS 同时引用了 woff2/woff/ttf 三种字体，但现代 VSCode（Chromium 内核）
+ * 只需 woff2 即可渲染数学公式。此插件在打包时移除 woff/ttf 的 src 声明，
+ * 使 esbuild 不会将这两类字体复制到 media/，减小 VSIX 体积。
+ *
+ * 匹配格式：,url(<path>.woff)  format("woff")
+ *           ,url(<path>.ttf)   format("truetype")
+ * 注意：必须保留开头的逗号，避免误删首条 src（首条无前导逗号）。
+ */
+const KATEX_FONT_REMOVAL = /,url\([^)]*?\.(?:woff|ttf)\)\s*format\("(?:woff|truetype)"\)/g;
+const KATEX_CSS_FILTER = /katex[\\/].*\.css$/;
+
 const katexWoff2Only = {
     name: 'katex-woff2-only',
     setup(build) {
-        build.onLoad({ filter: /katex[\\/].*\.css$/ }, async (args) => {
-            let css = await readFile(args.path, 'utf8');
-            css = css
-                .replace(/,url\([^)]*\.woff\)\s*format\("woff"\)/g, '')
-                .replace(/,url\([^)]*\.ttf\)\s*format\("truetype"\)/g, '');
+        build.onLoad({ filter: KATEX_CSS_FILTER }, async (args) => {
+            const css = (await readFile(args.path, 'utf8')).replace(KATEX_FONT_REMOVAL, '');
             return { contents: css, loader: 'css', resolveDir: dirname(args.path) };
         });
     },

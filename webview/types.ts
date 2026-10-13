@@ -19,9 +19,17 @@ export interface UiStringsData {
     exportTime: string;
     imageTooLarge: string;
     bashTruncated: string;
+    outputTruncated: string;
+    openFullOutput: string;
     historyDivider: string;
     changedFiles: string;
     revert: string;
+    revertOne: string;
+    revertLocked: string;
+    undoRevert: string;
+    undoRevertHint: string;
+    allRestored: string;
+    someRestoreFailed: string;
     remove: string;
     rename: string;
     context: string;
@@ -70,8 +78,12 @@ export type UiStrings = UiStringsData & {
 export interface ChatElements {
     chat: HTMLElement;
     welcome: HTMLElement;
+    welcomeSetup: HTMLElement;
     input: HTMLTextAreaElement;
     sendBtn: HTMLButtonElement;
+    stopBtn: HTMLButtonElement;
+    modeBtn: HTMLButtonElement;
+    modeLabel: HTMLElement;
     attachBtn: HTMLButtonElement;
     chipRow: HTMLElement;
     imageRow: HTMLElement;
@@ -131,6 +143,15 @@ export interface SessionInfo {
 
 export interface ContextChip {
     id: string;
+    type: string;
+    path: string;
+    lineRange?: string;
+    /** 由当前活动编辑器自动附加（可叉掉） */
+    auto?: boolean;
+}
+
+/** 用户消息回显用的文件/选区附件 */
+export interface MessageAttachment {
     type: string;
     path: string;
     lineRange?: string;
@@ -197,9 +218,19 @@ export interface StatsInfo {
     autoCompact: boolean;
 }
 
+export type TurnFileState = 'pending' | 'reverted' | 'deleted' | 'failed' | 'skipped';
+
 export interface TurnFile {
     path: string;
     status: 'created' | 'modified';
+    revertible: boolean;
+    state: TurnFileState;
+}
+
+export interface TurnRevertEntry {
+    path: string;
+    result: 'reverted' | 'deleted' | 'failed' | 'skipped';
+    error?: string;
 }
 
 export interface PermissionOption {
@@ -219,7 +250,7 @@ export interface VSCodeAPI {
 // ---- 消息类型 ----
 
 // ---- 从共享契约重新导出消息协议 ----
-export type { PostMessage, WebviewMessage } from '../src/chatPanel/sharedTypes';
+export type { PostMessage, WebviewMessage, SetupStatus, ContextAttachment } from '../src/chatPanel/sharedTypes';
 
 // ---- 共享上下文 ----
 
@@ -229,6 +260,8 @@ export interface WebviewContext {
     els: ChatElements;
     // Streaming state
     busy: boolean;
+    /** 忙碌时按下发送的行为：排队 / 插话 */
+    sendMode: 'queue' | 'steer';
     currentBody: HTMLElement | null;
     currentBuffer: string;
     streamRenderScheduled: boolean;
@@ -249,6 +282,8 @@ export interface WebviewContext {
     // Sessions
     sessionsList: SessionInfo[];
     currentSessionId: string | null;
+    /** 会话列表的搜索关键词 */
+    sessionQuery: string;
     // Contexts
     contexts: ContextChip[];
     // Images

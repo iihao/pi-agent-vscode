@@ -144,8 +144,8 @@ export function send(mode?: string): void {
         autoResizeInput();
         return;
     }
-    // 忙碌时：默认排队（follow-up），带修饰键则 steer 插入当前回合
-    ctx.vscode.postMessage({ type: 'sendMessage', text: text, mode: ctx.busy ? (mode || 'queue') : undefined, images: images.length ? images : undefined });
+    // 忙碌时：按当前模式（排队 / 插话）发送，带修饰键则强制插话
+    ctx.vscode.postMessage({ type: 'sendMessage', text: text, mode: ctx.busy ? (mode ?? ctx.sendMode) : undefined, images: images.length ? images : undefined });
     input.value = '';
     ctx.pendingImages = [];
     renderImages();

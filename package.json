@@ -2,7 +2,7 @@
   "name": "pi-agent-assistant",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "publisher": "iihao",
   "license": "MIT",
   "author": {
@@ -63,12 +63,14 @@
     "onCommand:pi-agent.cloneSession",
     "onCommand:pi-agent.openInEditor",
     "onCommand:pi-agent.openInEditorToSide",
+    "onCommand:pi-agent.openInSecondarySideBar",
     "onCommand:pi-agent.restartSession",
     "onCommand:pi-agent.exportDiagnostics",
     "onCommand:pi-agent.attachFile",
     "onCommand:pi-agent.attachSelection",
     "onCommand:pi-agent.attachFiles",
-    "onView:pi-agent.chatView"
+    "onView:pi-agent.chatView",
+    "onView:pi-agent.chatViewSecondary"
   ],
   "main": "./out/extension.js",
   "l10n": "./l10n",
@@ -151,6 +153,11 @@
         "icon": "$(split-horizontal)"
       },
       {
+        "command": "pi-agent.openInSecondarySideBar",
+        "title": "%cmd.openInSecondarySideBar%",
+        "icon": "$(layout-sidebar-right)"
+      },
+      {
         "command": "pi-agent.attachFile",
         "title": "%cmd.attachFile%",
         "icon": "$(add)"
@@ -214,19 +221,29 @@
       "view/title": [
         {
           "command": "pi-agent.restartSession",
-          "when": "view == pi-agent.chatView",
+          "when": "view == pi-agent.chatView || view == pi-agent.chatViewSecondary",
           "group": "navigation@1"
         },
         {
           "command": "pi-agent.openInEditor",
-          "when": "view == pi-agent.chatView",
+          "when": "view == pi-agent.chatView || view == pi-agent.chatViewSecondary",
           "group": "navigation@2"
+        },
+        {
+          "command": "pi-agent.openInSecondarySideBar",
+          "when": "view == pi-agent.chatView",
+          "group": "navigation@3"
         }
       ],
       "editor/title": [
         {
           "command": "pi-agent.openInEditor",
           "group": "navigation@99"
+        },
+        {
+          "command": "pi-agent.openInSecondarySideBar",
+          "when": "activeWebviewPanelId == pi-agent.chatEditor",
+          "group": "navigation@100"
         }
       ],
       "scm/title": [
@@ -244,6 +261,13 @@
           "title": "Pi Agent",
           "icon": "assets/icon-activity.svg"
         }
+      ],
+      "secondarySidebar": [
+        {
+          "id": "pi-agent-secondary",
+          "title": "Pi Agent",
+          "icon": "assets/icon-activity.svg"
+        }
       ]
     },
     "views": {
@@ -251,6 +275,14 @@
         {
           "type": "webview",
           "id": "pi-agent.chatView",
+          "name": "%view.chat.name%",
+          "icon": "$(comment-discussion)"
+        }
+      ],
+      "pi-agent-secondary": [
+        {
+          "type": "webview",
+          "id": "pi-agent.chatViewSecondary",
           "name": "%view.chat.name%",
           "icon": "$(comment-discussion)"
         }
@@ -325,6 +357,12 @@
           "default": false,
           "scope": "resource",
           "description": "%config.context.autoAttach%"
+        },
+        "pi-agent.context.autoAttachActiveEditor": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "%config.context.autoAttachActiveEditor%"
         },
         "pi-agent.context.includeDiagnostics": {
           "type": "boolean",

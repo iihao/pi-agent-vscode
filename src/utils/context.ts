@@ -12,7 +12,12 @@ export interface ContextRef {
 /** 已附加的上下文条目（引用 + 稳定 id） */
 export interface ContextItem extends ContextRef {
     id: string;
+    /** 由当前活动编辑器自动附加（可被用户叉掉），区别于用户手动附加 */
+    auto?: boolean;
 }
+
+/** 自动附加条目的保留 id（同一时刻至多一个） */
+export const AUTO_CONTEXT_ID = 'auto';
 
 const BLOCK_START = '--- pi-extension-context:start ---';
 const BLOCK_END = '--- pi-extension-context:end ---';
@@ -44,4 +49,35 @@ export function stripContextBlock(text: string): string {
     const end = text.indexOf(BLOCK_END, start);
     if (end === -1) { return text; }
     return text.slice(end + BLOCK_END.length).replace(/^\s+/, '');
+}
+
+/**
+ * 从消息文本里解析 context 块中的引用（用于历史消息回显附件）。
+ * 识别 `<file-context>` 内以 `@` 开头的行；尾部 `:行号[-行号]` 视为选区。
+ */
+export function parseContextRefs(text: string): ContextRef[] {
+    const start = text.indexOf(BLOCK_START);
+    if (start === -1) { return []; }
+    const end = text.indexOf(BLOCK_END, start);
+    if (end === -1) { return []; }
+    const block = text.slice(start + BLOCK_START.length, end);
+    const open = block.indexOf('<file-context>');
+    const close = block.indexOf('</file-context>');
+    if (open === -1 || close === -1 || close < open) { return []; }
+    const body = block.slice(open + '<file-context>'.length, close);
+    const refs: ContextRef[] = [];
+    const seen = new Set<string>();
+    for (const raw of body.split('\n')) {
+        const line = raw.trim();
+        if (!line.startsWith('@')) { continue; }
+        const value = line.slice(1).trim();
+        if (!value) { continue; }
+        const m = value.match(/^(.*):(\d+(?:-\d+)?)$/);
+        const ref: ContextRef = m
+            ? { type: 'selection', path: m[1], lineRange: m[2] }
+            : { type: 'file', path: value };
+        const key = `${ref.type}:${ref.path}:${ref.lineRange || ''}`;
+        if (!seen.has(key)) { seen.add(key); refs.push(ref); }
+    }
+    return refs;
 }

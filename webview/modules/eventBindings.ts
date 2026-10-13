@@ -4,13 +4,14 @@
 
 import type { WebviewContext } from '../types';
 import { getMessageText } from '../utils';
-import { closePopovers, togglePopover } from './panels';
+import { closePopovers, togglePopover, renderSessionPanel } from './panels';
 import { jumpToUserMessage, navigateUserMessage, updateRailActive, renderOutline } from './navigator';
 import { searchMessages, goToMatch, clearSearch } from './search';
 import { updateSuggest, renderSuggest, acceptSuggest, closeSuggest, suggestOpen, setSuggestIndex } from './slashCommands';
 import { exportConversation } from './exporter';
 import { readImage, renderImages } from './imagePaste';
 import { send, navigateHistory, autoResizeInput, copyMessage, editMessage, deleteMessage } from './inputHandling';
+import { updateSendAffordances } from './messageRenderer';
 
 let ctx: WebviewContext;
 
@@ -92,7 +93,15 @@ function bindSearchEvents(): void {
 function bindInputEvents(): void {
     const els = ctx.els;
     els.sendBtn.addEventListener('click', function () {
-        if (ctx.busy) { ctx.vscode.postMessage({ type: 'abort' }); } else { send(); }
+        // 忙碌时按当前模式发送（排队 / 插话），空闲时直接发送
+        send(ctx.busy ? ctx.sendMode : undefined);
+    });
+    els.stopBtn.addEventListener('click', function () {
+        ctx.vscode.postMessage({ type: 'abort' });
+    });
+    els.modeBtn.addEventListener('click', function () {
+        ctx.sendMode = ctx.sendMode === 'queue' ? 'steer' : 'queue';
+        updateSendAffordances();
     });
     els.input.addEventListener('input', function () { autoResizeInput(); updateSuggest(); });
     els.input.addEventListener('click', function () { updateSuggest(); });
@@ -147,7 +156,8 @@ function bindInputEvents(): void {
         }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            send(e.ctrlKey || e.metaKey ? 'steer' : undefined);
+            // Ctrl/Cmd+Enter 强制插话；否则按当前模式（忙碌时排队/插话）
+            send(e.ctrlKey || e.metaKey ? 'steer' : (ctx.busy ? ctx.sendMode : undefined));
         } else if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
             els.searchBar.classList.add('visible');
@@ -220,6 +230,13 @@ function bindPanelEvents(): void {
         if (btn) { ctx.vscode.postMessage({ type: 'removeContext', id: btn.dataset.id }); }
     });
     els.sessionBtn.addEventListener('click', function (e) { e.stopPropagation(); togglePopover(els.sessionPanel); });
+    els.sessionPanel.addEventListener('input', function (e) {
+        // 会话搜索：只刷新列表，保留输入框焦点
+        const input = (e.target as HTMLElement).closest('.session-search') as HTMLInputElement | null;
+        if (!input) { return; }
+        ctx.sessionQuery = input.value;
+        renderSessionPanel();
+    });
     els.sessionPanel.addEventListener('click', function (e) {
         const act = (e.target as HTMLElement).closest('.session-row-act') as HTMLElement | null;
         if (act) {
@@ -243,10 +260,79 @@ function bindChatEvents(): void {
     const els = ctx.els;
     els.chat.addEventListener('click', function (e) {
         const target = e.target as HTMLElement;
-        const turnFile = target.closest('.turn-file') as HTMLElement | null;
-        if (turnFile) { ctx.vscode.postMessage({ type: 'openFile', path: turnFile.dataset.path }); return; }
-        const revertBtn = target.closest('.turn-changes-revert');
-        if (revertBtn) { ctx.vscode.postMessage({ type: 'revertTurn' }); return; }
+
+        // 首次环境自检清单上的一键动作（安装 pi / 登录 / 重试 / 受信 / 日志）
+        const setupBtn = target.closest('.setup-action, .setup-logs') as HTMLButtonElement | null;
+        if (setupBtn && setupBtn.dataset.action) {
+            ctx.vscode.postMessage({ type: 'setupAction', action: setupBtn.dataset.action });
+            return;
+        }
+
+        // 错误气泡上的可操作按钮
+        const errBtn = target.closest('.error-action') as HTMLButtonElement | null;
+        if (errBtn) {
+            const action = errBtn.dataset.action;
+            // 「切模型」在本地打开模型选择器，其余交给扩展宿主
+            if (action === 'model') { togglePopover(ctx.els.modelPanel); }
+            else if (action) { ctx.vscode.postMessage({ type: 'errorAction', action }); }
+            return;
+        }
+
+        // 逐文件撤销
+        const fileRevertBtn = target.closest('.turn-file-revert') as HTMLButtonElement | null;
+        if (fileRevertBtn) {
+            const row = fileRevertBtn.closest('.turn-file-row') as HTMLElement | null;
+            const path = row?.dataset.path;
+            if (path) {
+                fileRevertBtn.classList.add('busy');
+                ctx.vscode.postMessage({ type: 'revertTurnFile', path });
+            }
+            return;
+        }
+
+        // 展开 / 收起某个文件的内联 diff
+        const diffToggle = target.closest('.turn-file-diff-toggle') as HTMLButtonElement | null;
+        if (diffToggle) {
+            const row = diffToggle.closest('.turn-file-row') as HTMLElement | null;
+            const path = row?.dataset.path;
+            if (path) {
+                const block = ctx.els.chat.querySelector('.turn-file-diff[data-path="' + CSS.escape(path) + '"]') as HTMLElement | null;
+                block?.classList.toggle('hidden');
+                diffToggle.classList.toggle('active', Boolean(block && !block.classList.contains('hidden')));
+            }
+            return;
+        }
+
+        // 撤销全部
+        const revertBtn = target.closest('.turn-changes-revert') as HTMLButtonElement | null;
+        if (revertBtn) {
+            revertBtn.classList.add('busy');
+            revertBtn.disabled = true;
+            // 所有可撤销行显示忙碌态
+            const card = revertBtn.closest('.turn-changes') as HTMLElement | null;
+            card?.querySelectorAll('.turn-file-revert').forEach(function (b) { (b as HTMLButtonElement).disabled = true; });
+            ctx.vscode.postMessage({ type: 'revertTurn' });
+            return;
+        }
+
+        // 再撤回（撤销的撤销）
+        const undoBtn = target.closest('.turn-changes-undo') as HTMLButtonElement | null;
+        if (undoBtn) {
+            undoBtn.classList.add('busy');
+            undoBtn.disabled = true;
+            ctx.vscode.postMessage({ type: 'undoRevert' });
+            return;
+        }
+
+        // 打开工具完整输出文件
+        const fullOutputBtn = target.closest('.activity-open-output') as HTMLElement | null;
+        const fullOutputPath = fullOutputBtn?.dataset.path;
+        if (fullOutputPath) { ctx.vscode.postMessage({ type: 'openFile', path: fullOutputPath }); return; }
+
+        // 点击文件行 → 打开文件
+        const turnFile = target.closest('.turn-file-row') as HTMLElement | null;
+        const path = turnFile?.dataset.path;
+        if (path) { ctx.vscode.postMessage({ type: 'openFile', path }); return; }
         const link = target.closest('a[href]') as HTMLAnchorElement | null;
         if (link) {
             e.preventDefault();

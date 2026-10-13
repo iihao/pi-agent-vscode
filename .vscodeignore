@@ -25,3 +25,5 @@ node_modules/**
 # media/ 是 webview 构建产物，需要打包
 test/**
 vitest.config.ts
+# 本地开发工具配置，不随扩展发布
+.claude/**

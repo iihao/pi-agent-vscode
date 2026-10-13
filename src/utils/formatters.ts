@@ -9,7 +9,7 @@ import { logError } from './logger';
 /**
  * 从工具结果中提取可展示的文本输出（超长则截断）
  */
-export function extractToolOutput(result: PiToolResult | undefined, maxLen = 20000): string {
+export function extractToolOutput(result: PiToolResult | undefined, maxLen = 200000): string {
     if (!result) { return ''; }
     const c = result.content;
     let text = '';
@@ -45,6 +45,24 @@ export function summarizeToolArgs(args: unknown): string {
         return json.length > 90 ? json.slice(0, 90) + '…' : json;
     } catch (err) {
         logError(`summarizeToolArgs failed: ${(err as Error).message}`);
+        return '';
+    }
+}
+
+/**
+ * 工具参数的完整展示文本（卡片正文用）。
+ * 卡片标题仍是摘要，这里给全文，避免长命令/参数在界面上看不到。
+ * 超过上限时截断并写明，不做静默丢弃。
+ */
+export function formatToolArgs(args: unknown, maxLen = 20000): string {
+    if (args === undefined || args === null) { return ''; }
+    try {
+        const text = typeof args === 'string' ? args : JSON.stringify(args, null, 2);
+        if (!text) { return ''; }
+        if (text.length <= maxLen) { return text; }
+        return text.slice(0, maxLen) + '\n' + vscode.l10n.t('… (arguments truncated, {0} characters total)', text.length);
+    } catch (err) {
+        logError(`formatToolArgs failed: ${(err as Error).message}`);
         return '';
     }
 }

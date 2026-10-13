@@ -5,6 +5,151 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+## [0.1.3] - 2026-10-13
+
+### Added
+
+- **First-run setup checklist.** When nothing is set up yet, the empty state
+  shows a small checklist — workspace trusted, `pi` installed, connected,
+  model available — each unfinished item with a one-click action (install `pi`
+  in a terminal, sign in by running `pi`, Retry, manage workspace trust, show
+  logs). It hides itself once everything is ready.
+- **Actionable errors.** A failed turn (or connection) now renders buttons in
+  the error bubble — **Retry** (re-sends the last message), **Switch model**,
+  and **Show logs** — instead of a dead-end red message.
+- **`Queue` / `Steer` buttons while pi is working.** Sending mid-turn no longer
+  requires remembering `Ctrl/Cmd+Enter`: the composer shows a Stop button and a
+  Queue/Steer toggle, and Enter/click follows the selected mode (`Ctrl/Cmd+Enter`
+  still force-steers).
+- **The three surfaces are independent by default.** The sidebar, the
+  secondary-side-bar view and the editor-tab panel each get their **own pi
+  process and session**, so all three run different conversations in parallel
+  with no shared busy / context / stream state. The first surface opened
+  continues your most recent session; the others start fresh (so two surfaces
+  never contend for the same session file). To mirror, switch a surface to a
+  session another surface is already on — then they share that runtime (busy,
+  composer context, models/stats, streamed output). Closing a surface keeps its
+  session alive; idle, unreferenced runtimes are stopped automatically.
+- **The active editor is attached to the composer by default** (like Claude
+  Code): the current selection — or the whole file when there is no selection —
+  shows up as a removable chip. Removing it keeps it removed for that file
+  until you switch documents. Turning focus to the chat keeps the attachment.
+  Controlled by `pi-agent.context.autoAttachActiveEditor` (default on).
+- **Sent user messages show their file attachments**: questions that carried
+  file/selection context now render the referenced paths (with line ranges) as
+  chips, both live and when the transcript is restored.
+
+### Changed
+
+- **Tool activity is grouped, one line per tool.** Consecutive tool calls in a
+  turn collapse into a single expandable group (a lone tool stays unwrapped),
+  and every tool card shows just one line — name, summary and status — until
+  you click it, so the answer is no longer buried under a wall of output and
+  diffs. Groups stay **expanded** by default (click the header to fold one); a
+  new thinking block starts a new group, and a group holds at most 5 tools
+  before a fresh one begins.
+- **Slimmer composer on narrow panels.** Below ~320px the thinking and
+  permission controls drop to icon-only, keeping the composer on one row.
+- **Searchable session list** (name / preview / id), and it now shows up to 60
+  recent sessions instead of 20.
+- **Inline diff for changed files.** Each file in the turn-change card has a `±`
+  toggle that expands its diff right in the chat.
+- **Chat can live in the Secondary Side Bar (right).** A native
+  `secondarySidebar` view is contributed, sharing the same pi client and
+  session as the primary sidebar. Open it from the command palette
+  (**Pi: Open Chat in Secondary Side Bar**), the new view-title button, or the
+  button on the editor-tab panel. The editor-tab panel itself cannot be dragged
+  there — VS Code only hosts views in the secondary side bar.
+- **`/compact` is one click.** Clicking the context-usage ring compacts
+  directly instead of inserting `/compact` into the composer and picking it from
+  the suggest menu; the modal confirmation is gone too.
+- **Thinking indicator polish.** The spinner uses the accent color, the live
+  token count shows the exact value (no more `1.5k`), and the elapsed time is
+  shown in milliseconds for the first second.
+
+- **Turn-change review & revert** is now per-file and reversible:
+  - Each changed file has its own hover **Undo** action, so you can restore a
+    single file without reverting the whole turn.
+  - No more modal confirmation; the card updates in place, marking each file
+    with a check (restored) or a reason on failure.
+  - After reverting you can **Undo** the revert (restore the state right after
+    the turn), so an accidental revert is never destructive. The undo entry
+    stays until the next turn or session.
+  - Files that cannot be reverted automatically (overwritten with `write`) are
+    marked and explained instead of silently skipped.
+
+### Fixed
+
+- **`write` (whole-file overwrite) now shows a diff and can be reverted.** The
+  extension snapshots the file right before the first tool touches it, so a
+  `write` gets a real line diff (context lines, `+`/`-`) and a working **Undo** —
+  previously it produced no diff and was reported as “cannot be reverted”.
+- **Failed tools are no longer counted as turn changes.** An `edit`/`write`
+  that errors (e.g. `oldText` not found) used to stay in the Changed-files card
+  (with a misleading diff, and a revert that failed with “content changed”).
+  The tracking now records each tool call’s delta and rolls it back on error.
+- **Diffs are visible again.** Tool cards with a diff auto-expand instead of
+  hiding it behind a click, and the `±` toggle on changed files is always shown
+  (it was hover-only).
+
+- **Stopping a turn by hand is no longer reported as an error.** pi marks a
+  user-stopped turn with `stopReason: "aborted"` but still carries an
+  `errorMessage`, so the extension rendered it as a red error bubble offering
+  **Retry / Switch model / Show logs**. It now shows a neutral **Stopped**
+  line; the actionable error bubble is reserved for real failures.
+
+- **Creating a new session no longer aborts a shared turn.** When the sidebar
+  and the secondary-side-bar (or editor tab) were on the *same* session,
+  clicking **New Chat** in one surface called `abort` on the shared runtime,
+  stopping the other surface's running turn with `Request aborted`. Aborting
+  now only happens when the panel is the sole user of that session — a surface
+  that is merely sharing it keeps running.
+
+- **Localization caught up.** Dozens of user-facing strings (the setup
+  checklist, error actions, **Queue/Steer** mode, session search, inline diff, …)
+  were missing from the `zh-cn` bundle and showed up in English under a Chinese
+  UI. Every `vscode.l10n.t()` source string now exists in both
+  `l10n/bundle.l10n.json` and `l10n/bundle.l10n.zh-cn.json`, and a regression
+  test fails if a new string is added without a translation.
+
+- **Compaction no longer trips the SDK's hard-coded 30s RPC timeout.** Long
+  sessions routinely take longer than 30 seconds to summarize, which failed
+  with `Timeout waiting for response to compact`. `compact` and `bash` now use a
+  10-minute timeout (other commands keep the SDK default).
+
+- **Nothing the agent produces is dropped from the transcript any more.** Every
+  finished message is reconciled against pi's authoritative content, so content
+  that never reached the webview (lost deltas, non-streaming providers) is
+  filled in — text, thinking, tool calls and tool results:
+  - assistant text is completed from `text_end.content` / `message_end`;
+  - thinking is completed from `thinking_end` / `message_end`;
+  - tool calls whose execution events were missed are rendered at turn end
+    (and never duplicated when the events did arrive);
+  - every `toolResult` message is rendered, and tool cards still spinning at
+    turn end are closed instead of hanging forever.
+- **Failed turns are no longer silent.** pi reports an aborted/errored turn as
+  an empty assistant message carrying `errorMessage`; the extension now shows
+  that error instead of finishing the turn with no output at all.
+- Tool output is no longer truncated a second time by the extension (cap raised
+  from 20k to 200k characters). When pi itself truncates, the card says so and
+  links to the full output file.
+- **Tool call arguments are rendered in full**, not just the one-line summary.
+  For `edit` this is where the old/new text lives, so the card now shows the
+  exact arguments the agent sent (very long arguments are capped at 20k
+  characters with an explicit marker rather than dropped silently).
+- A stream that fails mid-message keeps the text already received; the error
+  banner no longer discards the open stream buffer.
+- Multi-surface rendering: the "assistant stream is open" flag was shared
+  between the sidebar and the editor-tab panels, so whichever panel handled an
+  event second dropped every text chunk and showed only "Thinking…". Render
+  state is now per panel.
+- The **Undo** button on the turn-change card was visible before anything had
+  been reverted, so clicking it reported “Nothing to restore”. The webview now
+  defines a global `.hidden` utility (previously only per-component rules
+  existed, which the new button did not have), and a test guards against it.
+
 ## [0.1.2] - 2026-10-12
 
 ### Added

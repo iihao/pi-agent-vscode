@@ -2,7 +2,7 @@
 // 面板渲染：模型 / 思考 / 权限 / 会话 / 上下文 chip / 附加菜单 / 状态栏
 // ---------------------------------------------------------------------------
 
-import type { WebviewContext, PermissionOption } from '../types';
+import type { WebviewContext, PermissionOption, SetupStatus, SessionInfo } from '../types';
 import { escapeHtml, escapeAttr, formatTokens, sessionDisplayName } from '../utils';
 
 let ctx: WebviewContext;
@@ -88,7 +88,7 @@ export function renderChips(): void {
         const label = c.type === 'selection'
             ? (c.path + (c.lineRange ? ':' + c.lineRange : ''))
             : c.path;
-        html += '<span class="chip"><span class="chip-label" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+        html += '<span class="chip' + (c.auto ? ' auto' : '') + '"><span class="chip-label" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
             '<button class="chip-remove" data-id="' + escapeHtml(c.id) + '" title="' + S.remove + '">✕</button></span>';
     });
     els.chipRow.innerHTML = html;
@@ -152,6 +152,31 @@ export function renderPermissionPanel(): void {
     els.permPanel.innerHTML = html;
 }
 
+function filteredSessions(): SessionInfo[] {
+    const q = ctx.sessionQuery.trim().toLowerCase();
+    if (!q) { return ctx.sessionsList; }
+    return ctx.sessionsList.filter(function (s) {
+        return (s.name || '').toLowerCase().indexOf(q) !== -1
+            || (s.preview || '').toLowerCase().indexOf(q) !== -1
+            || s.id.toLowerCase().indexOf(q) !== -1;
+    });
+}
+
+function sessionRowHtml(s: SessionInfo): string {
+    const S = ctx.S;
+    const date = new Date(s.createdAt);
+    const dateStr = (date.getMonth() + 1) + '/' + date.getDate() + ' ' + date.getHours() + ':' + String(date.getMinutes()).padStart(2, '0');
+    const active = s.id === ctx.currentSessionId;
+    const label = sessionDisplayName(s);
+    return '<div class="session-row' + (active ? ' active' : '') + '" data-id="' + escapeHtml(s.id) + '" data-name="' + escapeHtml(s.name || '') + '">' +
+        '<button class="session-row-main">' +
+            '<span class="session-row-title" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
+            '<span class="session-row-meta">' + dateStr + '</span>' +
+        '</button>' +
+        '<button class="session-row-act" data-act="rename" title="' + S.rename + '">✎</button>' +
+    '</div>';
+}
+
 export function renderSessionPanel(): void {
     const els = ctx.els;
     const S = ctx.S;
@@ -162,25 +187,60 @@ export function renderSessionPanel(): void {
     }
     const cur = ctx.sessionsList.find(function (s) { return s.id === ctx.currentSessionId; });
     els.sessionLabel.textContent = cur ? sessionDisplayName(cur) : S.currentSession;
-    let html = '';
-    ctx.sessionsList.forEach(function (s) {
-        const date = new Date(s.createdAt);
-        const dateStr = (date.getMonth() + 1) + '/' + date.getDate() + ' ' + date.getHours() + ':' + String(date.getMinutes()).padStart(2, '0');
-        const active = s.id === ctx.currentSessionId;
-        const label = sessionDisplayName(s);
-        html += '<div class="session-row' + (active ? ' active' : '') + '" data-id="' + escapeHtml(s.id) + '" data-name="' + escapeHtml(s.name || '') + '">' +
-            '<button class="session-row-main">' +
-                '<span class="session-row-title" title="' + escapeHtml(label) + '">' + escapeHtml(label) + '</span>' +
-                '<span class="session-row-meta">' + dateStr + '</span>' +
-            '</button>' +
-            '<button class="session-row-act" data-act="rename" title="' + S.rename + '">✎</button>' +
-        '</div>';
-    });
-    els.sessionPanel.innerHTML = html;
+
+    // 结构只建一次，避免输入/刷新时丢掉搜索框焦点与内容
+    if (!els.sessionPanel.querySelector('.session-search')) {
+        els.sessionPanel.innerHTML =
+            '<input type="text" class="session-search" placeholder="' + escapeHtml(S.sessionSearch) + '">' +
+            '<div class="session-list"></div>';
+        (els.sessionPanel.querySelector('.session-search') as HTMLInputElement).value = ctx.sessionQuery;
+    }
+    const list = els.sessionPanel.querySelector('.session-list') as HTMLElement;
+    if (!list) { return; }
+    const items = filteredSessions();
+    list.innerHTML = items.length
+        ? items.map(sessionRowHtml).join('')
+        : '<div class="popover-empty">' + escapeHtml(S.noResults) + '</div>';
 }
 
 export function updateConnectionStatus(status: string): void {
     ctx.els.connectionStatus.className = 'connection-status ' + status;
+}
+
+/**
+ * 首次环境自检清单（空状态时展示）：工作区受信 / pi 安装 / 连接 / 模型。
+ * 一切就绪时自动收起；每项未完成时给出一个一键动作。
+ */
+export function renderSetup(status: SetupStatus | undefined): void {
+    const S = ctx.S;
+    const el = ctx.els.welcomeSetup;
+    if (!status || (status.connected && status.hasModels)) {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+        return;
+    }
+    el.classList.remove('hidden');
+    interface Row { label: string; ok: boolean; pending?: boolean; action?: string; actionLabel?: string }
+    const rows: Row[] = [
+        { label: S.setupTrust, ok: status.workspaceTrusted, action: status.workspaceTrusted ? undefined : 'trust', actionLabel: S.setupTrustAction },
+        { label: S.setupPi, ok: status.piFound, action: status.piFound ? undefined : 'install', actionLabel: S.setupPiAction },
+        {
+            label: S.setupConnect, ok: status.connected, pending: status.connecting && !status.connected,
+            action: (!status.connected && status.piFound) ? 'retry' : undefined, actionLabel: S.setupConnectAction,
+        },
+        { label: S.setupModel, ok: status.hasModels, action: (status.connected && !status.hasModels) ? 'pi' : undefined, actionLabel: S.setupModelAction },
+    ];
+    let html = '<div class="setup-head">' + escapeHtml(S.setupTitle) + '</div>';
+    rows.forEach(function (r) {
+        const cls = r.ok ? 'ok' : (r.pending ? 'pending' : 'todo');
+        html += '<div class="setup-row ' + cls + '">' +
+            '<span class="setup-dot" aria-hidden="true"></span>' +
+            '<span class="setup-label">' + escapeHtml(r.label) + '</span>' +
+            (r.action ? '<button type="button" class="setup-action" data-action="' + r.action + '">' + escapeHtml(r.actionLabel || '') + '</button>' : '') +
+            '</div>';
+    });
+    html += '<button type="button" class="setup-logs" data-action="logs">' + escapeHtml(S.setupLogs) + '</button>';
+    el.innerHTML = html;
 }
 
 export function updateMessageCount(): void {

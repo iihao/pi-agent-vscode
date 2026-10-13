@@ -21,6 +21,8 @@ export interface SessionInfo {
 /** 读取会话元数据时的读取上限，避免把大文件整体读入内存 */
 const HEAD_BYTES = 256 * 1024;
 const PREVIEW_MAX_CHARS = 60;
+/** 列表最多展示的会话数（按 mtime 取最近的；meta 有 mtime 缓存） */
+const SESSION_LIST_LIMIT = 60;
 
 /** 从会话文件头部的行中提取第一条用户提问（去除 context 块、压缩空白、截断） */
 function firstUserPreview(lines: string[]): string | undefined {
@@ -80,7 +82,7 @@ export class SessionManager {
                         }
                         const files = candidates
                             .sort((a, b) => b.mtimeMs - a.mtimeMs)
-                            .slice(0, 20)
+                            .slice(0, SESSION_LIST_LIMIT)
                             .map(({ full, mtimeMs }) => {
                                 const meta = this._readMeta(full, mtimeMs);
                                 return {

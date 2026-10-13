@@ -4,28 +4,22 @@ import {
     selectContexts,
     selectLastUsage,
     selectPermissionMode,
-    selectTurnHadText,
 } from './selectors';
-import { stateStore, setState } from './store';
 import { ChatState, getInitialState } from './types';
 
-const read = <T>(selector: (state: ChatState) => T): T => stateStore.select(selector);
+let state: ChatState;
+const setState = (partial: Partial<ChatState>): void => { state = { ...state, ...partial }; };
+const read = <T>(selector: (s: ChatState) => T): T => selector(state);
 
 describe('state selectors', () => {
     beforeEach(() => {
-        setState(getInitialState());
+        state = getInitialState();
     });
 
     it('selectBusy reflects the busy flag', () => {
         expect(read(selectBusy)).toBe(false);
         setState({ busy: true });
         expect(read(selectBusy)).toBe(true);
-    });
-
-    it('selectTurnHadText reflects the turn text flag', () => {
-        expect(read(selectTurnHadText)).toBe(false);
-        setState({ turnHadText: true });
-        expect(read(selectTurnHadText)).toBe(true);
     });
 
     it('selectContexts returns the attached contexts', () => {

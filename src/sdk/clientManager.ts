@@ -12,6 +12,7 @@ import {
     PI_INSTALL_HINT,
     PiSdkModule,
     respondExtensionUI,
+    patchLongRunningTimeouts,
 } from './piTypes';
 import { logInfo, logError } from '../utils/logger';
 
@@ -48,6 +49,14 @@ function permissionArgs(config: vscode.WorkspaceConfiguration): string[] {
     return args;
 }
 
+/** pi 启动时的会话选择 */
+export interface PiStartOptions {
+    /** 继续最近的会话（默认 true）；false 时新建一个全新会话 */
+    continueRecent?: boolean;
+    /** 打开指定会话文件（优先于 continueRecent） */
+    sessionFile?: string;
+}
+
 export class PiClientManager {
     private _client: PiRpcClient | undefined;
     private _unsubscribe: (() => void) | undefined;
@@ -67,10 +76,10 @@ export class PiClientManager {
         return !!this._client;
     }
 
-    public async ensureConnected(extensionPath: string): Promise<PiRpcClient> {
+    public async ensureConnected(extensionPath: string, options?: PiStartOptions): Promise<PiRpcClient> {
         if (this._client) { return this._client; }
         if (!this._starting) {
-            this._starting = this._startClient(extensionPath).catch((err) => {
+            this._starting = this._startClient(extensionPath, options).catch((err) => {
                 this._starting = undefined;
                 throw err;
             });
@@ -143,7 +152,7 @@ export class PiClientManager {
         }
     }
 
-    private async _startClient(extensionPath: string): Promise<void> {
+    private async _startClient(extensionPath: string, options?: PiStartOptions): Promise<void> {
         const config = vscode.workspace.getConfiguration('pi-agent');
         const executable = (config.get<string>('pi.executable') || '').trim();
         const resolved = this._deps.resolvePi(extensionPath, executable || undefined);
@@ -161,7 +170,11 @@ export class PiClientManager {
         }
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
-        const args = ['--continue', ...(config.get<string[]>('pi.arguments', []) || []), ...permissionArgs(config)];
+        // 会话选择：指定文件 > 继续最近 > 全新会话（不传 --continue 即新建）
+        const sessionArgs: string[] = [];
+        if (options?.sessionFile) { sessionArgs.push('--session', options.sessionFile); }
+        else if (options?.continueRecent !== false) { sessionArgs.push('--continue'); }
+        const args = [...sessionArgs, ...(config.get<string[]>('pi.arguments', []) || []), ...permissionArgs(config)];
         const client = new sdk.RpcClient({
             cliPath: resolved.cliPath,
             cwd,
@@ -187,6 +200,9 @@ export class PiClientManager {
             logError(`pi start failed: ${detail}`);
             throw new PiStartError(vscode.l10n.t('pi process failed to start: {0}', detail));
         }
+
+        // SDK 的 send 默认 30s 超时，对 compact / bash 这类长任务不够；放宽。
+        patchLongRunningTimeouts(client);
 
         this._client = client;
         logInfo('pi client ready');

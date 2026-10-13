@@ -96,6 +96,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 8 10 12 6 16"></polyline><line x1="13" y1="16" x2="18" y2="16"></line></svg>
             </div>
             <div class="welcome-title">Pi Agent</div>
+            <div class="welcome-setup hidden" id="welcomeSetup"></div>
             <div class="quick-actions">
                 <button class="quick-action" data-q="${escapeAttr(S.quickExplainQ)}">${S.quickExplain}</button>
                 <button class="quick-action" data-q="${escapeAttr(S.quickReviewQ)}">${S.quickReview}</button>
@@ -146,6 +147,9 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                         <span class="pill-caret">▾</span>
                     </button>
                     <button id="thinkingBtn" class="pill" title="${escapeAttr(S.thinkingTitle)}">
+                        <span class="pill-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a7 7 0 0 0-4 12.7V17h8v-2.3A7 7 0 0 0 12 2z"></path><path d="M9 20h6"></path></svg>
+                        </span>
                         <span id="thinkingLabel" class="pill-label">${escapeAttr(S.thinking)}</span>
                         <span class="pill-caret">▾</span>
                     </button>
@@ -156,7 +160,13 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                         <span id="permLabel" class="pill-label">${escapeAttr(S.permission)}</span>
                         <span class="pill-caret">▾</span>
                     </button>
+                    <button id="modeBtn" class="pill mode-pill hidden" title="${escapeAttr(S.modeTitle)}">
+                        <span id="modeLabel" class="pill-label"></span>
+                    </button>
                 </div>
+                <button id="stop" class="send-button stop-button hidden" title="${escapeAttr(S.stopTitle)}" aria-label="${escapeAttr(S.stopTitle)}">
+                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"></rect></svg>
+                </button>
                 <button id="send" class="send-button" title="${escapeAttr(S.sendTitle)}" aria-label="${escapeAttr(S.sendTitle)}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
                 </button>

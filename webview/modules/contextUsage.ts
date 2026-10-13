@@ -4,7 +4,6 @@
 
 import type { WebviewContext } from '../types';
 import { formatTokens, escapeHtml } from '../utils';
-import { openCustomSuggest, compactSuggestItems } from './slashCommands';
 
 const RING_R = 15.5;
 const RING_C = 2 * Math.PI * RING_R;
@@ -21,13 +20,9 @@ export function initContextUsage(c: WebviewContext): void {
     ctx.els.ctxUsage.appendChild(tip);
 
     ctx.els.ctxUsage.addEventListener('click', function () {
-        const input = ctx.els.input;
-        const prefix = '/compact ';
-        input.value = prefix + input.value;
-        const caretPos = prefix.length;
-        input.selectionStart = input.selectionEnd = caretPos;
-        input.focus();
-        openCustomSuggest(compactSuggestItems(), 'slash', 0, prefix.length);
+        // 工具提示已提示「Click to compact」，直接触发压缩，
+        // 不再往输入框插入命令、也不用再去 suggest 菜单里选一次。
+        ctx.vscode.postMessage({ type: 'compact' });
     });
 }
 
