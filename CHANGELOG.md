@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.3] - 2026-10-13
+## [0.1.4] - 2026-10-14
 
 ### Added
 
@@ -30,10 +30,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     self-hosted, Ollama/LM Studio) — written to pi's `models.json`;
   - **Sign in with pi** in a terminal for OAuth providers.
 
-  After saving it restarts the client, re-checks the provider and auto-selects a
-  usable model so you can send your first message immediately. Credential files
-  are backed up (`*.bak`) before writing and written `0600`; `PI_CODING_AGENT_DIR`
-  is respected.
+  After saving it restarts the client, re-checks the provider and picks a model
+  so you can send your first message immediately (pi still chooses the model
+  itself when it already has one). Credential files are backed up (`*.bak`)
+  before writing and written `0600`; `PI_CODING_AGENT_DIR` is respected.
+
+### Changed
+
+- **`Queue` / `Steer` while pi is working.** The composer keeps **one** button
+  (Send when idle, Stop while a turn runs) plus a Queue/Steer toggle, and Enter
+  follows the selected mode (`Ctrl/Cmd+Enter` still force-steers). This replaces
+  the temporary “Stop + Send side by side” arrangement.
+
+### Fixed
+
+- **The “Changed files” card is no longer clipped after a turn.** It was only
+  scrolled into view when the chat was already near the bottom — but that check
+  ran *after* the card was appended, so a multi-file card grew taller than the
+  threshold, the check failed, and the view stayed put with only the first row
+  visible (you had to scroll again to see the rest). The scroll intent is now
+  captured *before* the card is added, and if the card is taller than the
+  viewport it aligns to its top so you read from the first file.
+
+## [0.1.3] - 2026-10-13
+
+### Added
 
 - **First-run setup checklist.** When nothing is set up yet, the empty state
   shows a small checklist — workspace trusted, `pi` installed, connected,
@@ -105,14 +126,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     marked and explained instead of silently skipped.
 
 ### Fixed
-
-- **The “Changed files” card is no longer clipped after a turn.** It was only
-  scrolled into view when the chat was already near the bottom — but that check
-  ran *after* the card was appended, so a multi-file card grew taller than the
-  threshold, the check failed, and the view stayed put with only the first row
-  visible (you had to scroll again to see the rest). The scroll intent is now
-  captured *before* the card is added, and if the card is taller than the
-  viewport it aligns to its top so you read from the first file.
 
 - **`write` (whole-file overwrite) now shows a diff and can be reverted.** The
   extension snapshots the file right before the first tool touches it, so a
@@ -406,7 +419,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   language.
 - Trusted-workspace gating and a settings namespace (`pi-agent.*`).
 
-[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.3...v0.1.4
+[0.1.3]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.2...v0.1.3
 [0.1.2]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/iihao/pi-agent-vscode/releases/tag/v0.1.0
