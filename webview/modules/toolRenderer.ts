@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 工具调用 / bash 活动卡片
+// Tool-call / bash activity cards
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext } from '../types';
@@ -8,10 +8,10 @@ import { hideThinking, activityBegin, activityEnd } from './messageRenderer';
 
 let ctx: WebviewContext;
 
-/** 单个工具分组最多容纳的工具数；超出则收尾并开新组，避免一个组里堆太多 */
+/** Max tools per group; beyond this the group is closed and a new one starts */
 export const MAX_TOOLS_PER_GROUP = 5;
 
-/** 当前正在累积的工具分组（连续的 tool 调用合并为一个可折叠组） */
+/** The tool group currently being accumulated (consecutive tool calls merge into one collapsible group) */
 let currentGroup: HTMLElement | null = null;
 let currentGroupNames: string[] = [];
 
@@ -19,7 +19,7 @@ export function initToolRenderer(c: WebviewContext): void {
     ctx = c;
 }
 
-/** 取得（必要时创建）当前工具分组容器 */
+/** Get (creating if needed) the current tool group container */
 function ensureToolGroup(): HTMLElement {
     if (currentGroup) { return currentGroup; }
     const group = document.createElement('div');
@@ -54,7 +54,7 @@ function toolGroupBody(): HTMLElement {
     return ensureToolGroup().querySelector('.tool-group-body') as HTMLElement;
 }
 
-/** 收尾当前工具分组：单个工具时拆掉外壳，多个工具时收尾并默认折叠。 */
+/** Close the current tool group: unwrap a lone tool, otherwise finish it (stays expanded by default). */
 export function endToolGroup(): void {
     const group = currentGroup;
     if (!group) { return; }
@@ -64,7 +64,7 @@ export function endToolGroup(): void {
     const cards = Array.from(body.children) as HTMLElement[];
     group.classList.remove('running');
     if (cards.length <= 1) {
-        // 单工具不值得包一层：拆回聊天流
+        // A lone tool isn't worth a wrapper: move it back into the chat stream
         for (const card of cards) { group.parentElement?.insertBefore(card, group); }
         group.remove();
         return;
@@ -72,10 +72,10 @@ export function endToolGroup(): void {
     group.classList.add('done');
     const status = group.querySelector('.tool-group-status');
     if (status) { status.textContent = group.classList.contains('has-error') ? '✗' : '✓'; }
-    // 默认保持展开：组内卡片本身仍是一行，用户可点组头手动折叠
+    // Stay expanded by default (each card is one line); the user can fold it via the header
 }
 
-/** 丢弃当前工具分组引用（清空 / 新回合） */
+/** Drop the current tool group reference (clear / new turn) */
 export function resetToolGroup(): void {
     currentGroup = null;
     currentGroupNames = [];
@@ -85,7 +85,7 @@ export function addTool(tool: string, detail?: string, toolCallId?: string, tool
     ctx.els.welcome.style.display = 'none';
     activityBegin();
     hideThinking();
-    // 分组上限：已达到上限就收尾旧组、开新组
+    // Group cap: close the old group and start a new one once reached
     if (currentGroup && currentGroupNames.length >= MAX_TOOLS_PER_GROUP) {
         endToolGroup();
     }
@@ -93,7 +93,7 @@ export function addTool(tool: string, detail?: string, toolCallId?: string, tool
     currentGroupNames.push(capitalize(tool));
     updateToolGroupHeader();
     const el = document.createElement('div');
-    // 组内卡片一律默认折叠：只留一行，正文与环境更清爽
+    // Cards inside a group are collapsed by default: one line each keeps the transcript clean
     el.className = 'activity running collapsed';
     const head = document.createElement('div');
     head.className = 'activity-head';
@@ -105,7 +105,7 @@ export function addTool(tool: string, detail?: string, toolCallId?: string, tool
     const body = document.createElement('div');
     body.className = 'activity-body';
     if (toolArgs) {
-        // 完整参数（长命令、edit 的新旧文本等）：标题里只有摘要，全文放正文
+        // Full arguments (long commands, edit old/new text, ...): the title is a summary, the full text goes in the body
         const argsPre = document.createElement('pre');
         argsPre.className = 'activity-args';
         argsPre.textContent = toolArgs;
@@ -121,8 +121,8 @@ export function addTool(tool: string, detail?: string, toolCallId?: string, tool
 }
 
 /**
- * pi 截断了输出：明确告知，并给出完整输出文件的入口，
- * 避免「内容被截断」变成静默丢失。
+ * pi truncated the output: say so and offer a way to open the full output file,
+ * so "content was truncated" never becomes a silent loss.
  */
 export function appendTruncationNote(body: HTMLElement, fullOutputPath?: string): void {
     const note = document.createElement('div');
@@ -178,7 +178,7 @@ export function renderDiff(body: HTMLElement, diff: string): void {
 export function endTool(toolCallId: string | undefined, data: { isError?: boolean; durationMs?: number; diff?: string; output?: string; truncated?: boolean; fullOutputPath?: string }): void {
     const t = toolCallId ? ctx.runningTools[toolCallId] : null;
     if (toolCallId) {
-        // 已经结束过 / 从未渲染过：幂等返回，避免重复扣减运行计数
+        // Already ended / never rendered: return idempotently so the running count isn't decremented twice
         if (!t) { return; }
         delete ctx.runningTools[toolCallId];
     }
@@ -188,7 +188,7 @@ export function endTool(toolCallId: string | undefined, data: { isError?: boolea
     t.el.classList.remove('running');
     t.el.classList.add(data.isError ? 'failed' : 'done');
     if (data.isError) {
-        // 标记所在分组失败，收尾时不自动折叠，便于定位
+        // Mark the enclosing group as failed so it isn't auto-collapsed on close (easier to spot)
         const group = t.el.closest('.tool-group');
         if (group) { group.classList.add('has-error'); }
         t.el.classList.remove('collapsed');
@@ -199,7 +199,7 @@ export function endTool(toolCallId: string | undefined, data: { isError?: boolea
     }
     if (data.diff) {
         renderDiff(t.body, data.diff);
-        // 有 diff 就展开：默认折叠会把它藏起来，改动静不悄悄
+        // Expand when there's a diff: collapsing would hide it and make changes silent
         t.el.classList.remove('collapsed');
     } else if (data.output) {
         let pre = t.body.querySelector('.activity-output') as HTMLElement | null;
@@ -235,8 +235,8 @@ export function addBashRunning(id: string, command: string): void {
 }
 
 /**
- * 回合结束兜底：把仍停在「运行中」的卡片收尾，避免永久转圈。
- * 只改状态标记，卡片内容原样保留。
+ * End-of-turn safety net: close any card still "running" so nothing spins
+ * forever. Only the status marker changes; card content is kept as-is.
  */
 export function settleTools(): void {
     const ids = Object.keys(ctx.runningTools);

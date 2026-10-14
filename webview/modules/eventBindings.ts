@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 所有 DOM 事件绑定
+// All DOM event bindings
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext } from '../types';
@@ -93,7 +93,7 @@ function bindSearchEvents(): void {
 function bindInputEvents(): void {
     const els = ctx.els;
     els.sendBtn.addEventListener('click', function () {
-        // 忙碌时按当前模式发送（排队 / 插话），空闲时直接发送
+        // While busy: send with the current mode (queue / steer); otherwise just send
         send(ctx.busy ? ctx.sendMode : undefined);
     });
     els.stopBtn.addEventListener('click', function () {
@@ -145,9 +145,9 @@ function bindInputEvents(): void {
         acceptSuggest();
     });
     els.input.addEventListener('keydown', function (e) {
-        // Alt+↑/↓ 交给文档级处理器做问题跳转，不当作输入历史
+        // Alt+Up/Down is handled at the document level for question jumping, not input history
         if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { return; }
-        // 补全菜单优先响应方向键 / 回车 / Tab / Esc
+        // Let the suggest menu handle arrows / Enter / Tab / Esc first
         if (suggestOpen()) {
             if (e.key === 'ArrowDown') { e.preventDefault(); setSuggestIndex((ctx.suggestIndex + 1) % ctx.suggestItems.length); renderSuggest(); return; }
             if (e.key === 'ArrowUp') { e.preventDefault(); setSuggestIndex((ctx.suggestIndex - 1 + ctx.suggestItems.length) % ctx.suggestItems.length); renderSuggest(); return; }
@@ -156,7 +156,7 @@ function bindInputEvents(): void {
         }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            // Ctrl/Cmd+Enter 强制插话；否则按当前模式（忙碌时排队/插话）
+            // Ctrl/Cmd+Enter forces steer; otherwise use the current mode
             send(e.ctrlKey || e.metaKey ? 'steer' : (ctx.busy ? ctx.sendMode : undefined));
         } else if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
             e.preventDefault();
@@ -231,7 +231,7 @@ function bindPanelEvents(): void {
     });
     els.sessionBtn.addEventListener('click', function (e) { e.stopPropagation(); togglePopover(els.sessionPanel); });
     els.sessionPanel.addEventListener('input', function (e) {
-        // 会话搜索：只刷新列表，保留输入框焦点
+        // Session search: refresh only the list so the input keeps focus
         const input = (e.target as HTMLElement).closest('.session-search') as HTMLInputElement | null;
         if (!input) { return; }
         ctx.sessionQuery = input.value;
@@ -261,24 +261,24 @@ function bindChatEvents(): void {
     els.chat.addEventListener('click', function (e) {
         const target = e.target as HTMLElement;
 
-        // 首次环境自检清单上的一键动作（安装 pi / 登录 / 重试 / 受信 / 日志）
-        const setupBtn = target.closest('.setup-action, .setup-logs') as HTMLButtonElement | null;
+        // One-click actions on the setup checklist (install pi / sign in / retry / trust / logs)
+        const setupBtn = target.closest('.setup-action, .setup-logs, .setup-manage') as HTMLButtonElement | null;
         if (setupBtn && setupBtn.dataset.action) {
             ctx.vscode.postMessage({ type: 'setupAction', action: setupBtn.dataset.action });
             return;
         }
 
-        // 错误气泡上的可操作按钮
+        // Action buttons on an error bubble
         const errBtn = target.closest('.error-action') as HTMLButtonElement | null;
         if (errBtn) {
             const action = errBtn.dataset.action;
-            // 「切模型」在本地打开模型选择器，其余交给扩展宿主
+            // "Switch model" opens the model picker locally; the rest go to the host
             if (action === 'model') { togglePopover(ctx.els.modelPanel); }
             else if (action) { ctx.vscode.postMessage({ type: 'errorAction', action }); }
             return;
         }
 
-        // 逐文件撤销
+        // Revert a single file
         const fileRevertBtn = target.closest('.turn-file-revert') as HTMLButtonElement | null;
         if (fileRevertBtn) {
             const row = fileRevertBtn.closest('.turn-file-row') as HTMLElement | null;
@@ -290,7 +290,7 @@ function bindChatEvents(): void {
             return;
         }
 
-        // 展开 / 收起某个文件的内联 diff
+        // Expand / collapse a file's inline diff
         const diffToggle = target.closest('.turn-file-diff-toggle') as HTMLButtonElement | null;
         if (diffToggle) {
             const row = diffToggle.closest('.turn-file-row') as HTMLElement | null;
@@ -303,19 +303,19 @@ function bindChatEvents(): void {
             return;
         }
 
-        // 撤销全部
+        // Revert all
         const revertBtn = target.closest('.turn-changes-revert') as HTMLButtonElement | null;
         if (revertBtn) {
             revertBtn.classList.add('busy');
             revertBtn.disabled = true;
-            // 所有可撤销行显示忙碌态
+            // Show a busy state on every revertible row
             const card = revertBtn.closest('.turn-changes') as HTMLElement | null;
             card?.querySelectorAll('.turn-file-revert').forEach(function (b) { (b as HTMLButtonElement).disabled = true; });
             ctx.vscode.postMessage({ type: 'revertTurn' });
             return;
         }
 
-        // 再撤回（撤销的撤销）
+        // Undo the revert
         const undoBtn = target.closest('.turn-changes-undo') as HTMLButtonElement | null;
         if (undoBtn) {
             undoBtn.classList.add('busy');
@@ -324,12 +324,12 @@ function bindChatEvents(): void {
             return;
         }
 
-        // 打开工具完整输出文件
+        // Open the tool's full output file
         const fullOutputBtn = target.closest('.activity-open-output') as HTMLElement | null;
         const fullOutputPath = fullOutputBtn?.dataset.path;
         if (fullOutputPath) { ctx.vscode.postMessage({ type: 'openFile', path: fullOutputPath }); return; }
 
-        // 点击文件行 → 打开文件
+        // Click a file row -> open the file
         const turnFile = target.closest('.turn-file-row') as HTMLElement | null;
         const path = turnFile?.dataset.path;
         if (path) { ctx.vscode.postMessage({ type: 'openFile', path }); return; }

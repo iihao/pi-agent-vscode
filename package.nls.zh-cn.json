@@ -20,6 +20,7 @@
   "cmd.openInEditor": "Pi: 在编辑器标签打开对话",
   "cmd.openInEditorToSide": "Pi: 在侧边打开对话",
   "cmd.openInSecondarySideBar": "Pi: 在辅助侧边栏打开对话",
+  "cmd.manageProviders": "Pi: 管理模型供应商",
   "cmd.attachFile": "Pi: 附加当前文件到对话",
   "cmd.attachSelection": "Pi: 附加选中代码到对话",
   "cmd.attachFiles": "Pi: 从工作区附加文件",

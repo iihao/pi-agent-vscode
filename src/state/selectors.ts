@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 状态选择器（仅保留生产代码实际读取的字段）
+// State selectors (only the fields production code actually reads)
 // ---------------------------------------------------------------------------
 
 import { ChatStateSelector, TurnChange } from './types';

@@ -20,6 +20,7 @@
   "cmd.openInEditor": "Pi: エディタータブでチャットを開く",
   "cmd.openInEditorToSide": "Pi: 横にチャットを開く",
   "cmd.openInSecondarySideBar": "Pi: セカンダリサイドバーでチャットを開く",
+  "cmd.manageProviders": "Pi: モデルプロバイダーを管理",
   "cmd.attachFile": "Pi: 現在のファイルをチャットに添付",
   "cmd.attachSelection": "Pi: 選択範囲をチャットに添付",
   "cmd.attachFiles": "Pi: ワークスペースからファイルを添付",

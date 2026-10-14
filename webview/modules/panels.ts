@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 面板渲染：模型 / 思考 / 权限 / 会话 / 上下文 chip / 附加菜单 / 状态栏
+// Panel rendering: model / thinking / permission / session / context chips / attach menu / status bar
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext, PermissionOption, SetupStatus, SessionInfo } from '../types';
@@ -188,7 +188,7 @@ export function renderSessionPanel(): void {
     const cur = ctx.sessionsList.find(function (s) { return s.id === ctx.currentSessionId; });
     els.sessionLabel.textContent = cur ? sessionDisplayName(cur) : S.currentSession;
 
-    // 结构只建一次，避免输入/刷新时丢掉搜索框焦点与内容
+    // Build the structure once so typing/refreshing never loses the search box focus or value
     if (!els.sessionPanel.querySelector('.session-search')) {
         els.sessionPanel.innerHTML =
             '<input type="text" class="session-search" placeholder="' + escapeHtml(S.sessionSearch) + '">' +
@@ -208,19 +208,21 @@ export function updateConnectionStatus(status: string): void {
 }
 
 /**
- * 首次环境自检清单（空状态时展示）：工作区受信 / pi 安装 / 连接 / 模型。
- * 一切就绪时自动收起；每项未完成时给出一个一键动作。
+ * First-run setup checklist (shown in the empty state): workspace trust /
+ * pi installed / connected / provider ready. It hides itself once everything
+ * is ready, and every unfinished row offers a one-click action.
  */
 export function renderSetup(status: SetupStatus | undefined): void {
     const S = ctx.S;
     const el = ctx.els.welcomeSetup;
-    if (!status || (status.connected && status.hasModels)) {
+    if (!status || (status.connected && status.authReady === true)) {
         el.classList.add('hidden');
         el.innerHTML = '';
         return;
     }
     el.classList.remove('hidden');
     interface Row { label: string; ok: boolean; pending?: boolean; action?: string; actionLabel?: string }
+    const providerSuffix = status.provider ? ' · ' + status.provider : '';
     const rows: Row[] = [
         { label: S.setupTrust, ok: status.workspaceTrusted, action: status.workspaceTrusted ? undefined : 'trust', actionLabel: S.setupTrustAction },
         { label: S.setupPi, ok: status.piFound, action: status.piFound ? undefined : 'install', actionLabel: S.setupPiAction },
@@ -228,7 +230,13 @@ export function renderSetup(status: SetupStatus | undefined): void {
             label: S.setupConnect, ok: status.connected, pending: status.connecting && !status.connected,
             action: (!status.connected && status.piFound) ? 'retry' : undefined, actionLabel: S.setupConnectAction,
         },
-        { label: S.setupModel, ok: status.hasModels, action: (status.connected && !status.hasModels) ? 'pi' : undefined, actionLabel: S.setupModelAction },
+        {
+            label: S.setupProvider + providerSuffix,
+            ok: status.authReady === true,
+            pending: status.connected && status.authReady === undefined,
+            action: (status.connected && status.authReady === false) ? 'connect' : undefined,
+            actionLabel: S.setupProviderAction,
+        },
     ];
     let html = '<div class="setup-head">' + escapeHtml(S.setupTitle) + '</div>';
     rows.forEach(function (r) {
@@ -239,7 +247,10 @@ export function renderSetup(status: SetupStatus | undefined): void {
             (r.action ? '<button type="button" class="setup-action" data-action="' + r.action + '">' + escapeHtml(r.actionLabel || '') + '</button>' : '') +
             '</div>';
     });
-    html += '<button type="button" class="setup-logs" data-action="logs">' + escapeHtml(S.setupLogs) + '</button>';
+    html += '<div class="setup-foot">' +
+        '<button type="button" class="setup-manage" data-action="manage">' + escapeHtml(S.setupManage) + '</button>' +
+        '<button type="button" class="setup-logs" data-action="logs">' + escapeHtml(S.setupLogs) + '</button>' +
+        '</div>';
     el.innerHTML = html;
 }
 

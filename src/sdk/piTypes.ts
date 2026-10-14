@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// pi SDK 的最小类型接口
+// Minimal type interfaces for the pi SDK
 // ---------------------------------------------------------------------------
 
 export interface PiUsage {
@@ -11,16 +11,17 @@ export interface PiUsage {
 
 export interface PiAssistantMessageEvent {
     type: string;
-    /** 增量文本（text_delta / thinking_delta） */
+    /** Incremental text (text_delta / thinking_delta) */
     delta?: string;
     toolName?: string;
-    /** 内容块下标：text_* / thinking_* / toolcall_* 事件都会携带 */
+    /** Content-block index; carried by every text_* / thinking_* / toolcall_* event */
     contentIndex?: number;
-    /** text_end 携带的该文本块完整内容（增量缺失时的权威来源） */
+    /** Full text of the block, carried by text_end (authoritative when deltas are missing) */
     content?: string;
     /**
-     * thinking_end 携带的该思考块完整内容。
-     * 各 provider 适配器用 `content`，pi-messages 通道用 `thinking`，两者都要兜住。
+     * Full thinking text of the block, carried by thinking_end.
+     * Provider adapters use `content`; the pi-messages channel uses `thinking`.
+     * Both must be handled.
      */
     thinking?: string;
 }
@@ -31,18 +32,18 @@ export interface PiToolResultBlock {
 }
 
 export interface PiToolResultDetails {
-    /** 编辑工具：展示用 diff */
+    /** Edit tool: diff for display */
     diff?: string;
-    /** 编辑工具：unified patch */
+    /** Edit tool: unified patch */
     patch?: string;
     firstChangedLine?: number;
-    /** 输出被 pi 截断时，完整输出的落盘路径 */
+    /** Path to the full output on disk when pi truncated it */
     fullOutputPath?: string;
-    /** pi 自身的截断信息（注意：这是 pi 的截断，扩展不应再截断一次） */
+    /** pi's own truncation info (pi truncating; the extension must not truncate again) */
     truncation?: PiToolTruncation;
 }
 
-/** pi 对超长工具输出的截断信息 */
+/** pi's truncation info for very long tool output */
 export interface PiToolTruncation {
     truncated?: boolean;
     truncatedBy?: string;
@@ -77,11 +78,11 @@ export interface PiAgentEvent {
     // queue_update
     steering?: string[];
     followUp?: string[];
-    // extension_ui_request 字段
+    // extension_ui_request fields
     id?: string;
     method?: string;
     title?: string;
-    /** extension_ui_request 的提示文本；message_start / message_end 时是完整消息 */
+    /** Prompt text for extension_ui_request; the full message for message_start / message_end */
     message?: string | PiRawMessage;
     options?: string[];
     placeholder?: string;
@@ -89,7 +90,7 @@ export interface PiAgentEvent {
     notifyType?: string;
 }
 
-/** 向 pi 回一个 extension_ui_response（fire-and-forget，写入子进程 stdin） */
+/** Reply to pi with an extension_ui_response (fire-and-forget, written to the child's stdin) */
 export function respondExtensionUI(
     client: PiRpcClient,
     id: string,
@@ -110,17 +111,19 @@ export function respondExtensionUI(
 }
 
 // ---------------------------------------------------------------------------
-// 长任务超时补丁
+// Long-running command timeout patch
 // ---------------------------------------------------------------------------
 
 /**
- * pi SDK 的 `RpcClient.send` 内部硬编码了 30s 响应超时，且 RpcClientOptions
- * 没有提供配置项。`compact`（模型总结长会话）与 `bash`（长命令）很容易超过，
- * 于是抛「Timeout waiting for response to ...」。
+ * The pi SDK's `RpcClient.send` hard-codes a 30s response timeout, and
+ * RpcClientOptions exposes no override. `compact` (summarizing a long session)
+ * and `bash` (long commands) easily exceed it and then throw
+ * "Timeout waiting for response to ...".
  *
- * 这里在实例上包一层 `send`：长任务命令使用更长的超时，其余命令仍走原实现。
- * 依赖 SDK 的私有字段（process / pendingRequests / requestId / ...），
- * 结构不符时安全回退（不改动 send）。
+ * This wraps `send` on the instance: long-running commands get a longer timeout,
+ * everything else still goes through the original implementation. It relies on
+ * the SDK's private fields (process / pendingRequests / requestId / ...) and
+ * safely falls back (leaving `send` untouched) when the shape differs.
  */
 const LONG_RUNNING_COMMAND_TIMEOUT_MS: Record<string, number> = {
     compact: 10 * 60 * 1000,
@@ -180,7 +183,7 @@ export function patchLongRunningTimeouts(client: PiRpcClient): void {
                 reject: (error) => { clearTimeout(timer); reject(error); },
             });
             try {
-                // SDK 的 serializeJsonLine 即 `${JSON.stringify(value)}\n`，这里等价实现
+                // The SDK's serializeJsonLine is just `${JSON.stringify(value)}\n`; same thing here
                 stdin.write(JSON.stringify(fullCommand) + '\n');
             } catch (error) {
                 const writeError = error instanceof Error ? error : new Error(String(error));
@@ -236,26 +239,26 @@ export interface PiRawMessage {
     content?: unknown;
     /** assistant：stop / toolUse / length / error / aborted */
     stopReason?: string;
-    /** assistant：本回合失败原因（pi 用一条空消息承载错误） */
+    /** assistant: why this turn failed (pi carries the error on an empty message) */
     errorMessage?: string;
-    /** toolResult：对应的 toolCallId */
+    /** toolResult: the matching toolCallId */
     toolCallId?: string;
-    /** toolResult：工具名 */
+    /** toolResult: tool name */
     toolName?: string;
-    /** toolResult：是否失败 */
+    /** toolResult: whether it failed */
     isError?: boolean;
-    /** toolResult：耗时 */
+    /** toolResult: duration */
     durationMs?: number;
 }
 
-/** 助手消息里的工具调用块 */
+/** A tool-call block inside an assistant message */
 export interface PiToolCallBlock {
     id?: string;
     name?: string;
     arguments?: unknown;
 }
 
-/** 工具结果消息（role: 'toolResult'） */
+/** A tool-result message (role: 'toolResult') */
 export interface PiToolResultMessage {
     toolCallId: string;
     toolName: string;
@@ -270,21 +273,21 @@ export interface PiRpcClient {
     stop(): Promise<void>;
     onEvent(listener: (event: PiAgentEvent) => void): () => void;
     prompt(message: string, images?: unknown[], streamingBehavior?: 'steer' | 'followUp'): Promise<string>;
-    /** 向运行中的回合插入消息（打断当前回合） */
+    /** Insert a message into the running turn (interrupts it) */
     steer?(message: string, images?: unknown[]): Promise<string>;
-    /** 排队一条消息，当前回合结束后处理 */
+    /** Queue a message to be handled after the current turn */
     followUp?(message: string, images?: unknown[]): Promise<string>;
-    /** 清空排队的 steer / follow-up 消息 */
+    /** Clear queued steer / follow-up messages */
     clearQueue?(): Promise<{ steering: string[]; followUp: string[] }>;
-    /** 切换到下一个模型 */
+    /** Switch to the next model */
     cycleModel?(): Promise<{ model?: { provider?: string; id?: string } } | null>;
-    /** 切换到下一个思考档位 */
+    /** Switch to the next thinking level */
     cycleThinkingLevel?(): Promise<{ level?: string } | null>;
-    /** 压缩会话上下文 */
+    /** Compact the session context */
     compact?(customInstructions?: string): Promise<{ summary?: string; tokensBefore?: number; estimatedTokensAfter?: number }>;
-    /** 克隆当前分支为一个新会话 */
+    /** Clone the current branch into a new session */
     clone?(): Promise<{ cancelled: boolean }>;
-    /** 直接执行 shell 命令（不经过模型回合） */
+    /** Run a shell command directly (no model turn) */
     bash?(command: string): Promise<{ output: string; exitCode?: number; cancelled: boolean; truncated: boolean; fullOutputPath?: string }>;
     abort(): Promise<void>;
     newSession(parentSession?: string): Promise<{ cancelled: boolean }>;
@@ -293,15 +296,15 @@ export interface PiRpcClient {
     getState(): Promise<PiSessionState>;
     getMessages(): Promise<PiRawMessage[]>;
     getAvailableModels(): Promise<PiModelInfo[]>;
-    /** 可用的斜杠命令 / 提示模板 / 技能 */
+    /** Available slash commands / prompt templates / skills */
     getCommands?(): Promise<PiSlashCommand[]>;
     setModel(provider: string, modelId: string): Promise<{ provider: string; id: string }>;
     getAvailableThinkingLevels?(): Promise<string[]>;
     setThinkingLevel?(level: string): Promise<void>;
     getSessionStats?(): Promise<PiSessionStats>;
-    /** 等待 agent 空闲（收到 agent_settled） */
+    /** Wait until the agent is idle (an agent_settled event) */
     waitForIdle?(timeout?: number): Promise<void>;
-    /** 取最后一条助手消息的文本 */
+    /** Text of the last assistant message */
     getLastAssistantText?(): Promise<string | null>;
     getStderr(): string;
 }
@@ -315,7 +318,7 @@ export interface PiSdkModule {
 }
 
 // ---------------------------------------------------------------------------
-// SDK 加载与缓存
+// SDK loading and caching
 // ---------------------------------------------------------------------------
 
 import * as path from 'path';
@@ -342,7 +345,7 @@ export function loadPiSdk(entryPath: string): Promise<PiSdkModule> {
 }
 
 // ---------------------------------------------------------------------------
-// pi CLI 路径解析
+// pi CLI path resolution
 // ---------------------------------------------------------------------------
 
 export interface ResolvedPi {
@@ -350,7 +353,7 @@ export interface ResolvedPi {
     sdkEntry: string;
 }
 
-/** 把「包目录」解析为 pi 的 CLI + SDK 入口（要求 dist/cli.js 与 dist/index.js 同时存在） */
+/** Resolve a package directory to pi's CLI + SDK entry points (both dist/cli.js and dist/index.js must exist) */
 function resolvePackageDir(dir: string): ResolvedPi | null {
     if (!dir) { return null; }
     const cliPath = path.join(dir, 'dist', 'cli.js');
@@ -361,7 +364,7 @@ function resolvePackageDir(dir: string): ResolvedPi | null {
     return null;
 }
 
-/** 从起始目录向上查找最近的 package.json 所在目录；到文件系统根仍找不到时返回起始目录 */
+/** Walk up from the start directory to the nearest package.json; returns the start directory if the filesystem root is reached */
 function findPackageRoot(startDir: string): string {
     let dir = startDir;
     let parent = path.dirname(dir);
@@ -372,7 +375,7 @@ function findPackageRoot(startDir: string): string {
     return dir;
 }
 
-/** 从自定义 pi 可执行文件路径解析 cliPath + sdkEntry */
+/** Resolve cliPath + sdkEntry from a custom pi executable path */
 export function resolvePiFromCli(cliPath: string): ResolvedPi | null {
     try {
         const real = fs.realpathSync(cliPath);
@@ -388,19 +391,19 @@ export function resolvePiFromCli(cliPath: string): ResolvedPi | null {
     return null;
 }
 
-/** pi 的可执行文件名（Windows 需要 .cmd/.exe） */
+/** pi executable names (Windows needs .cmd/.exe) */
 function piExecutableNames(): string[] {
     return process.platform === 'win32' ? ['pi.cmd', 'pi.exe', 'pi'] : ['pi'];
 }
 
-/** 从可执行文件路径解析 pi：先解软链向上找 package.json，再回退同目录 node_modules */
+/** Resolve pi from an executable path: follow the symlink up to package.json, else fall back to a sibling node_modules */
 function resolveFromBin(bin: string): ResolvedPi | null {
     try {
         const real = fs.realpathSync(bin);
         const found = resolvePackageDir(findPackageRoot(path.dirname(real)));
         if (found) { return found; }
-    } catch { /* 文件不存在或不是软链：继续尝试同目录 node_modules */ }
-    // Windows 的 npm 全局：bin（%APPDATA%\npm）与 node_modules 同级
+    } catch { /* not a file or not a symlink: keep trying the sibling node_modules */ }
+    // Windows npm global: the bin dir (%APPDATA%\npm) sits next to node_modules
     const binDir = path.dirname(bin);
     for (const rel of [
         path.join('node_modules', '@earendil-works', 'pi-coding-agent'),
@@ -412,7 +415,7 @@ function resolveFromBin(bin: string): ResolvedPi | null {
     return null;
 }
 
-/** 在 PATH 中查找第一个存在的可执行文件名 */
+/** Find the first existing executable name on PATH */
 function findOnPath(names: string[]): string | null {
     const dirs = (process.env.PATH || '').split(path.delimiter).filter(Boolean);
     for (const dir of dirs) {
@@ -424,7 +427,7 @@ function findOnPath(names: string[]): string | null {
     return null;
 }
 
-/** 通过 `npm root -g` 定位全局安装的 pi */
+/** Locate a global pi via `npm root -g` */
 function resolveNpmGlobal(): ResolvedPi | null {
     const npm = process.platform === 'win32' ? 'npm.cmd' : 'npm';
     try {
@@ -436,7 +439,7 @@ function resolveNpmGlobal(): ResolvedPi | null {
         if (!root) { return null; }
         const inModules = resolvePackageDir(path.join(root, '@earendil-works', 'pi-coding-agent'));
         if (inModules) { return inModules; }
-        // 回退：npm 的 bin 目录（Windows: root 本身即全局目录）
+        // Fallback: npm's bin directory (on Windows, root itself is the global dir)
         for (const binDir of [root, path.dirname(root)]) {
             for (const name of piExecutableNames()) {
                 const bin = path.join(binDir, name);
@@ -453,25 +456,25 @@ function resolveNpmGlobal(): ResolvedPi | null {
 }
 
 export function resolvePi(extensionPath: string, executableOverride?: string): ResolvedPi | null {
-    // 0. 用户显式配置的可执行文件优先
+    // 0. A user-configured executable wins
     if (executableOverride) {
         const custom = resolvePiFromCli(executableOverride);
         if (custom) { return custom; }
     }
 
-    // 1. 优先使用插件内置的 pi
+    // 1. Prefer pi bundled with the extension
     const bundled = resolvePackageDir(
         path.join(extensionPath, 'node_modules', '@earendil-works', 'pi-coding-agent')
     );
     if (bundled) { return bundled; }
 
-    // 1.5 开发模式：尝试从项目根目录查找
-    // extensionPath 可能是 .vscode-test/... 目录，需要向上查找
+    // 1.5 Dev mode: look from the project root.
+    // extensionPath may be a .vscode-test/... directory, so walk upwards.
     let searchDir = extensionPath;
     for (let i = 0; i < 5; i++) {
         const packageJsonPath = path.join(searchDir, 'package.json');
         if (fs.existsSync(packageJsonPath)) {
-            // 找到项目根目录，尝试查找 node_modules
+            // Found the project root; look for node_modules
             const projectBundled = resolvePackageDir(
                 path.join(searchDir, 'node_modules', '@earendil-works', 'pi-coding-agent')
             );
@@ -483,18 +486,18 @@ export function resolvePi(extensionPath: string, executableOverride?: string): R
         searchDir = parent;
     }
 
-    // 2. PATH 上的 pi（覆盖 nvm/fnm/asdf/volta/bun/pnpm/自定义 prefix 等）
+    // 2. pi on PATH (covers nvm/fnm/asdf/volta/bun/pnpm/custom prefixes, ...)
     const onPath = findOnPath(piExecutableNames());
     if (onPath) {
         const found = resolveFromBin(onPath);
         if (found) { return found; }
     }
 
-    // 2.5 npm 全局安装（npm i -g @earendil-works/pi-coding-agent）
+    // 2.5 npm global install (npm i -g @earendil-works/pi-coding-agent)
     const npmGlobal = resolveNpmGlobal();
     if (npmGlobal) { return npmGlobal; }
 
-    // 3. 常见安装位置
+    // 3. Common install locations
     const home = os.homedir();
     const binCandidates: string[] = [];
     if (process.platform === 'win32') {
@@ -526,7 +529,7 @@ export function resolvePi(extensionPath: string, executableOverride?: string): R
         );
     }
 
-    // 3.5 nvm 各版本目录 + fnm 默认别名
+    // 3.5 nvm version dirs + the fnm default alias
     try {
         const nvmRoot = path.join(home, '.nvm', 'versions', 'node');
         if (fs.existsSync(nvmRoot)) {
@@ -552,7 +555,7 @@ export function resolvePi(extensionPath: string, executableOverride?: string): R
 }
 
 // ---------------------------------------------------------------------------
-// 消息文本提取
+// Message text extraction
 // ---------------------------------------------------------------------------
 
 export function extractMessageText(m: PiRawMessage): string | null {
@@ -576,14 +579,14 @@ export function extractMessageText(m: PiRawMessage): string | null {
 }
 
 export interface PiMessageParts {
-    /** 所有 text 块按顺序原样拼接（不加分隔符，便于与流式增量做前缀比对） */
+    /** All text blocks concatenated in order, verbatim (no separator, so it can be prefix-compared with streamed deltas) */
     text: string;
-    /** 所有 thinking 块按顺序原样拼接 */
+    /** All thinking blocks concatenated in order, verbatim */
     thinking: string;
     toolCalls: PiToolCallBlock[];
 }
 
-/** 拆解助手消息内容块（text / thinking / toolCall），用于漏内容补齐 */
+/** Split an assistant message into content blocks (text / thinking / toolCall) for filling in missing content */
 export function extractMessageParts(m: PiRawMessage): PiMessageParts {
     const out: PiMessageParts = { text: '', thinking: '', toolCalls: [] };
     const c = m.content;
@@ -601,7 +604,7 @@ export function extractMessageParts(m: PiRawMessage): PiMessageParts {
     return out;
 }
 
-/** 读取工具结果消息（role: 'toolResult'），非工具结果返回 null */
+/** Read a tool-result message (role: 'toolResult'); returns null for anything else */
 export function extractToolResult(m: PiRawMessage): PiToolResultMessage | null {
     if (m.role !== 'toolResult' || !m.toolCallId) { return null; }
     return {
@@ -619,7 +622,7 @@ export interface PiImageBlock {
     mimeType?: string;
 }
 
-/** 从消息内容中提取图片块（用于在聊天里回显用户粘贴的图片） */
+/** Extract image blocks from message content (to echo images the user pasted) */
 export function extractMessageImages(m: PiRawMessage): PiImageBlock[] {
     const c = m.content;
     if (!Array.isArray(c)) { return []; }

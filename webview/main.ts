@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Webview 入口 — 组装所有模块
+// Webview entry — assembles all modules
 // ---------------------------------------------------------------------------
 
 import './styles.css';
@@ -21,7 +21,7 @@ import { initContextUsage } from './modules/contextUsage';
 
 const ctx = createContext();
 
-// 初始化所有模块
+// Initialize all modules
 initPanels(ctx);
 initNavigator(ctx);
 initImagePaste(ctx);
@@ -36,7 +36,7 @@ initEventBindings(ctx);
 initMessageHandler(ctx);
 initContextUsage(ctx);
 
-// 初始渲染
+// Initial render
 scrollToBottom(ctx.els.chat);
 ctx.els.input.focus();
 ctx.vscode.postMessage({ type: 'ready' });

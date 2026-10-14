@@ -1,15 +1,15 @@
 // ---------------------------------------------------------------------------
-// Webview HTML 外壳
+// Webview HTML shell
 //
-// 结构（body）保留在这里；样式与脚本已抽离为独立资源：
+// The body structure lives here; styles and scripts are separate assets:
 //   webview/styles.css  -> media/main.css
-//   webview/main.ts      -> media/main.js（esbuild 打包，含 markdown-it/highlight.js）
-// 由 ChatPanel 通过 webview.asWebviewUri 引用。
+//   webview/main.ts      -> media/main.js (esbuild bundle, includes markdown-it/highlight.js)
+// Referenced from ChatPanel via webview.asWebviewUri.
 // ---------------------------------------------------------------------------
 
 import { UiStrings } from './strings';
 
-/** HTML 转义（属性值与文本节点通用） */
+/** HTML escape (for attribute values and text nodes) */
 function escapeAttr(s: unknown): string {
     return String(s ?? '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }

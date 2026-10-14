@@ -18,7 +18,7 @@ describe('ChatRuntimeRegistry', () => {
         const sidebar = reg.forSurface('sidebar');
         const secondary = reg.forSurface('secondary');
         expect(sidebar).not.toBe(secondary);
-        // 同一槽位复用时拿到同一个运行时
+        // Reusing a slot returns the same runtime
         expect(reg.forSurface('sidebar')).toBe(sidebar);
         expect(reg.forSurface('secondary')).toBe(secondary);
     });
@@ -27,9 +27,9 @@ describe('ChatRuntimeRegistry', () => {
         const reg = new ChatRuntimeRegistry();
         const first = reg.forSurface('sidebar');
         const second = reg.forSurface('secondary');
-        // 首个界面不传 startOptions → pi 用 --continue 续接最近会话
+        // The first surface passes no startOptions -> pi uses --continue to resume the most recent session
         expect(first.startOptions).toBeUndefined();
-        // 后续界面明确新开，避免多进程争用同一会话文件
+        // Later surfaces explicitly start fresh, so two processes never contend for the same session file
         expect(second.startOptions).toEqual({ continueRecent: false });
     });
 
@@ -78,7 +78,7 @@ describe('ChatRuntimeRegistry', () => {
         reg.create();
         await reg.stopAll();
         expect(reg.all()).toHaveLength(0);
-        // 清空后再取槽位会得到一个新的运行时
+        // After clearing, asking for the slot yields a new runtime
         expect(reg.forSurface('sidebar')).toBeTruthy();
         expect(reg.all()).toHaveLength(1);
     });

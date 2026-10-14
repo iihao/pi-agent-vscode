@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 输入处理：发送、编辑/删除/复制消息、输入历史
+// Input handling: send, edit/delete/copy messages, input history
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext } from '../types';
@@ -39,19 +39,19 @@ export function send(mode?: string): void {
     const text = input.value.trim();
     const images = ctx.pendingImages.map(function (i) { return { type: 'image', data: i.data, mimeType: i.mimeType }; });
     if (!text && !images.length) { return; }
-    // 编辑重发：移除原消息及之后的助手回复
+    // Edit & resend: drop the original message and everything after it
     if (ctx.editingMessageEl) {
         removeMessagesFrom(ctx.editingMessageEl);
         ctx.editingMessageEl.classList.remove('editing');
         ctx.editingMessageEl = null;
     }
-    // 保存到历史
+    // Save to input history
     if (text && (ctx.messageHistory.length === 0 || ctx.messageHistory[ctx.messageHistory.length - 1] !== text)) {
         ctx.messageHistory.push(text);
         if (ctx.messageHistory.length > 50) { ctx.messageHistory.shift(); }
     }
     ctx.historyIndex = -1;
-    // 斜杠命令拦截
+    // Intercept slash commands
     if (text.charAt(0) === '/') {
         const cmd = text.split(/\s/)[0];
         if (cmd === '/compact') {
@@ -132,7 +132,7 @@ export function send(mode?: string): void {
             return;
         }
     }
-    // `!` 前缀：直接执行 shell 命令，不经过模型回合
+    // `!` prefix: run a shell command directly, without a model turn
     if (text.charAt(0) === '!') {
         const command = text.slice(1).trim();
         if (command) {
@@ -144,7 +144,7 @@ export function send(mode?: string): void {
         autoResizeInput();
         return;
     }
-    // 忙碌时：按当前模式（排队 / 插话）发送，带修饰键则强制插话
+    // While busy: send using the current mode (queue / steer); a modifier forces steer
     ctx.vscode.postMessage({ type: 'sendMessage', text: text, mode: ctx.busy ? (mode ?? ctx.sendMode) : undefined, images: images.length ? images : undefined });
     input.value = '';
     ctx.pendingImages = [];

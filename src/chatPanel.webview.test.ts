@@ -1,4 +1,7 @@
 import { describe, it, expect, afterEach, beforeEach } from 'vitest';
+import * as fs from 'fs';
+import * as os from 'os';
+import * as path from 'path';
 import { ChatPanel } from './chatPanel';
 import { ChatRuntime } from './chatPanel/runtime';
 import * as vscodeMock from '../test/vscode.mock';
@@ -148,8 +151,107 @@ describe('ChatPanel webview bridge', () => {
             const { webview } = make();
             webview.emit({ type: 'setupAction', action: 'install' });
             webview.emit({ type: 'setupAction', action: 'logs' });
-            // 不应抛错（终端/剪贴板已 mock）
+            // Must not throw (terminal / clipboard are mocked)
             expect(true).toBe(true);
+        });
+
+        type AuthInternals = { _refreshAuthStatus(): Promise<void>; _runtime: { clientManager: unknown } };
+        const stubClient = (panel: ChatPanel, provider: string, authStdout: string, code = 0): void => {
+            const runtime = (panel as unknown as AuthInternals)._runtime;
+            runtime.clientManager = {
+                client: { getState: async () => ({ model: { provider } }) },
+                runCli: async () => ({ stdout: authStdout, stderr: '', code }),
+            };
+        };
+
+        it('reports “provider ready” from `pi auth check`', async () => {
+            const { webview, panel } = make();
+            stubClient(panel, 'openai', '{"status":"ready","provider":"openai"}');
+            await (panel as unknown as AuthInternals)._refreshAuthStatus();
+            const setup = webview.posted.filter((m) => m.type === 'setup').pop();
+            expect(setup?.setup).toMatchObject({ authReady: true, provider: 'openai' });
+        });
+
+        it('reports not-ready with the pi reason', async () => {
+            const { webview, panel } = make();
+            stubClient(panel, 'anthropic', '{"status":"not_ready","reason":"credentials_not_configured"}', 1);
+            await (panel as unknown as AuthInternals)._refreshAuthStatus();
+            const setup = webview.posted.filter((m) => m.type === 'setup').pop();
+            expect(setup?.setup).toMatchObject({ authReady: false, authReason: 'credentials_not_configured', provider: 'anthropic' });
+        });
+
+        type ActionInternals = { _errorActions(t?: string): Array<{ id: string }>; _authStatus: unknown };
+
+        it('adds connect / sign-in buttons to a credential error', () => {
+            const { panel } = make();
+            const ids = (panel as unknown as ActionInternals)._errorActions('No API key for provider openai').map((a) => a.id);
+            expect(ids).toEqual(expect.arrayContaining(['connect', 'login', 'logs']));
+        });
+
+        it('does not add connect for an unrelated error', () => {
+            const { panel } = make();
+            const ids = (panel as unknown as ActionInternals)._errorActions('Request timed out').map((a) => a.id);
+            expect(ids).not.toContain('connect');
+        });
+
+        it('adds connect when the provider is known not-ready', () => {
+            const { panel } = make();
+            (panel as unknown as ActionInternals)._authStatus = { provider: 'openai', ready: false };
+            const ids = (panel as unknown as ActionInternals)._errorActions('boom').map((a) => a.id);
+            expect(ids).toContain('connect');
+        });
+
+        describe('credential files', () => {
+            let dir: string;
+            let prev: string | undefined;
+            beforeEach(() => {
+                dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-agent-dir-'));
+                prev = process.env.PI_CODING_AGENT_DIR;
+                process.env.PI_CODING_AGENT_DIR = dir;
+            });
+            afterEach(() => {
+                if (prev === undefined) { delete process.env.PI_CODING_AGENT_DIR; } else { process.env.PI_CODING_AGENT_DIR = prev; }
+                fs.rmSync(dir, { recursive: true, force: true });
+            });
+
+            it('merges API keys into auth.json', () => {
+                const { panel } = make();
+                const inner = panel as unknown as { _writeAuthKey(p: string, k: string): void };
+                inner._writeAuthKey('openai', 'sk-1');
+                inner._writeAuthKey('deepseek', 'sk-2');
+                const auth = JSON.parse(fs.readFileSync(path.join(dir, 'auth.json'), 'utf8')) as Record<string, unknown>;
+                expect(auth.openai).toEqual({ type: 'api_key', key: 'sk-1' });
+                expect(auth.deepseek).toEqual({ type: 'api_key', key: 'sk-2' });
+            });
+
+            it('merges a custom endpoint into models.json', () => {
+                const { panel } = make();
+                const inner = panel as unknown as { _writeCustomProvider(p: Record<string, string>): void };
+                inner._writeCustomProvider({ id: 'my-gw', name: 'My GW', baseUrl: 'https://api.example.com/v1', apiKey: 'k', modelId: 'm1' });
+                const models = JSON.parse(fs.readFileSync(path.join(dir, 'models.json'), 'utf8')) as {
+                    providers: Record<string, { baseUrl: string; api: string; apiKey: string; models: Array<{ id: string }> }>;
+                };
+                expect(models.providers['my-gw']).toMatchObject({ baseUrl: 'https://api.example.com/v1', api: 'openai-completions', apiKey: 'k' });
+                expect(models.providers['my-gw'].models).toEqual([{ id: 'm1' }]);
+            });
+
+            it('lists providers from both files and deletes them', () => {
+                const { panel } = make();
+                const inner = panel as unknown as {
+                    _writeAuthKey(p: string, k: string): void;
+                    _writeCustomProvider(p: Record<string, string>): void;
+                    _collectProviders(): Array<{ id: string; sources: string[] }>;
+                    _deleteProvider(id: string): void;
+                };
+                inner._writeAuthKey('openai', 'sk');
+                inner._writeCustomProvider({ id: 'my-gw', name: 'My GW', baseUrl: 'https://x/v1', apiKey: 'k', modelId: 'm' });
+                expect(inner._collectProviders().map((p) => p.id).sort()).toEqual(['my-gw', 'openai']);
+
+                inner._deleteProvider('openai');
+                inner._deleteProvider('my-gw');
+                expect(inner._collectProviders()).toEqual([]);
+                expect(JSON.parse(fs.readFileSync(path.join(dir, 'auth.json'), 'utf8'))).toEqual({});
+            });
         });
     });
 
@@ -223,7 +325,7 @@ describe('ChatPanel webview bridge', () => {
         const win = vscodeMock.window as unknown as { activeTextEditor?: unknown };
         type Ctx = { id: string; type: string; path: string; lineRange?: string; auto?: boolean };
 
-        // 唯一的文件名：模块级的“已叉掉”状态按文档路径持久，避免测试间污染
+        // Unique file names: the module-level "dismissed" state persists per document path, so avoid cross-test pollution
         const fakeEditor = (fsPath: string, start = 0, end = start) => ({
             document: { uri: { scheme: 'file', fsPath, path: fsPath } },
             selection: { isEmpty: start === end, start: { line: start }, end: { line: end } },
@@ -294,7 +396,7 @@ describe('ChatPanel webview bridge', () => {
         });
     });
 
-    // 事件桥的核心契约：插件只改变呈现形式，内容一律以 pi 的权威消息为准。
+    // Core contract of the event bridge: the extension only changes presentation; content always follows pi's authoritative messages.
     describe('agent event bridge', () => {
         type EventSink = { _onAgentEvent(event: unknown): void };
         const push = (panel: ChatPanel, event: unknown): void =>
@@ -335,7 +437,7 @@ describe('ChatPanel webview bridge', () => {
         it('thinking_end fills in thinking that never arrived as deltas', () => {
             const { webview, panel } = make();
             push(panel, { type: 'agent_start' });
-            // provider 适配器用 content，pi-messages 通道用 thinking，两种都要兜住
+            // Provider adapters use content, the pi-messages channel uses thinking; both must be handled
             push(panel, { type: 'message_update', assistantMessageEvent: { type: 'thinking_end', content: 'deep ' } });
             push(panel, { type: 'message_update', assistantMessageEvent: { type: 'thinking_end', thinking: 'thought' } });
             expect(thinking(webview)).toBe('deep thought');
@@ -363,7 +465,7 @@ describe('ChatPanel webview bridge', () => {
 
         it('failed-turn errors carry actionable buttons (logs, plus retry after a message)', () => {
             const { webview, panel } = make();
-            // 模拟“上一条用户消息”（发消息会尝试真连接，这里直接注入）
+            // Simulate the "last user message" (sending would attempt a real connection, so inject it)
             (panel as unknown as { _lastUserMessage: unknown })._lastUserMessage = { text: 'do it' };
             push(panel, { type: 'agent_start' });
             push(panel, { type: 'message_start', message: { role: 'assistant', content: [] } });
@@ -385,7 +487,7 @@ describe('ChatPanel webview bridge', () => {
                 type: 'message_end',
                 message: { role: 'assistant', content: [{ type: 'toolCall', id: 'c1', name: 'bash', arguments: { command: 'ls' } }] },
             });
-            // message_end 早于 tool_execution_start：此时还不能建卡片，否则会重复
+            // message_end precedes tool_execution_start: don't build the card yet or it would duplicate
             expect(webview.posted.filter((m) => m.type === 'toolCall')).toHaveLength(0);
             push(panel, { type: 'agent_settled' });
             expect(webview.posted).toContainEqual({

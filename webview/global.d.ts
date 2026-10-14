@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Webview 全局类型声明
+// Webview global type declarations
 // ---------------------------------------------------------------------------
 
 declare function acquireVsCodeApi(): {
@@ -8,9 +8,9 @@ declare function acquireVsCodeApi(): {
     setState(state: unknown): void;
 };
 
-// markdown-it 类型（简化声明，覆盖 webview 中的使用方式）
+// markdown-it types (simplified to cover how the webview uses it)
 declare module 'markdown-it' {
-    /** markdown-it Token 类型 */
+    /** markdown-it Token */
     export interface Token {
         info?: string;
         content?: string;

@@ -20,6 +20,7 @@
   "cmd.openInEditor": "Pi : Ouvrir le chat dans un onglet",
   "cmd.openInEditorToSide": "Pi : Ouvrir le chat à côté",
   "cmd.openInSecondarySideBar": "Pi : Ouvrir le chat dans la barre latérale secondaire",
+  "cmd.manageProviders": "Pi : Gérer les fournisseurs de modèles",
   "cmd.attachFile": "Pi : Joindre le fichier courant au chat",
   "cmd.attachSelection": "Pi : Joindre la sélection au chat",
   "cmd.attachFiles": "Pi : Joindre des fichiers de l'espace de travail",

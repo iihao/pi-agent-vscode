@@ -52,7 +52,7 @@ describe('extractMessageImages', () => {
     });
 });
 
-/** 模拟 pi SDK 的 RpcClient 内部结构（send / pendingRequests / requestId / process.stdin） */
+/** Fake the pi SDK RpcClient internals (send / pendingRequests / requestId / process.stdin) */
 function makeFakeClient() {
     const pendingRequests = new Map<string, { resolve: (value: unknown) => void; reject: (error: unknown) => void }>();
     const written: string[] = [];
@@ -84,7 +84,7 @@ describe('patchLongRunningTimeouts', () => {
             expect(cmd.type).toBe('compact');
             expect(cmd.id).toMatch(/^req_/);
 
-            // 30s 后仍未超时（默认 SDK 会在这里报错）
+            // Still not timed out after 30s (the default SDK would error here)
             await vi.advanceTimersByTimeAsync(30_000);
             expect(pendingRequests.has(cmd.id)).toBe(true);
 

@@ -1,11 +1,14 @@
 // ---------------------------------------------------------------------------
-// 漏内容补齐（回合结束时的对账）
+// Filling in dropped content (reconciliation at turn end)
 //
-// 设计原则：扩展只决定「呈现形式」，内容一律以 pi 的权威消息为准。
-//  - 流式事件（*_delta）负责即时体验，可能因为丢包/重连而缺片段；
-//  - 消息结束事件（*_end / message_end）携带完整内容，是权威来源；
-//  - 每个消息结束时做一次对账，把没渲染出去的部分补上。
-// 任何情况下都不允许「内容被静默丢弃」：宁可重复，也不漏。
+// Principle: the extension only decides how things are presented; content
+// always comes from pi's authoritative messages.
+//  - Streaming events (*_delta) drive the live experience but can miss chunks
+//    (packet loss / reconnects);
+//  - Message-end events (*_end / message_end) carry the full content and are
+//    authoritative;
+//  - At each message end we reconcile and send whatever was never rendered.
+// Content is never silently dropped: duplicating is better than missing.
 // ---------------------------------------------------------------------------
 
 import {
@@ -16,28 +19,29 @@ import {
     extractToolResult,
 } from '../sdk/piTypes';
 
-/** 一条消息流式阶段已经下发给 webview 的内容 */
+/** What the streaming phase has already sent to the webview for one message */
 export interface StreamedContent {
     text: string;
     thinking: string;
 }
 
 export interface MissingSuffix {
-    /** 仍需下发的部分（空字符串 = 已经不缺） */
+    /** Still-missing part (empty string = nothing missing) */
     suffix: string;
-    /** 流式内容与权威内容不是前缀关系（说明增量丢失/被改写） */
+    /** The streamed content is not a prefix of the authoritative content (deltas lost or rewritten) */
     mismatch: boolean;
 }
 
 /**
- * 计算 full 相对 streamed 缺了什么。
- * streamed 为空 → 全量补发；streamed 是 full 的前缀 → 只补后缀。
+ * Compute what `streamed` is missing relative to `full`.
+ * Empty streamed -> resend everything; streamed is a prefix of full -> send only
+ * the suffix.
  */
 export function missingSuffix(full: string, streamed: string): MissingSuffix {
     if (!full || full === streamed) { return { suffix: '', mismatch: false }; }
     if (!streamed) { return { suffix: full, mismatch: false }; }
     if (full.startsWith(streamed)) { return { suffix: full.slice(streamed.length), mismatch: false }; }
-    // 对不上：补发权威全文，避免漏内容（调用方会记一条诊断日志）
+    // Mismatch: resend the authoritative full text so nothing is missed (the caller logs a diagnostic)
     return { suffix: full, mismatch: true };
 }
 
@@ -48,23 +52,23 @@ export interface MissingToolCall {
 }
 
 export interface AssistantCompletion {
-    /** 仍缺的正文 */
+    /** Still-missing text */
     textSuffix: string;
-    /** 仍缺的思考内容 */
+    /** Still-missing thinking */
     thinkingSuffix: string;
-    /** 还没有渲染成卡片的工具调用 */
+    /** Tool calls not yet rendered as cards */
     toolCalls: MissingToolCall[];
-    /** 该消息的失败原因（pi 用一条空助手消息承载错误） */
+    /** Why this message failed (pi carries the error on an empty assistant message) */
     error?: string;
-    /** 该回合是被中止的（用户主动停止 / 被 abort），不是失败 */
+    /** The turn was aborted (user stop / abort), not failed */
     aborted: boolean;
     textMismatch: boolean;
     thinkingMismatch: boolean;
 }
 
 /**
- * 依据已结束的助手消息，算出还需要补发给 webview 的内容。
- * renderedToolIds：已经建过卡片的 toolCallId 集合。
+ * Work out what still needs to be sent to the webview for a finished assistant
+ * message. renderedToolIds: toolCallIds that already have a card.
  */
 export function planAssistantCompletion(
     m: PiRawMessage,
@@ -98,13 +102,14 @@ export interface ToolResultCompletion {
     durationMs?: number;
     content?: PiToolResultBlock[] | string;
     details?: PiToolResultDetails;
-    /** 卡片还没建过：需要先补一条 toolCall 再补结果 */
+    /** No card yet: a toolCall must be sent before the result */
     needCard: boolean;
 }
 
 /**
- * 依据已结束的工具结果消息，算出需要补发的工具结果。
- * 已完成的结果重复下发是幂等的（webview 按 toolCallId 定位卡片）。
+ * Work out which tool results to resend for a finished tool-result message.
+ * Resending an already-completed result is idempotent (the webview locates the
+ * card by toolCallId).
  */
 export function planToolResultCompletion(
     m: PiRawMessage,

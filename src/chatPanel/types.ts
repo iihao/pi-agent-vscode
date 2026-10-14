@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// ChatPanel 消息类型定义（重新导出共享协议）
+// ChatPanel message types (re-export of the shared protocol)
 // ---------------------------------------------------------------------------
 
 export { PostMessage, WebviewMessage, ImageAttachment } from './sharedTypes';

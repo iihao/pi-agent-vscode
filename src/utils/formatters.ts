@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 工具函数
+// Helpers
 // ---------------------------------------------------------------------------
 
 import * as vscode from 'vscode';
@@ -7,7 +7,7 @@ import { PiToolResult } from '../sdk/piTypes';
 import { logError } from './logger';
 
 /**
- * 从工具结果中提取可展示的文本输出（超长则截断）
+ * Extract displayable text output from a tool result (truncated when too long).
  */
 export function extractToolOutput(result: PiToolResult | undefined, maxLen = 200000): string {
     if (!result) { return ''; }
@@ -30,7 +30,7 @@ export function extractToolOutput(result: PiToolResult | undefined, maxLen = 200
 }
 
 /**
- * 工具参数摘要
+ * Short summary of tool arguments.
  */
 export function summarizeToolArgs(args: unknown): string {
     try {
@@ -50,9 +50,9 @@ export function summarizeToolArgs(args: unknown): string {
 }
 
 /**
- * 工具参数的完整展示文本（卡片正文用）。
- * 卡片标题仍是摘要，这里给全文，避免长命令/参数在界面上看不到。
- * 超过上限时截断并写明，不做静默丢弃。
+ * Full display text for tool arguments (used as the card body).
+ * The card title stays a summary; the full text goes here so long commands /
+ * arguments are never hidden. Truncated with a note when over the cap.
  */
 export function formatToolArgs(args: unknown, maxLen = 20000): string {
     if (args === undefined || args === null) { return ''; }
@@ -68,7 +68,7 @@ export function formatToolArgs(args: unknown, maxLen = 20000): string {
 }
 
 /**
- * 格式化 token 用量
+ * Format token usage.
  */
 export function formatUsage(usage: { input?: number; output?: number; cacheRead?: number }): string {
     const parts: string[] = [];
@@ -79,7 +79,7 @@ export function formatUsage(usage: { input?: number; output?: number; cacheRead?
 }
 
 /**
- * 验证用户消息
+ * Validate a user message.
  */
 export function validateMessage(text: string): { valid: boolean; error?: string } {
     if (!text.trim()) {

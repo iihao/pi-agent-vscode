@@ -1,6 +1,7 @@
 // ---------------------------------------------------------------------------
-// 上下文引用：附加的文件/选区以「引用」而非「复制内容」的方式拼进 prompt。
-// 只给 pi 路径（必要时带行号），让它用自己的工具读取当前磁盘内容。
+// Context references: attached files / selections are woven into the prompt as
+// references, not copied content. Only the path (plus a line range when needed)
+// is given, so pi reads the current on-disk content with its own tools.
 // ---------------------------------------------------------------------------
 
 export interface ContextRef {
@@ -9,27 +10,27 @@ export interface ContextRef {
     lineRange?: string;
 }
 
-/** 已附加的上下文条目（引用 + 稳定 id） */
+/** An attached context entry (reference + stable id) */
 export interface ContextItem extends ContextRef {
     id: string;
-    /** 由当前活动编辑器自动附加（可被用户叉掉），区别于用户手动附加 */
+    /** Auto-attached from the active editor (user can remove it), unlike a manual attachment */
     auto?: boolean;
 }
 
-/** 自动附加条目的保留 id（同一时刻至多一个） */
+/** Reserved id for the auto-attached entry (at most one at a time) */
 export const AUTO_CONTEXT_ID = 'auto';
 
 const BLOCK_START = '--- pi-extension-context:start ---';
 const BLOCK_END = '--- pi-extension-context:end ---';
 
-/** 单个引用：选区带行号，文件只给路径 */
+/** A single reference: a selection carries a line range, a file just its path */
 export function contextRef(c: ContextRef): string {
     return c.type === 'selection' && c.lineRange ? `@${c.path}:${c.lineRange}` : `@${c.path}`;
 }
 
 /**
- * 把上下文引用拼到消息前面，形成 pi 可读的 context 块。
- * 无引用时原样返回。
+ * Prefix the message with the context references as a pi-readable context block.
+ * Returns the text unchanged when there are no references.
  */
 export function buildContextBlock(contexts: ContextRef[], text: string, extraBlocks: string[] = []): string {
     if (contexts.length === 0 && extraBlocks.length === 0) { return text; }
@@ -42,7 +43,7 @@ export function buildContextBlock(contexts: ContextRef[], text: string, extraBlo
     return parts.join('\n') + '\n\n' + text;
 }
 
-/** 从消息文本中剥离 context 块（用于展示历史消息，避免暴露内部格式） */
+/** Strip the context block from a message (for history display, to hide the internal format) */
 export function stripContextBlock(text: string): string {
     const start = text.indexOf(BLOCK_START);
     if (start === -1) { return text; }
@@ -52,8 +53,9 @@ export function stripContextBlock(text: string): string {
 }
 
 /**
- * 从消息文本里解析 context 块中的引用（用于历史消息回显附件）。
- * 识别 `<file-context>` 内以 `@` 开头的行；尾部 `:行号[-行号]` 视为选区。
+ * Parse the references out of a context block (used to echo attachments on
+ * history messages). Recognizes `@`-prefixed lines inside `<file-context>`;
+ * a trailing `:line[-line]` is treated as a selection.
  */
 export function parseContextRefs(text: string): ContextRef[] {
     const start = text.indexOf(BLOCK_START);

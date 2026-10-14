@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 输出通道 + 内存环形缓冲（供诊断导出）
+// Output channel + in-memory ring buffer (for the diagnostics export)
 // ---------------------------------------------------------------------------
 
 import * as vscode from 'vscode';
@@ -37,12 +37,12 @@ export function logError(msg: string): void {
     write('error', msg);
 }
 
-/** 显示输出通道（错误气泡里的「查看日志」） */
+/** Show the output channel (the error bubble's "Show logs") */
 export function showLogs(): void {
     channel?.show(true);
 }
 
-/** 导出诊断文本（日志 + 基本环境信息） */
+/** Build the diagnostics text (log + basic environment info) */
 export function buildDiagnostics(extensionPath: string): string {
     const header = [
         vscode.l10n.t('# Pi Agent diagnostics'),

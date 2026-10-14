@@ -5,12 +5,13 @@ import { fileURLToPath } from 'node:url';
 const stylesPath = fileURLToPath(new URL('../webview/styles.css', import.meta.url));
 
 describe('webview styles', () => {
-    // 回归守卫：曾经因为只在每个组件上写 `.foo.hidden`，新增的撤销按钮漏写规则，
-    // 导致「未撤销时 Undo 按钮就可见、点了只报 Nothing to restore」。
-    // 这里确保存在一份「全局 .hidden 工具类」，任何组件都能直接复用。
+    // Regression guard: components used to declare `.foo.hidden` individually, so a
+    // new Undo button missed the rule and showed before anything was reverted —
+    // clicking it only reported "Nothing to restore". This asserts a single global
+    // `.hidden` utility exists so any component can reuse it.
     it('defines a global .hidden utility (not only per-component rules)', () => {
         const css = readFileSync(stylesPath, 'utf8');
-        // 行首（或前面是 } / 空白）的裸 .hidden 规则，排除 `.popover.hidden` 这类组合选择器
+        // A bare .hidden rule at line start (or after } / whitespace), excluding compound selectors like `.popover.hidden`
         const globalHidden = /(^|\n)\s*\.hidden\s*\{[^}]*display:\s*none/i;
         expect(css).toMatch(globalHidden);
     });

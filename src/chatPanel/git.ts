@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Git 集成
+// Git integration
 // ---------------------------------------------------------------------------
 
 import * as vscode from 'vscode';
@@ -8,7 +8,7 @@ import { logError } from '../utils/logger';
 
 const vs = getVSCodeService();
 
-// ---- 最小化的 vscode.git API 类型（内建 Git 扩展） ----
+// ---- Minimal vscode.git API types (built-in Git extension) ----
 interface GitChange { uri: vscode.Uri; }
 interface GitRepository {
     rootUri: vscode.Uri;

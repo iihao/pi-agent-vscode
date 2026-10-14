@@ -1,39 +1,46 @@
 // ---------------------------------------------------------------------------
-// 消息协议共享类型（扩展宿主 ↔ webview 双向）
+// Shared message-protocol types (extension host <-> webview)
 //
-// 本文件是两边唯一的消息契约定义，src/ 与 webview/ 均从此文件导入。
+// This file is the single message contract for both sides; src/ and webview/
+// both import from it.
 // ---------------------------------------------------------------------------
 
 import { PiImageBlock } from '../sdk/piTypes';
 
 export type ImageAttachment = { type?: string; data?: string; mimeType?: string };
 
-/** 文件/选区引用（输入框附件与消息回显共用） */
+/** File / selection reference (composer attachment and message echo) */
 export interface ContextAttachment {
     type: string;
     path: string;
     lineRange?: string;
 }
 
-/** 首次环境自检状态 */
+/** First-run setup status */
 export interface SetupStatus {
     connecting: boolean;
     connected: boolean;
     piFound: boolean;
     hasModels: boolean;
     workspaceTrusted: boolean;
+    /** Whether the current provider has usable credentials (undefined = unknown) */
+    authReady?: boolean;
+    /** Why it is not ready (pi's auth check reason) */
+    authReason?: string;
+    /** Current provider id */
+    provider?: string;
 }
 
-// ---- 扩展宿主 → webview ----
+// ---- extension host -> webview ----
 
 export interface PostMessage {
     type: string;
     text?: string;
     busy?: boolean;
     isError?: boolean;
-    /** 错误气泡上的可操作按钮 */
+    /** Action buttons on an error bubble */
     actions?: Array<{ id: string; label: string }>;
-    /** 首次环境自检 */
+    /** First-run setup */
     setup?: SetupStatus;
     messages?: Array<{ role: string; text: string; images?: PiImageBlock[]; attachments?: ContextAttachment[] }>;
     models?: Array<{ provider: string; id: string }>;
@@ -44,15 +51,15 @@ export interface PostMessage {
     sessions?: Array<{ id: string; file: string; createdAt: number; messageCount: number; name?: string; preview?: string }>;
     tool?: string;
     detail?: string;
-    /** 工具参数全文（卡片正文展示，避免长命令只看到摘要） */
+    /** Full tool arguments (card body, so long commands are not reduced to a summary) */
     toolArgs?: string;
     toolCallId?: string;
     output?: string;
     diff?: string;
     durationMs?: number;
-    /** 工具输出被 pi 截断 */
+    /** Tool output was truncated by pi */
     truncated?: boolean;
-    /** 被截断时的完整输出文件路径（可打开） */
+    /** Path to the full output file when truncated (openable) */
     fullOutputPath?: string;
     toolCalls?: Array<{ tool: string; detail: string; isError?: boolean }>;
     stats?: {
@@ -65,7 +72,7 @@ export interface PostMessage {
         autoCompact: boolean;
     };
     contexts?: Array<ContextAttachment & { id: string; auto?: boolean }>;
-    /** 本条用户消息携带的文件/选区附件（消息回显用） */
+    /** File / selection attachments carried by this user message (for echo) */
     attachments?: ContextAttachment[];
     images?: ImageAttachment[];
     pending?: 'steering' | 'queued';
@@ -75,9 +82,9 @@ export interface PostMessage {
     openEditors?: Array<{ path: string; label: string; range?: string }>;
     recentFiles?: Array<{ path: string; label: string }>;
     code?: string;
-    // 工作区文件列表（@ 提及补全）
+    // Workspace file list (@ mention completion)
     files?: string[];
-    // 本回合改动 / 撤销
+    // Per-turn changes / revert
     turnFiles?: Array<{ path: string; status: 'created' | 'modified'; revertible: boolean; state: 'pending' | 'reverted' | 'deleted' | 'failed' | 'skipped'; diff?: string }>;
     results?: Array<{ path: string; result: 'reverted' | 'deleted' | 'failed' | 'skipped'; error?: string }>;
     canUndo?: boolean;
@@ -86,12 +93,12 @@ export interface PostMessage {
     [key: string]: unknown;
 }
 
-// ---- webview → 扩展宿主 ----
+// ---- webview -> extension host ----
 
 export interface WebviewMessage {
     type: string;
     text?: string;
-    /** 错误气泡按钮的动作 id（retry / logs …） */
+    /** Action id from an error-bubble button (retry / logs ...) */
     action?: string;
     code?: string;
     provider?: string;

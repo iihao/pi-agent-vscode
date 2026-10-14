@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
-// ChatPanel - 主聊天面板（重构版）
+// ChatPanel - main chat panel (refactored)
 // ---------------------------------------------------------------------------
 
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
 import { getWebviewHtml } from './views/webviewTemplate';
 import { getUiStrings } from './views/strings';
 import { PiClientManager, PiStartError, PiNotFoundError } from './sdk/clientManager';
@@ -23,11 +24,12 @@ import { getGitAPI, pickGitRepository } from './chatPanel/git';
 import { buildCommitPrompt, buildPrPrompt, buildNamePrompt } from './chatPanel/prompts';
 import { parseEdits, isRevertible, revertEdits, editsToDiff, lineDiff } from './chatPanel/turnChanges';
 import { planAssistantCompletion, planToolResultCompletion, missingSuffix } from './chatPanel/turnReconcile';
+import { KNOWN_PROVIDERS, providerLabel } from './chatPanel/providers';
 
-/** VS Code 访问统一走服务容器（便于测试与替换） */
+/** All VS Code access goes through the service container (easier to test and swap) */
 const vs = getVSCodeService();
 
-/** 判断错误是否为「pi 进程/连接」类问题（用类型/code 判断，不依赖本地化文案） */
+/** Whether an error is a "pi process / connection" problem (checked by type/code, not localized text) */
 function isProcessError(err: unknown): boolean {
     if (err instanceof PiStartError) { return true; }
     const e = err as { code?: string; message?: string } | undefined;
@@ -46,12 +48,12 @@ function permissionLabel(mode: string): string {
     }
 }
 
-/** webview 构建产物所在目录 */
+/** Directory holding the built webview assets */
 function mediaRoot(extensionPath: string): vscode.Uri {
     return vs.uri.file(path.join(extensionPath, 'media'));
 }
 
-// ---- Git 集成、Prompt 构建、改动追踪、消息类型已解耦到 chatPanel/ 目录 ----
+// ---- Git integration, prompt builders, change tracking and message types live under chatPanel/ ----
 
 export class ChatPanel {
     public static currentView: ChatPanel | undefined;
@@ -59,30 +61,32 @@ export class ChatPanel {
     public static readonly secondaryViewType = 'pi-agent.chatViewSecondary';
     public static readonly editorViewType = 'pi-agent.chatEditor';
     private static _instances: ChatPanel[] = [];
-    /** 会话运行时注册表：一个会话 = 一个独立 pi 客户端 + 状态 */
+    /** Session runtime registry: one session = one independent pi client + state */
     private static _registry = new ChatRuntimeRegistry();
 
     private readonly _webview: vscode.Webview;
     private readonly _extensionPath: string;
     private _disposables: vscode.Disposable[] = [];
-    /** 本面板绑定的会话运行时（同一运行时 = 同一会话 + 镜像状态） */
+    /** Session runtime this panel is bound to (same runtime = same session + shared state) */
     private _runtime: ChatRuntime;
-    /** 本面板所属界面槽位（侧边栏 / 辅助侧边栏 / 编辑器面板），决定默认会话 */
+    /** Surface slot this panel belongs to (sidebar / secondary sidebar / editor panel); decides its default session */
     private readonly _surfaceKey: string;
     private _runtimeUnsub: (() => void) | undefined;
     private _contextWarned = false;
     private _commands: PiSlashCommand[] = [];
     private _fileList: string[] | undefined;
     private _fileListAt = 0;
-    /** 最近一次发送的用户消息（错误气泡「重试」用） */
+    /** Last user message sent (for the error bubble's "Retry") */
     private _lastUserMessage: { text: string; images?: ImageAttachment[] } | undefined;
-    /** 工具调用 → 本次记录前的改动状态（工具失败时回滚本次记录） */
+    /** Tool call -> change state before this record (rolled back when the tool fails) */
     private readonly _pendingTrack = new Map<string, { rel: string; prev: TurnChange | undefined }>();
-    /** 最近一次连接是否因「pi 未安装」失败（自检清单用） */
+    /** Whether the last connect failed because pi is not installed (for the setup checklist) */
     private _piMissing = false;
+    /** Credential status of the current provider (from `pi auth check`) */
+    private _authStatus: { provider?: string; ready?: boolean; reason?: string } = {};
     private _disposed = false;
 
-    // ---- 会话级状态：存在运行时上，同一会话的多个面板共享 ----
+    // ---- Session-level state lives on the runtime and is shared by panels on the same session ----
     private get _clientManager(): PiClientManager { return this._runtime.clientManager; }
     private get _sessionManager(): SessionManager { return this._runtime.sessionManager; }
     private _patch(partial: Partial<ChatState>): void {
@@ -92,33 +96,35 @@ export class ChatPanel {
     private get _busy(): boolean { return selectBusy(this._runtime.state); }
     private set _busy(v: boolean) { this._patch({ busy: v }); }
 
-    // 渲染台账必须是面板私有的：侧边栏与编辑器标签是两个独立 webview，
-    // 共享「已经渲染过什么」会让第二个面板把内容当成已下发而整段丢弃。
+    // The render ledger must be panel-private: the sidebar and the editor tab are
+    // separate webviews, and sharing "what was already rendered" makes the second
+    // panel treat content as already sent and drop the whole thing.
     private _turnHadText = false;
-    /** 本回合是否渲染过任何内容（正文/思考/工具/错误），用于收尾诊断 */
+    /** Whether anything was rendered this turn (text/thinking/tool/error), for end-of-turn diagnostics */
     private _turnRenderedAny = false;
-    /** 当前助手消息已下发的正文（message_end 对账用） */
+    /** Text already sent for the current assistant message (for message_end reconciliation) */
     private _msgText = '';
-    /** 当前助手消息已下发的思考内容（message_end 对账用） */
+    /** Thinking already sent for the current assistant message (for message_end reconciliation) */
     private _msgThinking = '';
-    /** 当前文本块已下发的正文（text_end 对账用） */
+    /** Text already sent for the current text block (for text_end reconciliation) */
     private _blockText = '';
-    /** 当前思考块已下发的思考内容（thinking_end 对账用） */
+    /** Thinking already sent for the current thinking block (for thinking_end reconciliation) */
     private _blockThinking = '';
-    /** 本回合已渲染成卡片的 toolCallId */
+    /** toolCallIds rendered as cards this turn */
     private readonly _renderedToolIds = new Set<string>();
     /**
-     * 本回合消息里出现过的工具调用（id → 调用信息）。
-     * message_end 总早于 tool_execution_start，所以这里只记账、不立刻渲染，
-     * 等回合结束时再把「从没渲染过」的补上，避免重复建卡片。
+     * Tool calls seen in this turn's messages (id -> call info).
+     * message_end always precedes tool_execution_start, so we only record here and
+     * do not render immediately; at turn end we add the ones that were never
+     * rendered, avoiding duplicate cards.
      */
     private readonly _pendingToolCalls = new Map<string, { name: string; arguments?: unknown }>();
 
-    /** 本回合改动追踪（会话级：同一会话多面板保持同步） */
+    /** This turn's change tracking (session-level so panels on one session stay in sync) */
     private get _turnChanges(): TurnChange[] { return selectTurnChanges(this._runtime.state); }
     private set _turnChanges(v: TurnChange[]) { this._patch({ turnChanges: v }); }
 
-    /** clear() 时若未连接，标记连接后需创建新会话 */
+    /** Set when clear() runs while disconnected: create a session once connected */
     private get _pendingNewSession(): boolean { return selectPendingNewSession(this._runtime.state); }
     private set _pendingNewSession(v: boolean) { this._patch({ pendingNewSession: v }); }
 
@@ -132,7 +138,7 @@ export class ChatPanel {
         this._webview = webview;
         this._extensionPath = extensionPath;
         this._surfaceKey = surfaceKey;
-        // 每个界面槽位默认各自一个独立运行时（独立会话、可并行），互不镜像。
+        // Each surface slot gets its own runtime by default (own session, run in parallel), never mirrored.
         this._runtime = ChatPanel._registry.forSurface(surfaceKey);
         ChatPanel._instances.push(this);
 
@@ -152,11 +158,11 @@ export class ChatPanel {
             this._disposables
         );
 
-        // 订阅本面板绑定的会话运行时事件；换绑/销毁时退订
+        // Subscribe to the bound session runtime's events; unsubscribe on rebind / dispose
         this._subscribeRuntime(this._runtime);
     }
 
-    /** 订阅给定运行时的事件（会先退订旧的），并把面板登记进运行时 */
+    /** Subscribe to a runtime's events (unsubscribing the old one first) and register this panel with it */
     private _subscribeRuntime(runtime: ChatRuntime): void {
         this._runtimeUnsub?.();
         this._runtime = runtime;
@@ -165,23 +171,23 @@ export class ChatPanel {
     }
 
     /**
-     * 把本面板切换到另一个会话运行时（"新建会话" / 切到别的会话时）。
-     * 旧运行时若已无面板则被释放（停掉其 pi 进程）；默认运行时保留。
+     * Move this panel to another session runtime ("new chat" / switching sessions).
+     * A previous runtime with no panels left is released (its pi process stopped).
      */
     private _bindRuntime(runtime: ChatRuntime): void {
         if (this._runtime === runtime) { return; }
         const previous = this._runtime;
         previous.panels.delete(this);
-        // 旧的 busy 超时属于上一个会话，换绑后必须清掉
+        // The old busy timeout belongs to the previous session and must be cleared on rebind
         this._clearBusyTimeout();
         this._resetRenderLedger();
-        // 换绑后旧会话的「重试」消息不应再保留
+        // After rebinding, the previous session's "retry" message must not carry over
         this._lastUserMessage = undefined;
         this._subscribeRuntime(runtime);
         void ChatPanel._registry.release(previous);
     }
 
-    /** 重置本面板的渲染台账（换运行时/清空时用，避免把新内容当已下发丢弃） */
+    /** Reset this panel's render ledger (on runtime switch / clear, so new content isn't treated as already sent) */
     private _resetRenderLedger(): void {
         this._turnHadText = false;
         this._turnRenderedAny = false;
@@ -200,23 +206,24 @@ export class ChatPanel {
                 view.webview.options = { enableScripts: true, localResourceRoots: [mediaRoot(extensionPath)] };
                 const panel = new ChatPanel(view.webview, extensionPath, view.onDidDispose, surfaceKey);
                 ChatPanel.currentView = panel;
-                // 连接由 webview 的 ready 消息触发，确保 webview 消息监听器已就绪，
-                // 避免 ESM 延迟执行导致 models/sessions 等消息被丢弃。
+                // The connection is triggered by the webview's ready message, making sure
+                // its message listeners are ready so models/sessions messages aren't dropped
+                // by the deferred ESM execution.
             },
         });
         context.subscriptions.push(
-            // 主侧边栏（左）与辅助侧边栏（右）各自独立：各自一个会话、可并行运行
+            // Sidebar (left) and secondary side bar (right) are independent: own session each, run in parallel
             vscode.window.registerWebviewViewProvider(ChatPanel.viewType, makeProvider(ChatPanel.viewType)),
             vscode.window.registerWebviewViewProvider(ChatPanel.secondaryViewType, makeProvider(ChatPanel.secondaryViewType))
         );
     }
 
-    /** 在辅助侧边栏（右侧）打开聊天视图 */
+    /** Open the chat view in the secondary side bar (right) */
     public static async openInSecondarySideBar(): Promise<void> {
         await vs.executeCommand(`${ChatPanel.secondaryViewType}.focus`);
     }
 
-    /** 在编辑器标签打开聊天（编辑器面板是独立的一个界面槽位） */
+    /** Open the chat in an editor tab (the editor panel is its own surface slot) */
     public static openInEditor(extensionPath: string, column: vscode.ViewColumn = vscode.ViewColumn.Active): ChatPanel {
         const panel = vscode.window.createWebviewPanel(
             ChatPanel.editorViewType,
@@ -230,14 +237,14 @@ export class ChatPanel {
         return chat;
     }
 
-    /** 停止所有运行时的 pi 客户端（扩展停用时调用） */
+    /** Stop every runtime's pi client (called on deactivate) */
     public static async stopSharedClient(): Promise<void> {
         await ChatPanel._registry.stopAll();
     }
 
     /**
-     * 重启所有会话运行时的 pi 客户端（权限模式 / 可执行路径变更后），
-     * 让每个已绑定的会话都重新连接并生效。
+     * Restart every session runtime's pi client (after permission mode /
+     * executable changes) so each bound session reconnects and picks it up.
      */
     public static async restartAllClients(): Promise<void> {
         for (const runtime of ChatPanel._registry.all()) {
@@ -249,19 +256,19 @@ export class ChatPanel {
         }
     }
 
-    /** 仅供测试：重置运行时注册表，避免用例间状态泄漏 */
+    /** Test-only: reset the runtime registry so state doesn't leak between cases */
     public static resetRuntimesForTest(): void {
         ChatPanel._registry = new ChatRuntimeRegistry();
     }
 
-    /** 直接用给定 webview 创建面板（测试 / 自定义宿主用） */
+    /** Create a panel from a given webview (tests / custom hosts) */
     public static create(webview: vscode.Webview, extensionPath: string, disposeEvent: vscode.Event<void>, surfaceKey = 'default'): ChatPanel {
         return new ChatPanel(webview, extensionPath, disposeEvent, surfaceKey);
     }
 
     public static async ensureView(): Promise<ChatPanel> {
         await vs.executeCommand(`${ChatPanel.viewType}.focus`);
-        // 最多等待约 5s：webview 在慢机器/高负载下创建可能超过 2s
+        // Wait up to ~5s: webview creation can take over 2s on slow or loaded machines
         for (let i = 0; i < 100; i++) {
             if (ChatPanel.currentView) { return ChatPanel.currentView; }
             await new Promise((resolve) => setTimeout(resolve, 50));
@@ -270,11 +277,11 @@ export class ChatPanel {
     }
 
     public async clear(): Promise<void> {
-        // 先等流式中止落盘，再切会话；否则 pi 侧可能报「正在流式时不能新建会话」
+        // Let the abort settle before switching sessions, otherwise pi may reject a new session while streaming
         await this._abortIfBusy();
         this._busy = false;
         this._turnHadText = false;
-        // 保留当前编辑器自动附件（仍在输入框里代表当前文件），只清掉手动附加
+        // Keep the active-editor auto attachment (it still represents the current file) and clear only manual ones
         this._contexts = this._contexts.filter((c) => c.auto);
         this._contextWarned = false;
         this._runtime.firstUserMessage = undefined;
@@ -292,13 +299,13 @@ export class ChatPanel {
                 this._post({ type: 'notice', text: vscode.l10n.t('Failed to create new session: {0}', (err as Error).message) });
             }
         } else {
-            // 未连接时标记待建会话，连接后 _ensureClient 会自动创建
+            // When disconnected, mark a pending session; _ensureClient creates it on connect
             this._pendingNewSession = true;
             this._post({ type: 'notice', text: vscode.l10n.t('Not connected; will create a new session when Pi connects') });
         }
     }
 
-    /** 重启 pi 客户端（权限模式/可执行路径变更后生效） */
+    /** Restart the pi client (takes effect after permission mode / executable changes) */
     public async restartClient(): Promise<void> {
         await this._clientManager.stop();
         this._busy = false;
@@ -311,9 +318,9 @@ export class ChatPanel {
         await this._ensureClient();
     }
 
-    // ---------- 编辑器上下文 ----------
+    // ---------- Editor context ----------
 
-    /** 附加当前编辑器：有选区则附加选区，否则附加整个文件 */
+    /** Attach the active editor: the selection if there is one, otherwise the whole file */
     public attachActive(): void {
         const editor = vs.activeTextEditor;
         if (!editor) { this._post({ type: 'notice', text: vscode.l10n.t('No active editor') }); return; }
@@ -333,7 +340,7 @@ export class ChatPanel {
         this._addSelectionContext(editor);
     }
 
-    /** 从工作区选择文件/文件夹并附加（弹出菜单的“Files & folders…”） */
+    /** Pick files/folders from the workspace and attach them (the menu's "Files & folders...") */
     public async attachFiles(): Promise<void> {
         const uris = await vs.showOpenDialog({
             canSelectMany: true,
@@ -346,12 +353,12 @@ export class ChatPanel {
         for (const uri of uris) { this._addUriContext(uri); }
     }
 
-    /** 把选中的 Uri 作为路径引用附加（工作区内用相对路径） */
+    /** Attach the picked Uri as a path reference (relative inside the workspace) */
     private _addUriContext(uri: vscode.Uri): void {
         this._addContext({ type: 'file', path: this._displayPath(uri) });
     }
 
-    /** 构建「+ 添加上下文」弹出菜单数据并下发 */
+    /** Build and send the "add context" popover data */
     private _postAttachMenu(): void {
         const seen = new Set<string>();
         const openEditors: Array<{ path: string; label: string; range?: string }> = [];
@@ -382,7 +389,7 @@ export class ChatPanel {
         this._post({ type: 'attachMenu', openEditors, recentFiles });
     }
 
-    /** 路径展示：工作区内用相对路径，否则绝对路径 */
+    /** Path display: relative inside the workspace, absolute otherwise */
     private _displayPath(uri: vscode.Uri): string {
         return vs.getWorkspaceFolder(uri) ? vs.asRelativePath(uri, false) : uri.fsPath;
     }
@@ -403,7 +410,7 @@ export class ChatPanel {
         const lineRange = sel.start.line === sel.end.line
             ? `${sel.start.line + 1}`
             : `${sel.start.line + 1}-${sel.end.line + 1}`;
-        // 只记录引用（路径 + 行号），不复制选区内容；由 pi 自行读取当前内容
+        // Record only the reference (path + line range), not the selection text; pi reads the current content itself
         this._addContext({ type: 'selection', path: rel, lineRange });
     }
 
@@ -421,11 +428,11 @@ export class ChatPanel {
 
     private _removeContext(id: string): void {
         const target = this._contexts.find((c) => c.id === id);
-        // 叉掉自动附件后，该文档在本会话中不再自动加回（切换文档后恢复）
+        // After removing the auto attachment, that document is not auto-added again in this session (until the document changes)
         if (target?.auto) { this._runtime.autoContextDismissedDoc = target.path; }
         this._contexts = this._contexts.filter((c) => c.id !== id);
         this._postContexts();
-        // 移除的是手动条目时，若当前活动文件已无 chip，把自动附件补回
+        // When a manual entry is removed, restore the auto attachment if the active file has no chip
         if (target && !target.auto) { ChatPanel.syncAutoContext(); }
     }
 
@@ -433,7 +440,7 @@ export class ChatPanel {
         ChatPanel.broadcastContexts(this._runtime);
     }
 
-    /** 把某个运行时的上下文广播给绑定它的所有面板（同会话 chip 保持一致） */
+    /** Broadcast a runtime's contexts to every panel bound to it (same-session chips stay in sync) */
     public static broadcastContexts(runtime: ChatRuntime): void {
         const contexts = runtime.state.contexts.map((c) => ({
             id: c.id, type: c.type, path: c.path, lineRange: c.lineRange, auto: c.auto,
@@ -443,7 +450,7 @@ export class ChatPanel {
         }
     }
 
-    /** 某个编辑器对应的引用：有选区则选区，否则整个文件 */
+    /** The reference for an editor: the selection if there is one, otherwise the whole file */
     private static _editorRefFor(editor: vscode.TextEditor): ContextRef {
         const rel = vs.asRelativePath(editor.document.uri);
         if (editor.selection.isEmpty) { return { type: 'file', path: rel }; }
@@ -455,11 +462,12 @@ export class ChatPanel {
     }
 
     /**
-     * 同步「当前编辑器」自动附件（默认开启，类似 Claude Code）：
-     * - 有活动编辑器（file scheme）时，默认附加选区/文件，作为输入框 chip；
-     * - 无活动编辑器时保留已有附件（焦点可能在聊天 webview 上），仅当文件已关闭才移除；
-     * - 用户叉掉后该文档不再自动加回，切换文档后恢复；
-     * - 自动附件用保留 id，不覆盖用户手动附加的同一引用。
+     * Sync the "active editor" auto attachment (on by default, like Claude Code):
+     * - with an active file-scheme editor, attach the selection/file as a composer chip;
+     * - with no active editor, keep the existing attachment (focus may be on the chat
+     *   webview) and only remove it once the file is closed;
+     * - after the user removes it, that document is not auto-added again until it changes;
+     * - the auto attachment uses a reserved id and never overrides a user's manual one.
      */
     public static syncAutoContext(): void {
         const enabled = vs.getConfiguration('pi-agent').get<boolean>('context.autoAttachActiveEditor', true);
@@ -467,14 +475,14 @@ export class ChatPanel {
         const ref = (editor && editor.document.uri.scheme === 'file')
             ? ChatPanel._editorRefFor(editor)
             : undefined;
-        // 无活动编辑器时才需要「文件是否还打开着」这个集合
+        // The "is the file still open" set is only needed when there is no active editor
         const openPaths = ref ? undefined : new Set(vs.openEditorUris().map((u) => vs.asRelativePath(u)));
         for (const runtime of ChatPanel._registry.all()) {
             ChatPanel._syncRuntimeAutoContext(runtime, enabled, ref, openPaths);
         }
     }
 
-    /** 对单个运行时的上下文同步自动附件（每个会话/输入框各自维护） */
+    /** Sync the auto attachment for one runtime's contexts (each session / composer keeps its own) */
     private static _syncRuntimeAutoContext(
         runtime: ChatRuntime,
         enabled: boolean,
@@ -490,7 +498,7 @@ export class ChatPanel {
         };
 
         if (!ref) {
-            // 无活动编辑器：保留自动附件，除非自动附加被关闭或其文件已不在打开的标签里。
+            // No active editor: keep the auto attachment unless auto-attach is off or its file is no longer open.
             if (autoItem) {
                 const stillOpen = enabled && Boolean(openPaths?.has(autoItem.path));
                 if (!stillOpen) { setContexts(withoutAuto); }
@@ -498,7 +506,7 @@ export class ChatPanel {
             return;
         }
 
-        // 切换文档后恢复自动附加：dismiss 只作用于叉掉时的那个文档
+        // Auto-attach resumes after switching documents: a dismissal only applies to that document
         if (runtime.autoContextDismissedDoc && runtime.autoContextDismissedDoc !== ref.path) {
             runtime.autoContextDismissedDoc = undefined;
         }
@@ -508,7 +516,7 @@ export class ChatPanel {
         }
 
         const refKey = `${ref.type}:${ref.path}:${ref.lineRange || ''}`;
-        // 用户已手动附加同一引用：不重复添加，并清掉可能存在的自动条目
+        // The user already attached the same reference: don't duplicate, and drop any auto entry
         const dup = withoutAuto.some((c) => `${c.type}:${c.path}:${c.lineRange || ''}` === refKey);
         if (dup) {
             if (autoItem) { setContexts(withoutAuto); }
@@ -516,19 +524,19 @@ export class ChatPanel {
         }
 
         const autoKey = autoItem ? `${autoItem.type}:${autoItem.path}:${autoItem.lineRange || ''}` : undefined;
-        if (refKey === autoKey) { return; } // 无变化
+        if (refKey === autoKey) { return; } // no change
 
         setContexts([...withoutAuto, { ...ref, id: AUTO_CONTEXT_ID, auto: true }]);
     }
 
-    /** 把附加的上下文以「引用」形式拼到 prompt 前（只给路径/行号，内容由 pi 读取） */
+    /** Prefix the prompt with the attached contexts as references (path / line range only; pi reads the content) */
     private _withContext(text: string, extraBlocks: string[] = []): string {
-        // 斜杠命令必须位于消息开头，不能前置 context 块
+        // A slash command must start the message, so no context block may precede it
         if (text.startsWith('/')) { return text; }
         return buildContextBlock(this._contexts, text, extraBlocks);
     }
 
-    /** 根据设置构建自动上下文块（编辑器 / 诊断 / Git） */
+    /** Build the auto-context blocks from settings (editor / diagnostics / Git) */
     private async _buildAutoContext(): Promise<string[]> {
         const cfg = vs.getConfiguration('pi-agent');
         if (!cfg.get<boolean>('context.autoAttach', false)) { return []; }
@@ -570,7 +578,7 @@ export class ChatPanel {
     }
 
     private _clearContexts(): void {
-        // 保留自动附件（仍代表当前编辑器），只清掉手动附加的引用
+        // Keep the auto attachment (it still represents the active editor) and clear only manual references
         const manual = this._contexts.filter((c) => !c.auto);
         if (manual.length) {
             this._contexts = this._contexts.filter((c) => c.auto);
@@ -582,14 +590,14 @@ export class ChatPanel {
         await this._handleUserMessage(question);
     }
 
-    // ---------- 命令入口（供 VS Code 命令调用） ----------
+    // ---------- Command entry points (called by VS Code commands) ----------
 
     public async newSession(): Promise<void> { await this._handleNewSession(); }
     public focusInput(): void { this._post({ type: 'focusInput' }); }
     public editLastMessage(): void { this._post({ type: 'editLast' }); }
     public async revertLastTurn(): Promise<void> { await this._revertTurn(); }
 
-    /** 克隆当前会话分支为一个新会话 */
+    /** Clone the current session branch into a new session */
     public async cloneSession(): Promise<void> {
         const client = this._clientManager.client;
         if (!client || typeof client.clone !== 'function') {
@@ -615,7 +623,7 @@ export class ChatPanel {
         }
     }
 
-    /** 首次回合结束后，按需用一次性生成给会话命名（按会话隔离） */
+    /** After the first turn, optionally name the session with a one-shot generation (per session) */
     private async _maybeAutoName(): Promise<void> {
         const runtime = this._runtime;
         if (runtime.autoNameInFlight) { return; }
@@ -685,8 +693,9 @@ export class ChatPanel {
             this._post({ type: 'notice', text: vscode.l10n.t('Pi is working; wait for it to finish before compacting') });
             return;
         }
-        // 压缩是破坏性且不可撤销，但由明确的入口（占用圈 / 命令 / 命令面板）触发，
-        // 不再弹二次确认；用会话运行时的 in-flight 标志防重复触发。
+        // Compaction is destructive and irreversible, but is triggered from explicit
+        // entry points (usage ring / command / command palette), so there is no second
+        // confirmation; a per-runtime in-flight flag prevents duplicate triggers.
         const runtime = this._runtime;
         if (runtime.compactInFlight) { return; }
         runtime.compactInFlight = true;
@@ -706,9 +715,9 @@ export class ChatPanel {
         }
     }
 
-    // ---------- Git 集成 ----------
+    // ---------- Git integration ----------
 
-    /** 用当前改动生成 commit message，写入 SCM 输入框 */
+    /** Generate a commit message from the current changes and write it into the SCM input box */
     public async generateCommitMessage(): Promise<void> {
         const api = await getGitAPI();
         if (!api) { this._post({ type: 'notice', text: vscode.l10n.t('Git extension not available') }); return; }
@@ -730,7 +739,7 @@ export class ChatPanel {
         }
     }
 
-    /** 用当前分支提交生成 PR 描述，打开为临时 Markdown 文档 */
+    /** Generate a PR description from the current branch's commits and open it as a temporary Markdown document */
     public async generatePullRequestDescription(): Promise<void> {
         const api = await getGitAPI();
         if (!api) { this._post({ type: 'notice', text: vscode.l10n.t('Git extension not available') }); return; }
@@ -753,9 +762,9 @@ export class ChatPanel {
         }
     }
 
-    // ---------- 本回合改动审阅 / 撤销 ----------
+    // ---------- This turn's change review / revert ----------
 
-    /** 丢弃本回合改动追踪（清空 / 新建 / 切换会话后不应再回滚旧会话的文件） */
+    /** Drop this turn's change tracking (after clear / new / switch, old-session files must not be reverted) */
     private _resetTurnChanges(): void {
         this._turnChanges = [];
         this._pendingTrack.clear();
@@ -763,7 +772,7 @@ export class ChatPanel {
         this._post({ type: 'turnChanges', turnFiles: [] });
     }
 
-    /** tool_execution_start 时记录 edit/write 目标（不读文件内容，避免读到半写入状态） */
+    /** Record edit/write targets at tool_execution_start (without reading the file, to avoid a half-written state) */
     private _trackToolTarget(event: PiAgentEvent): void {
         const tool = (event.toolName || '').toLowerCase();
         if (tool !== 'edit' && tool !== 'write') { return; }
@@ -782,7 +791,7 @@ export class ChatPanel {
         let written = prev?.written;
         if (tool === 'write') {
             edits = null;
-            // 首次触碰：快照文件原内容（用于生成 diff / 还原）
+            // First touch: snapshot the original file content (for the diff / revert)
             if (!prev) {
                 try { before = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : undefined; } catch { before = undefined; }
             }
@@ -791,7 +800,7 @@ export class ChatPanel {
             edits = edits.concat(parseEdits(args));
         }
         const entry: TurnChange = { rel, existed, edits, before, written };
-        // 记住本次调用前的状态：工具失败时回滚本次记录
+        // Remember the state before this call so a failing tool rolls back this record
         if (event.toolCallId) {
             this._pendingTrack.set(event.toolCallId, { rel, prev });
         }
@@ -799,7 +808,7 @@ export class ChatPanel {
         this._turnChanges = list;
     }
 
-    /** 工具结束：成功则确认记录，失败则撤销本次调用写入的改动记录 */
+    /** Tool end: confirm the record on success, roll back this call's change record on failure */
     private _settleToolTrack(event: PiAgentEvent): void {
         if (!event.toolCallId) { return; }
         const pending = this._pendingTrack.get(event.toolCallId);
@@ -817,10 +826,10 @@ export class ChatPanel {
         this._post({ type: 'turnChanges', turnFiles: this._turnChangeFiles() });
     }
 
-    /** 本回合改动还原结果（逐文件） */
-    private static readonly TURN_REVERT_RESULT_LIVE_MS = 4500; // 全部成功后自动隐藏延时
+    /** Per-file results of reverting this turn's changes */
+    private static readonly TURN_REVERT_RESULT_LIVE_MS = 4500; // auto-hide delay after full success
 
-    /** 撤销给定文件集合（不传则撤销全部），返回逐文件结果 */
+    /** Revert the given files (all when omitted) and return per-file results */
     private async _doRevert(changes: TurnChange[]): Promise<Array<{ path: string; result: 'reverted' | 'deleted' | 'failed' | 'skipped'; error?: string }>> {
         const results: Array<{ path: string; result: 'reverted' | 'deleted' | 'failed' | 'skipped'; error?: string }> = [];
         const root = vs.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
@@ -828,7 +837,7 @@ export class ChatPanel {
         for (const change of changes) {
             const abs = path.isAbsolute(change.rel) ? change.rel : path.join(root, change.rel);
             try {
-                // 撤销前先快照当前（回合后）状态，供再撤回使用
+                // Snapshot the current (post-turn) state before reverting, for undoing the revert
                 let snapshot: { content: string | null; existed: boolean };
                 try {
                     if (fs.existsSync(abs)) {
@@ -858,7 +867,7 @@ export class ChatPanel {
                     this._runtime.revertSnapshot.set(change.rel, snapshot);
                     results.push({ path: change.rel, result: 'reverted' });
                 } else if (change.before !== undefined) {
-                    // write：用快照还原整个文件
+                    // write: restore the whole file from the snapshot
                     const uri = vs.uri.file(abs);
                     await vs.fs.writeFile(uri, Buffer.from(change.before, 'utf8'));
                     this._runtime.revertSnapshot.set(change.rel, snapshot);
@@ -876,7 +885,7 @@ export class ChatPanel {
         return results;
     }
 
-    /** 计算行内卡片展示数据（保留未撤销的文件，标记已撤销/失败的文件） */
+    /** Build the inline card data (keep unreverted files, mark reverted / failed ones) */
     private _turnChangeFiles(): Array<{ path: string; status: 'created' | 'modified'; revertible: boolean; state: 'pending' | 'reverted' | 'deleted' | 'failed' | 'skipped'; diff?: string }> {
         return this._turnChanges.map((v) => ({
             path: v.rel,
@@ -887,7 +896,7 @@ export class ChatPanel {
         }));
     }
 
-    /** 该文件本回合的 diff：edit 用参数重建，write 用「快照 → 写入内容」；算一次后缓存。 */
+    /** This turn's diff for a file: edit is rebuilt from the args, write diffs "snapshot -> written content"; cached after one computation. */
     private _diffFor(v: TurnChange): string | undefined {
         if (v.diff !== undefined) { return v.diff || undefined; }
         let diff: string | undefined;
@@ -901,9 +910,10 @@ export class ChatPanel {
     }
 
     /**
-     * 把本回合改动的文件恢复到改动前状态。无弹窗确认，逐文件反馈结果，
-     * 由 webview 在卡片上原地展示：成功打勾、失败标红并说明原因。
-     * @param onlyRel 仅撤销指定文件；不传则撤销全部
+     * Restore this turn's changed files to their pre-turn state. No modal
+     * confirmation; results are reported per file and shown in place on the card by
+     * the webview (check on success, red plus a reason on failure).
+     * @param onlyRel revert only this file; omit to revert everything
      */
     private async _revertTurn(onlyRel?: string): Promise<void> {
         if (this._turnChanges.length === 0) {
@@ -919,7 +929,7 @@ export class ChatPanel {
         const results = await this._doRevert(targets);
 
         if (onlyRel) {
-            // 单文件撤销：从待撤销列表中移除该文件，其余保留
+            // Single-file revert: drop this file from the pending list, keep the rest
             this._turnChanges = this._turnChanges.filter((c) => c.rel !== onlyRel);
         } else {
             this._turnChanges = [];
@@ -934,7 +944,7 @@ export class ChatPanel {
         });
     }
 
-    /** 「再撤回」：把上次撤销恢复回去，让用户无惧误操作 */
+    /** Undo the revert: restore what was just reverted, so mistakes are not scary */
     private async _undoRevert(): Promise<void> {
         if (this._runtime.revertSnapshot.size === 0) {
             this._post({ type: 'notice', text: vscode.l10n.t('Nothing to restore') });
@@ -948,7 +958,7 @@ export class ChatPanel {
                 if (snap.existed && snap.content !== null) {
                     await vs.fs.writeFile(vs.uri.file(abs), Buffer.from(snap.content, 'utf8'));
                 } else {
-                    // 撤销前该文件不存在（本回合新建），恢复 = 删除
+                    // The file did not exist before the revert (created this turn), so restoring means deleting
                     await vs.fs.delete(vs.uri.file(abs), { useTrash: true });
                 }
                 restored++;
@@ -975,7 +985,7 @@ export class ChatPanel {
         }
     }
 
-    // ---------- Webview 消息处理 ----------
+    // ---------- Webview message handling ----------
 
     private async _handleWebviewMessage(message: WebviewMessage): Promise<void> {
         switch (message.type) {
@@ -1018,18 +1028,25 @@ export class ChatPanel {
                 break;
             case 'abort':
                 await this._clientManager.abort();
-                // 停止后丢弃等待中的 steer / follow-up，避免它们意外继续
+                // After stopping, drop pending steer / follow-up so they don't unexpectedly continue
                 await this._clearQueue();
-                // 同步清空 webview 上的排队/steer 徽章（不依赖 pi 是否补发 queue_update）
+                // Clear the queue/steer badges in the webview too (not relying on pi re-sending queue_update)
                 this._post({ type: 'queue', steering: [], followUp: [] });
                 break;
             case 'errorAction':
-                // 错误气泡上的按钮：重发上一条消息 / 打开日志（切模型在 webview 侧本地完成）
+                // Error-bubble buttons ("switch model" is handled locally in the webview)
                 if (message.action === 'retry') {
                     const last = this._lastUserMessage;
                     if (last) { await this._handleUserMessage(last.text, undefined, last.images); }
                 } else if (message.action === 'logs') {
                     showLogs();
+                } else if (message.action === 'connect') {
+                    await this._connectProvider();
+                } else if (message.action === 'login') {
+                    const term = vscode.window.createTerminal('Pi login');
+                    term.show();
+                    term.sendText('pi');
+                    void vs.showInformationMessage(vscode.l10n.t('In pi, type /login to sign in with OAuth'));
                 }
                 break;
             case 'setupAction':
@@ -1056,7 +1073,7 @@ export class ChatPanel {
                 if (message.sessionId) { await this._handleRenameSession(message.sessionId, message.currentName); }
                 break;
             case 'ready':
-                // 新面板可能复用共享状态：先同步自动附件并把上下文 chip 回显给 webview
+                // A new panel may reuse shared state: sync the auto attachment and echo context chips to the webview first
                 ChatPanel.syncAutoContext();
                 this._postContexts();
                 await this._ensureClient();
@@ -1072,7 +1089,7 @@ export class ChatPanel {
                 break;
             case 'attachPath':
                 if (message.path) {
-                    // 用菜单传入的 path + range 直接生成引用，不依赖当前活动编辑器
+                    // Build the reference from the menu's path + range, independent of the active editor
                     if (message.range) { this._addContext({ type: 'selection', path: message.path, lineRange: message.range }); }
                     else { this._addContext({ type: 'file', path: message.path }); }
                 }
@@ -1091,7 +1108,7 @@ export class ChatPanel {
                 break;
             case 'openLink':
                 if (message.href) {
-                    // 仅放行常见安全 scheme：避免把 command:/vscode:/ms-* 等自定义协议交给系统
+                    // Only allow common safe schemes; never hand command:/vscode:/ms-* to the OS
                     const scheme = (message.href.match(/^([a-z][a-z0-9+.-]*):/i)?.[1] || '').toLowerCase();
                     if (scheme === 'http' || scheme === 'https' || scheme === 'mailto') {
                         await vs.openExternal(vs.uri.parse(message.href));
@@ -1143,16 +1160,16 @@ export class ChatPanel {
         }
     }
 
-    // ---------- Pi 客户端管理 ----------
+    // ---------- Pi client management ----------
 
     private async _ensureClient(): Promise<void> {
         this._patch({ connecting: true, connected: false });
         this._post({ type: 'connecting' });
         this._postSetupStatus();
-        // 如果正在流式输出（如编辑器面板 ready 消息到达时用户已发送消息），
-        // 不能清空 webview，否则会抹掉正在渲染的内容。
+        // If a turn is streaming (e.g. the user sent a message before the editor
+        // panel's ready arrived), do not clear the webview or the rendering is wiped.
         if (!this._busy) {
-            // 清空现有聊天内容，避免重连时历史消息重复追加
+            // Clear the existing chat so history isn't appended twice on reconnect
             this._post({ type: 'clear' });
         } else {
             logInfo('_ensureClient: skipping clear (turn in progress)');
@@ -1160,11 +1177,11 @@ export class ChatPanel {
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath, this._runtime.startOptions);
 
-            // 用 pi 的真实状态校准 busy（面板可能在运行中途被重新打开）
+            // Reconcile busy from pi's real state (the panel may reopen mid-run)
             try {
                 const st = await client.getState();
                 this._runtime.sessionId = st.sessionId;
-                // 记录会话文件：客户端重启后复用同一会话，而不是又开一个新的
+                // Record the session file: reuse the same session after a client restart instead of starting a new one
                 if (st.sessionFile) {
                     this._runtime.sessionFile = st.sessionFile;
                     this._runtime.startOptions = { sessionFile: st.sessionFile };
@@ -1173,7 +1190,7 @@ export class ChatPanel {
                 this._post({ type: 'setBusy', busy: this._busy });
             } catch (err) { logError(`reconcile busy failed: ${(err as Error).message}`); }
 
-            // clear() 时若未连接，连接后自动创建新会话
+            // If clear() ran while disconnected, create a new session on connect
             if (this._pendingNewSession) {
                 this._pendingNewSession = false;
                 try {
@@ -1184,10 +1201,10 @@ export class ChatPanel {
                 }
             }
 
-            // 恢复历史消息
+            // Restore history
             await this._restoreHistory(client);
 
-            // 通知连接成功
+            // Announce a successful connection
             let folderName = vs.workspaceFolders?.[0]?.name;
             if (!folderName) {
                 try {
@@ -1204,17 +1221,19 @@ export class ChatPanel {
                 text: vscode.l10n.t('Connected to pi · workspace "{0}"', folderName)
             });
 
-            // 加载模型列表与斜杠命令
+            // Load models and slash commands
             await this._loadModels(client);
             await this._loadCommands(client);
             await this._loadStats(client);
 
-            // 加载会话列表
+            // Load the session list
             await this._sessionManager.loadSessions(client);
             this._postSessionList();
             this._piMissing = false;
             this._patch({ connected: true, connecting: false });
             this._postSetupStatus();
+            // Check the current provider's credentials asynchronously (posts a more accurate setup status)
+            void this._refreshAuthStatus();
         } catch (err) {
             const msg = (err as Error).message || String(err);
             this._piMissing = err instanceof PiNotFoundError;
@@ -1234,7 +1253,7 @@ export class ChatPanel {
             for (const m of messages) {
                 const text = extractMessageText(m);
                 const images = extractMessageImages(m);
-                // 历史里用户消息带 context 块：剥掉后展示，并解析出附件用于回显
+                // History user messages carry a context block: strip it for display and parse attachments to echo
                 const refs = text ? parseContextRefs(text) : [];
                 if (text || images.length) {
                     items.push({
@@ -1252,7 +1271,7 @@ export class ChatPanel {
         } catch (err) { logError(`_restoreHistory failed: ${(err as Error).message}`); }
     }
 
-    /** 会话统计（累计 tokens + 上下文占用）→ 顶栏状态指示 */
+    /** Session stats (cumulative tokens + context usage) -> header indicator */
     private async _loadStats(client: PiRpcClient): Promise<void> {
         if (typeof client.getSessionStats !== 'function') { return; }
         try {
@@ -1276,7 +1295,7 @@ export class ChatPanel {
         } catch (err) { logError(`_loadStats failed: ${(err as Error).message}`); }
     }
 
-    /** 上下文接近满时提示压缩（阈值 85%，回落到 75% 以下后重置） */
+    /** Warn to compact when context is nearly full (85% threshold, reset below 75%) */
     private _maybeWarnContext(percent: number | null | undefined): void {
         const threshold = 85;
         if (percent === null || percent === undefined) { return; }
@@ -1293,7 +1312,7 @@ export class ChatPanel {
         }
     }
 
-    /** 加载 pi 的斜杠命令 / 提示模板 / 技能，供输入框补全 */
+    /** Load pi's slash commands / prompt templates / skills for composer completion */
     private async _loadCommands(client: PiRpcClient): Promise<void> {
         if (typeof client.getCommands !== 'function') { return; }
         try {
@@ -1327,7 +1346,7 @@ export class ChatPanel {
         } catch (err) {
             const msg = (err as Error).message;
             logError(`_loadModels failed: ${msg}`);
-            // 避免模型选择器一直停留在「连接中…」
+            // Keep the model picker from being stuck on "Connecting..." forever
             this._post({ type: 'modelsError' });
             this._post({ type: 'notice', text: vscode.l10n.t('Failed to load models: {0}', msg) });
         }
@@ -1363,7 +1382,7 @@ export class ChatPanel {
             : vs.configurationTarget.Global;
         try {
             await vs.getConfiguration('pi-agent').update('agent.permissionMode', mode, target);
-            // 配置变更监听会重启会话使权限模式生效
+            // The config watcher restarts the session so the permission mode takes effect
             this._post({ type: 'permission', permissionMode: mode });
             this._post({ type: 'notice', text: vscode.l10n.t('Permission mode: {0} (restarting session…)', permissionLabel(mode)) });
         } catch (err) {
@@ -1371,7 +1390,7 @@ export class ChatPanel {
         }
     }
 
-    /** 处理 pi 发来的 extension_ui_request（确认/选择/输入） */
+    /** Handle an extension_ui_request from pi (confirm / select / input) */
     private async _handleExtensionUI(req: PiAgentEvent): Promise<void> {
         const client = this._clientManager.client;
         if (!client || !req.id) { return; }
@@ -1428,13 +1447,13 @@ export class ChatPanel {
                 break;
             }
             default:
-                // 其他请求若在等待响应，回 cancelled 避免 pi 挂起
+                // Other requests awaiting a response get cancelled so pi doesn't hang
                 this._respondUI(client, req.id, { cancelled: true });
                 break;
         }
     }
 
-    /** 回复 extension_ui_request；写入 stdin 失败时记日志，避免 pi 静默等待响应 */
+    /** Reply to an extension_ui_request; log a stdin write failure so pi doesn't wait silently */
     private _respondUI(client: PiRpcClient, id: string, response: { value?: string; confirmed?: boolean; cancelled?: boolean }): void {
         if (!respondExtensionUI(client, id, response)) {
             logError(`respondExtensionUI failed for request ${id}; pi may be waiting for a response`);
@@ -1465,16 +1484,16 @@ export class ChatPanel {
         }
     }
 
-    // ---------- 会话管理 ----------
+    // ---------- Session management ----------
 
-    /** abort 恢复超时：agent_settled 未到达时强制解锁 */
-    private static readonly ABORT_RECOVERY_MS = 30 * 1000; // 30 秒
+    /** Abort recovery timeout: force-unlock when agent_settled never arrives */
+    private static readonly ABORT_RECOVERY_MS = 30 * 1000; // 30 seconds
 
-    /** 若正在运行则先中断当前回合（切换 / 新建 / 克隆会话前调用，避免后台继续流式） */
+    /** Abort the running turn first (before switch / new / clone, so streaming doesn't continue in the background) */
     private async _abortIfBusy(): Promise<void> {
         if (!this._busy) { return; }
         await this._clientManager.abort().catch((err) => { logError(`abort failed: ${(err as Error).message}`); });
-        // abort 后 busy 状态由 agent_settled 事件处理；若事件未到达，强制恢复超时兜底
+        // busy is cleared by the agent_settled event after an abort; the recovery timeout is a fallback if it never arrives
         this._clearBusyTimeout();
         this._busyTimeout = setTimeout(() => {
             if (this._busy) {
@@ -1488,16 +1507,16 @@ export class ChatPanel {
     }
 
     /**
-     * 仅当本面板是本运行时的唯一使用者时才中止当前回合。
-     * 侧边栏 / 辅助侧边栏共享同一会话时，在其中一个里新建或切换会话
-     * 不应打断另一个仍在运行的回合。
+     * Abort the current turn only when this panel is the sole user of its runtime.
+     * When the sidebar / secondary sidebar share a session, creating or switching
+     * sessions in one must not interrupt the other's running turn.
      */
     private async _abortIfSole(): Promise<void> {
         if (this._runtime.panels.size <= 1) { await this._abortIfBusy(); }
     }
 
     private async _handleNewSession(): Promise<void> {
-        // 「新建会话」= 为这个界面槽位开一个全新的会话运行时，其他界面不受影响。
+        // "New chat" = start a brand-new session runtime for this surface slot; other surfaces are unaffected.
         await this._abortIfSole();
         const runtime = ChatPanel._registry.create({ continueRecent: false });
         ChatPanel._registry.bindSurface(this._surfaceKey, runtime);
@@ -1509,12 +1528,12 @@ export class ChatPanel {
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
         await this._ensureClient();
-        // _ensureClient 会加载会话列表并回填 runtime.sessionId
+        // _ensureClient loads the session list and fills in runtime.sessionId
     }
 
     private async _handleRenameSession(sessionId: string, currentName?: string): Promise<void> {
-        // 若该会话由另一个运行时持有，走那个运行时重命名，
-        // 避免同一会话文件被两个 pi 进程同时打开。
+        // If another runtime holds this session, rename through that runtime so the
+        // same session file is never opened by two pi processes at once.
         const owner = ChatPanel._registry.bySessionId(sessionId) ?? this._runtime;
         const client = owner.clientManager.client;
         if (!client) {
@@ -1531,14 +1550,14 @@ export class ChatPanel {
             void vs.showInformationMessage(vscode.l10n.t('Rename cancelled'));
             return;
         }
-        // 重命名非当前会话需要先切过去；若正在运行则先中断，避免中途切换会话
+        // Renaming a non-current session needs a switch first; abort if running, to avoid switching mid-turn
         if (sessionId !== owner.sessionManager.currentSessionId && owner.state.busy) {
             await owner.clientManager.abort().catch((err) => logError(`abort before rename failed: ${(err as Error).message}`));
         }
         const before = owner.sessionManager.currentSessionId;
         const ok = await owner.sessionManager.renameSession(client, sessionId, name);
         if (ok) {
-            // 若 owner 的当前会话被意外切换（切换/切回异常），让绑定它的面板重载历史
+            // If the owner's current session changed unexpectedly (switch-back error), reload history for its panels
             if (owner.sessionManager.currentSessionId !== before) {
                 for (const panel of owner.panels) {
                     panel._post({ type: 'clear' });
@@ -1549,10 +1568,10 @@ export class ChatPanel {
                     await panel._restoreHistory(client);
                 }
             }
-            // 刷新所有运行时的会话列表（同一会话目录）并重渲染
+            // Refresh every runtime's session list (same session directory) and re-render
             for (const rt of ChatPanel._registry.all()) {
                 const c = rt.clientManager.client;
-                if (c) { await rt.sessionManager.loadSessions(c).catch(() => { /* 忽略 */ }); }
+                if (c) { await rt.sessionManager.loadSessions(c).catch(() => { /* ignore */ }); }
                 for (const panel of rt.panels) { panel._postSessionList(); }
             }
             this._post({ type: 'notice', text: vscode.l10n.t('Session renamed') });
@@ -1562,19 +1581,19 @@ export class ChatPanel {
     }
 
     private async _handleSwitchSession(sessionId: string): Promise<void> {
-        // 会话文件：各运行时共用同一会话目录，用当前面板的列表即可
+        // Session file: runtimes share one session directory, so the current panel's list is enough
         const session = this._sessionManager.sessions.find((s) => s.id === sessionId);
         if (!session || !session.file) {
             this._post({ type: 'notice', text: vscode.l10n.t('Failed to switch session. The session may no longer exist or the file may be corrupted.') });
             return;
         }
-        // 已在目标会话：无操作
+        // Already on the target session: nothing to do
         if (this._runtime.sessionId === sessionId) { return; }
 
-        // 共享同一会话时不中止他人的回合
+        // When sharing a session, do not abort the other panel's turn
         await this._abortIfSole();
 
-        // 已有运行时在跑该会话 → 直接切过去（与那边的面板共享、镜像）
+        // A runtime already runs this session -> switch to it (share and mirror with that panel)
         const existing = ChatPanel._registry.bySessionId(sessionId);
         if (existing) {
             ChatPanel._registry.bindSurface(this._surfaceKey, existing);
@@ -1588,7 +1607,7 @@ export class ChatPanel {
             return;
         }
 
-        // 否则为该会话新建一个运行时（打开指定会话文件）
+        // Otherwise create a runtime for this session (opening the given session file)
         const runtime = ChatPanel._registry.create({ sessionFile: session.file });
         runtime.sessionId = sessionId;
         runtime.sessionFile = session.file;
@@ -1604,7 +1623,7 @@ export class ChatPanel {
         this._post({ type: 'notice', text: vscode.l10n.t('Switched to session: {0}', sessionId) });
     }
 
-    // ---------- 事件桥接（pi → webview） ----------
+    // ---------- Event bridge (pi -> webview) ----------
 
     private _onAgentEvent(event: PiAgentEvent): void {
         if (this._disposed) {
@@ -1615,7 +1634,7 @@ export class ChatPanel {
             void this._handleExtensionUI(event);
             return;
         }
-        // 诊断：记录所有非 thinking/text 事件类型，便于发现未知事件
+        // Diagnostics: log every non thinking/text event type to surface unknown events
         if (event.type !== 'agent_start' && event.type !== 'message_update'
             && event.type !== 'agent_settled' && event.type !== 'queue_update'
             && event.type !== 'auto_retry_start') {
@@ -1628,7 +1647,7 @@ export class ChatPanel {
                 this._resetTurnLedger();
                 this._lastUsage = undefined;
                 this._turnChanges = [];
-                this._runtime.revertSnapshot.clear();   // 新回合开始，旧的再撤回快照失效
+                this._runtime.revertSnapshot.clear();   // A new turn starts, so the old undo-of-revert snapshot is stale
                 this._post({ type: 'turnChanges', turnFiles: [] });
                 this._post({ type: 'setBusy', busy: true });
                 break;
@@ -1645,7 +1664,7 @@ export class ChatPanel {
                     this._msgThinking += ae.delta;
                     this._post({ type: 'thinkingDelta', text: ae.delta });
                 } else if (ae.type === 'thinking_end') {
-                    // 兜底：增量丢失时用 thinking_end 的完整内容补齐，保证思考内容不丢
+                    // Fallback: backfill from thinking_end's full content when deltas were lost, so thinking isn't dropped
                     this._fillThinking(
                         typeof ae.thinking === 'string' && ae.thinking
                             ? ae.thinking
@@ -1659,12 +1678,12 @@ export class ChatPanel {
                     this._msgText += ae.delta;
                     this._postAssistantChunk(ae.delta);
                 } else if (ae.type === 'text' && ae.delta) {
-                    // pi SDK 有时直接发送完整文本（非流式），而非 text_delta 流
+                    // The pi SDK sometimes sends the full text (non-streaming) instead of text_delta chunks
                     this._blockText += ae.delta;
                     this._msgText += ae.delta;
                     this._postAssistantChunk(ae.delta);
                 } else if (ae.type === 'text_end') {
-                    // 兜底：增量丢失时用 text_end 的完整内容补齐，保证正文不丢
+                    // Fallback: backfill from text_end's full content when deltas were lost, so text isn't dropped
                     this._fillText(typeof ae.content === 'string' ? ae.content : '');
                     this._blockText = '';
                     if (this._turnHadText) {
@@ -1672,14 +1691,14 @@ export class ChatPanel {
                         this._post({ type: 'assistantEnd' });
                     }
                 } else {
-                    // 未知事件类型，记录日志以便诊断
+                    // Unknown event type: log it for diagnostics
                     logInfo(`message_update: unrecognized assistantMessageEvent type: ${ae.type}`);
                 }
                 break;
             }
 
             case 'message_start': {
-                // 新的一条助手消息开始：重置按消息统计的台账
+                // A new assistant message starts: reset the per-message ledger
                 const started = event.message;
                 if (started && typeof started !== 'string' && started.role === 'assistant') {
                     this._msgText = '';
@@ -1691,7 +1710,7 @@ export class ChatPanel {
             }
 
             case 'message_end': {
-                // pi 的权威消息：补齐任何没渲染出去的内容，并透出失败原因
+                // pi's authoritative message: backfill anything not rendered and surface the failure reason
                 const done = event.message;
                 if (!done || typeof done === 'string') { break; }
                 if (done.role === 'assistant') { this._completeAssistantMessage(done); }
@@ -1701,10 +1720,11 @@ export class ChatPanel {
 
             case 'tool_execution_start':
                 if (event.toolCallId) { this._renderedToolIds.add(event.toolCallId); }
-                // 注意：不要重置 _turnHadText！
-                // _turnHadText 跟踪的是"本回合是否已发出 assistantStart"，
-                // 工具运行不应该影响它。text_end 依赖这个标志来决定是否发 assistantEnd。
-                // 如果这里重置，工具运行后 text_end 会跳过 assistantEnd，导致流永远悬空。
+                // Note: do NOT reset _turnHadText here!
+                // It tracks "was assistantStart sent this turn", which running a tool must
+                // not affect. text_end relies on it to decide whether to send assistantEnd.
+                // Resetting here makes text_end skip assistantEnd after a tool, leaving the
+                // stream open forever.
                 this._trackToolTarget(event);
                 this._post({
                     type: 'toolCall',
@@ -1724,7 +1744,7 @@ export class ChatPanel {
             }
 
             case 'tool_execution_end': {
-                // 失败的工具不算作本回合改动（回滚它写入的追踪记录）
+                // A failed tool is not a turn change (roll back the record it wrote)
                 this._settleToolTrack(event);
                 const details = event.result?.details;
                 const diff = details?.diff;
@@ -1761,8 +1781,9 @@ export class ChatPanel {
             case 'agent_settled': {
                 this._busy = false;
                 this._clearBusyTimeout();
-                // 兜底：如果 text_end 被错过（如 tool_execution_start 曾错误重置 _turnHadText），
-                // 确保关闭助手流，避免 webview 侧流式光标永久悬停。
+                // Fallback: if text_end was missed (e.g. tool_execution_start once reset
+                // _turnHadText by mistake), close the assistant stream so the webview's
+                // streaming cursor never hangs forever.
                 if (this._turnHadText) {
                     this._turnHadText = false;
                     this._post({ type: 'assistantEnd' });
@@ -1770,15 +1791,15 @@ export class ChatPanel {
                 }
                 this._turnHadText = false;
                 this._post({ type: 'thinkingEnd' });
-                // 兜底：消息里有、却从没渲染过的工具调用（例如事件丢失）补上
+                // Fallback: render tool calls present in the message but never rendered (e.g. lost events)
                 this._settlePendingToolCalls();
-                // 兜底：仍停在「运行中」的工具卡片必须收尾，避免永久转圈
+                // Fallback: close tool cards still "running" so nothing spins forever
                 this._post({ type: 'toolSettle' });
                 const u = this._lastUsage;
                 if (u && (u.input || u.output)) {
                     this._post({ type: 'notice', text: vscode.l10n.t('Usage this turn: {0} tokens', formatUsage(u)) });
                 } else if (!this._turnRenderedAny) {
-                    // 诊断：本回合确实什么都没渲染出来（请求失败 / 只思考无输出）
+                    // Diagnostic: nothing was rendered this turn at all (request failed / thinking with no output)
                     logError('agent_settled: nothing was rendered this turn (no text, thinking, tool or error)');
                 }
                 this._resetTurnLedger();
@@ -1786,7 +1807,7 @@ export class ChatPanel {
                 if (!event.aborted) { this._notifySettled(); }
                 this._postTurnChanges();
                 void this._maybeAutoName();
-                // 统计刷新与是否 abort 无关，刷新后反映最新会话状态
+                // Refresh stats regardless of abort, so they reflect the latest session state
                 const settledClient = this._clientManager.client;
                 if (settledClient) { void this._loadStats(settledClient); }
                 break;
@@ -1797,7 +1818,7 @@ export class ChatPanel {
         }
     }
 
-    /** 下发一段助手正文：必要时先开气泡，保证任何一段内容都不会被 webview 丢掉 */
+    /** Send a chunk of assistant text, opening a bubble if needed so the webview never drops it */
     private _postAssistantChunk(text: string): void {
         if (!text) { return; }
         if (!this._turnHadText) {
@@ -1808,7 +1829,7 @@ export class ChatPanel {
         this._post({ type: 'assistantChunk', text });
     }
 
-    /** 用权威内容补齐当前文本块（流式增量缺失时），宁可重复也不漏 */
+    /** Backfill the current text block from authoritative content (when deltas are missing); duplicating beats missing */
     private _fillText(full: string): void {
         const missing = missingSuffix(full, this._blockText);
         if (!missing.suffix) { return; }
@@ -1820,7 +1841,7 @@ export class ChatPanel {
         this._postAssistantChunk(missing.suffix);
     }
 
-    /** 用权威内容补齐当前思考块（流式增量缺失时） */
+    /** Backfill the current thinking block from authoritative content (when deltas are missing) */
     private _fillThinking(full: string): void {
         const missing = missingSuffix(full, this._blockThinking);
         if (!missing.suffix) { return; }
@@ -1834,8 +1855,9 @@ export class ChatPanel {
     }
 
     /**
-     * 一条助手消息结束：以 pi 的权威消息为准补齐正文 / 思考 / 工具调用 / 失败原因。
-     * 这是「插件只改变呈现形式、不改变内容」的兜底保证。
+     * An assistant message ended: backfill text / thinking / tool calls / failure
+     * reason from pi's authoritative message. This is the guarantee behind "the
+     * extension only changes presentation, never the content".
      */
     private _completeAssistantMessage(m: PiRawMessage): void {
         const completion = planAssistantCompletion(
@@ -1859,14 +1881,14 @@ export class ChatPanel {
             this._postAssistantChunk(completion.textSuffix);
         }
         for (const tc of completion.toolCalls) {
-            // 只记账：tool_execution_start 之后才会执行，回合结束时统一对账
+            // Only record: tool_execution_start runs first; reconcile at turn end
             this._pendingToolCalls.set(tc.id, { name: tc.name, arguments: tc.arguments });
         }
         if (completion.error || completion.aborted) {
             this._turnRenderedAny = true;
             if (completion.aborted) {
-                // 用户主动停止（stopReason=aborted）：不是失败，给个中性提示即可，
-                // 不要弹出带「重试/切换模型/查看日志」的错误气泡。
+                // User stopped the turn (stopReason=aborted): not a failure, so show a
+                // neutral notice instead of an error bubble with retry / switch model / logs.
                 this._post({ type: 'notice', text: vscode.l10n.t('Stopped') });
             } else {
                 logError(`pi turn failed: ${completion.error}`);
@@ -1875,8 +1897,9 @@ export class ChatPanel {
         }
     }
 
-    /** 一条工具结果消息结束：补齐没渲染过的工具卡片与结果（重复下发是幂等的）
-     *  注意：tool_execution_start 一定先于工具结果，所以这里建卡片不会重复。 */
+    /** A tool-result message ended: backfill cards and results that were never rendered
+     *  (resending is idempotent). Note: tool_execution_start always precedes the result,
+     *  so building the card here never duplicates. */
     private _completeToolResult(m: PiRawMessage): void {
         const completion = planToolResultCompletion(m, this._renderedToolIds);
         if (!completion) { return; }
@@ -1907,7 +1930,7 @@ export class ChatPanel {
         });
     }
 
-    /** 回合结束：把「消息里有、但从没渲染过」的工具调用补成卡片（内容不丢） */
+    /** Turn end: render tool calls present in messages that were never rendered (nothing is dropped) */
     private _settlePendingToolCalls(): void {
         for (const [id, call] of this._pendingToolCalls) {
             if (this._renderedToolIds.has(id)) { continue; }
@@ -1924,7 +1947,7 @@ export class ChatPanel {
         }
     }
 
-    /** 回合结束：清空渲染台账，下一回合重新对账 */
+    /** Turn end: clear the render ledger; the next turn reconciles fresh */
     private _resetTurnLedger(): void {
         this._msgText = '';
         this._msgThinking = '';
@@ -1935,7 +1958,7 @@ export class ChatPanel {
         this._turnRenderedAny = false;
     }
 
-    /** 窗口失焦时，任务完成后弹通知 */
+    /** Show a notification when a turn finishes while the window is unfocused */
     private _notifySettled(): void {
         if (vs.windowFocused()) { return; }
         const enabled = vs.getConfiguration('pi-agent').get<boolean>('notifications.enabled', true);
@@ -1943,14 +1966,14 @@ export class ChatPanel {
         void vs.showInformationMessage(vscode.l10n.t('Pi finished the current turn'));
     }
 
-    /** 清空等待中的 steer / follow-up 队列 */
+    /** Clear pending steer / follow-up messages */
     private async _clearQueue(): Promise<void> {
         const client = this._clientManager.client;
         if (!client || typeof client.clearQueue !== 'function') { return; }
         try { await client.clearQueue(); } catch (err) { logError(`clearQueue failed: ${(err as Error).message}`); }
     }
 
-    /** 工作区文件列表（供 `@` 提及补全），带 30s 缓存 */
+    /** Workspace file list (for `@` mention completion), cached for 30s */
     private async _getWorkspaceFiles(): Promise<string[]> {
         const now = Date.now();
         if (this._fileList && now - this._fileListAt < 30000) { return this._fileList; }
@@ -1968,7 +1991,7 @@ export class ChatPanel {
         return this._fileList;
     }
 
-    /** 把拖入的路径解析为工作区相对路径（丢弃工作区外的路径） */
+    /** Resolve dropped paths to workspace-relative paths (dropping anything outside) */
     private _resolveDroppedPaths(paths: string[]): string[] {
         const out: string[] = [];
         const seen = new Set<string>();
@@ -1992,7 +2015,7 @@ export class ChatPanel {
         return out;
     }
 
-    /** 直接执行 shell 命令（`!` 前缀），不经过模型回合 */
+    /** Run a shell command directly (the `!` prefix), without a model turn */
     private async _runBash(command: string, id?: string): Promise<void> {
         if (this._permissionMode() === 'restricted') {
             this._post({ type: 'bashResult', id, command, isError: true, output: vscode.l10n.t('Read-only mode: shell commands are disabled') });
@@ -2023,11 +2046,11 @@ export class ChatPanel {
         }
     }
 
-    // ---------- 用户消息 ----------
+    // ---------- User messages ----------
 
-    /** busy 状态超时保护：pi 进程异常时自动解锁，避免用户永久无法发送消息 */
+    /** Busy timeout guard: auto-unlock when the pi process misbehaves so the user is never stuck */
     private _busyTimeout: NodeJS.Timeout | undefined;
-    private static readonly BUSY_TIMEOUT_MS = 10 * 60 * 1000; // 10 分钟
+    private static readonly BUSY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 
     private _startBusyTimeout(): void {
         this._clearBusyTimeout();
@@ -2049,14 +2072,14 @@ export class ChatPanel {
         }
     }
 
-    /** 当前输入框里的上下文附件（用于消息回显告知用户本条带了附件） */
+    /** Context attachments currently in the composer (echoed on the message so the user knows it had attachments) */
     private _currentAttachments(): Array<{ type: string; path: string; lineRange?: string }> {
         return this._contexts.map((c) => ({ type: c.type, path: c.path, lineRange: c.lineRange }));
     }
 
     private async _handleUserMessage(userText: string, mode?: string, images?: ImageAttachment[]) {
         if (userText && !this._runtime.firstUserMessage) { this._runtime.firstUserMessage = userText; }
-        // 记录最近一条用户消息，供错误气泡「重试」重发
+        // Record the last user message so the error bubble's "Retry" can resend it
         this._lastUserMessage = { text: userText, images };
         if (this._busy) {
             await this._enqueueWhileBusy(userText, mode, images);
@@ -2080,12 +2103,12 @@ export class ChatPanel {
             const disposition = await client.prompt(this._withContext(userText, extra), images);
             this._clearContexts();
             if (disposition === 'handled') {
-                // pi 未启动新一轮（如扩展命令已处理），立即结束 busy
+                // pi did not start a new turn (e.g. an extension command handled it): end busy immediately
                 this._busy = false;
                 this._clearBusyTimeout();
                 this._post({ type: 'setBusy', busy: false });
             } else if (disposition === 'queued') {
-                // 已排队：当前回合结束后 pi 会自动处理，busy 保持到 agent_settled
+                // Queued: pi handles it after the current turn; busy clears at agent_settled
                 this._post({ type: 'notice', text: vscode.l10n.t('Message queued; pi will handle it after the current turn') });
             }
         } catch (err) {
@@ -2096,7 +2119,7 @@ export class ChatPanel {
 
             const msg = (err as Error).message || String(err);
 
-            // 仅当进程确实崩溃时才重置客户端（类型判断，不依赖文案）
+            // Reset the client only when the process really crashed (type check, not message text)
             if (isProcessError(err)) {
                 await this._clientManager.stop();
                 void this._ensureClient().catch((err) => { logError(`reconnect after crash failed: ${(err as Error).message}`); });
@@ -2119,11 +2142,11 @@ export class ChatPanel {
         }
     }
 
-    /** 忙碌时：steer 立刻插入当前回合；否则排队为 follow-up */
+    /** While busy: steer inserts into the current turn; otherwise it queues as a follow-up */
     private async _enqueueWhileBusy(userText: string, mode?: string, images?: ImageAttachment[]): Promise<void> {
         const steering = mode === 'steer';
         const attachments = this._currentAttachments();
-        // 先展示用户消息（带 pending 状态），避免排队失败时消息丢失
+        // Show the user message first (with a pending state) so it isn't lost if queueing fails
         this._post({
             type: 'addUserMessage',
             text: userText,
@@ -2140,7 +2163,7 @@ export class ChatPanel {
             } else if (typeof client.followUp === 'function') {
                 await client.followUp(message, images);
             } else {
-                // 客户端不支持 steer/followUp 时回退到带 streamingBehavior 的 prompt
+                // Fall back to prompt with streamingBehavior when the client lacks steer/followUp
                 await client.prompt(message, images, steering ? 'steer' : 'followUp');
             }
             this._clearContexts();
@@ -2149,7 +2172,7 @@ export class ChatPanel {
         }
     }
 
-    // ---------- 应用到编辑器 ----------
+    // ---------- Apply to the editor ----------
 
     private async _applyCode(code: string) {
         const editor = vs.activeTextEditor;
@@ -2177,30 +2200,43 @@ export class ChatPanel {
         }
     }
 
-    // ---------- Webview 通信 ----------
+    // ---------- Webview communication ----------
 
     private _post(message: PostMessage) {
         if (this._disposed) { return; }
         void this._webview.postMessage(message);
     }
 
-    /** 错误气泡的可操作按钮（有可重试的消息时才提供重试 / 切模型） */
-    private _errorActions(): Array<{ id: string; label: string }> {
+    /** Whether an error looks like a missing credential */
+    private _looksLikeAuthError(text: string): boolean {
+        const t = (text || '').toLowerCase();
+        return t.includes('credential') || t.includes('api key') || t.includes('api-key')
+            || t.includes('unauthorized') || t.includes('authentication')
+            || t.includes('not configured') || t.includes('no provider');
+    }
+
+    /** Action buttons for an error bubble */
+    private _errorActions(text = ''): Array<{ id: string; label: string }> {
         const actions: Array<{ id: string; label: string }> = [];
         if (this._lastUserMessage) {
             actions.push({ id: 'retry', label: vscode.l10n.t('Retry') });
             actions.push({ id: 'model', label: vscode.l10n.t('Switch model') });
         }
+        // Missing credential: offer "Add API key / Sign in" directly
+        if (this._authStatus.ready === false || this._looksLikeAuthError(text)) {
+            actions.push({ id: 'connect', label: vscode.l10n.t('Add API key') });
+            actions.push({ id: 'login', label: vscode.l10n.t('Sign in with pi') });
+        }
         actions.push({ id: 'logs', label: vscode.l10n.t('Show logs') });
         return actions;
     }
 
-    /** 以可操作错误气泡的形式报告错误 */
+    /** Report an error as an actionable error bubble */
     private _postError(text: string): void {
-        this._post({ type: 'error', text, actions: this._errorActions() });
+        this._post({ type: 'error', text, actions: this._errorActions(text) });
     }
 
-    /** 首次环境自检：pi 是否安装 / 是否连接 / 是否有模型 / 工作区是否受信 */
+    /** First-run setup: pi installed / connected / provider credentials ready / workspace trusted */
     private _postSetupStatus(): void {
         const status = {
             connecting: this._runtime.state.connecting,
@@ -2208,11 +2244,40 @@ export class ChatPanel {
             piFound: this._runtime.state.connected || !this._piMissing,
             hasModels: this._runtime.state.models.length > 0,
             workspaceTrusted: vscode.workspace.isTrusted,
+            authReady: this._authStatus.ready,
+            authReason: this._authStatus.reason,
+            provider: this._authStatus.provider,
         };
         this._post({ type: 'setup', setup: status });
     }
 
-    /** 首次环境自检清单上的一键动作 */
+    /** Use `pi auth check --provider <p> --json` to see whether the current provider's credentials are ready */
+    private async _refreshAuthStatus(): Promise<void> {
+        let provider: string | undefined;
+        const client = this._clientManager.client;
+        if (client) {
+            try { provider = (await client.getState()).model?.provider; } catch { /* ignore */ }
+        }
+        if (!provider) {
+            this._authStatus = { ready: false, reason: 'no_provider' };
+            this._postSetupStatus();
+            return;
+        }
+        try {
+            const res = await this._clientManager.runCli(
+                this._extensionPath,
+                ['auth', 'check', '--provider', provider, '--json', '--no-refresh'],
+            );
+            const parsed = JSON.parse(res.stdout.trim()) as { status?: string; reason?: string };
+            this._authStatus = { provider, ready: parsed.status === 'ready', reason: parsed.reason };
+        } catch (err) {
+            logError(`auth check failed: ${(err as Error).message}`);
+            this._authStatus = { provider, ready: undefined };
+        }
+        this._postSetupStatus();
+    }
+
+    /** One-click actions on the first-run setup checklist */
     private async _handleSetupAction(action: string): Promise<void> {
         switch (action) {
             case 'install': {
@@ -2223,8 +2288,14 @@ export class ChatPanel {
                 void vs.showInformationMessage(vscode.l10n.t('Install command copied — run it in the terminal, then Retry'));
                 break;
             }
+            case 'connect':
+                await this._connectProvider();
+                break;
+            case 'manage':
+                await this._manageProviders();
+                break;
             case 'pi': {
-                // 开一个终端运行 pi，让用户登录 / 选模型
+                // Open a terminal running pi so the user can sign in / pick a model
                 const term = vscode.window.createTerminal('Pi');
                 term.show();
                 term.sendText('pi');
@@ -2234,7 +2305,7 @@ export class ChatPanel {
                 await this._ensureClient();
                 break;
             case 'trust':
-                try { await vs.executeCommand('workbench.trust.manage'); } catch { /* 忽略 */ }
+                try { await vs.executeCommand('workbench.trust.manage'); } catch { /* ignore */ }
                 break;
             case 'logs':
                 showLogs();
@@ -2244,9 +2315,295 @@ export class ChatPanel {
         }
     }
 
+    /** "Connect a provider" flow: built-in API key / third-party OpenAI-compatible endpoint / terminal OAuth */
+    private async _connectProvider(): Promise<void> {
+        const pick = await vs.showQuickPick(
+            [
+                { label: vscode.l10n.t('Add an API key'), description: vscode.l10n.t('Anthropic, OpenAI, DeepSeek, OpenRouter…'), id: 'builtin' },
+                { label: vscode.l10n.t('Add a custom OpenAI-compatible endpoint'), description: vscode.l10n.t('third-party gateway, self-hosted, Ollama/LM Studio'), id: 'custom' },
+                { label: vscode.l10n.t('Sign in with pi (terminal)'), description: vscode.l10n.t('OAuth providers, e.g. GitHub Copilot'), id: 'oauth' },
+            ],
+            { title: vscode.l10n.t('Connect a model provider'), ignoreFocusOut: true },
+        );
+        if (!pick) { return; }
+        const id = (pick as { id?: string }).id;
+        if (id === 'builtin') { await this._addBuiltinProvider(); }
+        else if (id === 'custom') { await this._addCustomProvider(); }
+        else if (id === 'oauth') {
+            const term = vscode.window.createTerminal('Pi login');
+            term.show();
+            term.sendText('pi');
+            void vs.showInformationMessage(vscode.l10n.t('In pi, type /login to sign in with OAuth'));
+        }
+    }
+
+    /** Built-in provider: write to pi's auth.json, restart and verify */
+    private async _addBuiltinProvider(): Promise<void> {
+        const items = [
+            ...KNOWN_PROVIDERS.map((p) => ({ label: p.label, description: p.id, detail: p.envVar, id: p.id })),
+            { label: vscode.l10n.t('Other…'), description: vscode.l10n.t('enter a provider id'), detail: '', id: '__other__' },
+        ];
+        const pick = await vs.showQuickPick(items, {
+            title: vscode.l10n.t('Select a provider'), ignoreFocusOut: true, matchOnDescription: true, matchOnDetail: true,
+        });
+        if (!pick) { return; }
+        let provider = (pick as { id?: string }).id ?? '';
+        if (provider === '__other__') {
+            const typed = await vs.showInputBox({
+                title: vscode.l10n.t('Provider id'),
+                prompt: vscode.l10n.t('pi provider id, e.g. anthropic'),
+                ignoreFocusOut: true,
+            });
+            if (!typed) { return; }
+            provider = typed.trim();
+        }
+        const key = await vs.showInputBox({
+            title: vscode.l10n.t('API key for {0}', providerLabel(provider)),
+            prompt: vscode.l10n.t("Saved to pi's credential file (auth.json); the extension never sends it anywhere."),
+            password: true,
+            ignoreFocusOut: true,
+        });
+        if (!key) { return; }
+        try { this._writeAuthKey(provider, key.trim()); } catch (err) {
+            this._postError(vscode.l10n.t('Failed to save the API key: {0}', (err as Error).message));
+            return;
+        }
+        await this._verifyProvider(provider);
+    }
+
+    /** Third-party / self-hosted OpenAI-compatible endpoint: write to pi's models.json */
+    private async _addCustomProvider(): Promise<void> {
+        const name = await vs.showInputBox({ title: vscode.l10n.t('Display name'), prompt: vscode.l10n.t('e.g. My gateway'), ignoreFocusOut: true });
+        if (!name) { return; }
+        const baseUrl = await vs.showInputBox({
+            title: vscode.l10n.t('Base URL'),
+            prompt: vscode.l10n.t('e.g. https://api.example.com/v1'),
+            ignoreFocusOut: true,
+            validateInput: (v) => (/^https?:\/\//.test(v.trim()) ? undefined : vscode.l10n.t('Must start with http:// or https://')),
+        });
+        if (!baseUrl) { return; }
+        const key = await vs.showInputBox({ title: vscode.l10n.t('API key'), password: true, ignoreFocusOut: true });
+        if (key === undefined) { return; }
+        const modelId = await vs.showInputBox({ title: vscode.l10n.t('Model id'), prompt: vscode.l10n.t('e.g. deepseek-chat'), ignoreFocusOut: true });
+        if (!modelId) { return; }
+        const id = name.trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '') || 'custom';
+        try {
+            this._writeCustomProvider({ id, name: name.trim(), baseUrl: baseUrl.trim(), apiKey: key.trim(), modelId: modelId.trim() });
+        } catch (err) {
+            this._postError(vscode.l10n.t('Failed to save the endpoint: {0}', (err as Error).message));
+            return;
+        }
+        await this._verifyProvider(id);
+    }
+
+    /** After writing credentials: restart the client -> re-check -> auto-select a model */
+    private async _verifyProvider(provider: string): Promise<void> {
+        await this.restartClient();
+        await this._refreshAuthStatus();
+        if (this._authStatus.ready === false) {
+            void vs.showWarningMessage(vscode.l10n.t('Saved, but pi still reports the provider as not ready ({0})', this._authStatus.reason ?? provider));
+            return;
+        }
+        await this._selectProviderModel(provider);
+        void vs.showInformationMessage(vscode.l10n.t('Provider connected: {0}', providerLabel(provider)));
+    }
+
+    /** Set the provider's first model as current so the user can start right away */
+    private async _selectProviderModel(provider: string): Promise<void> {
+        const client = this._clientManager.client;
+        if (!client || typeof client.setModel !== 'function') { return; }
+        try {
+            const models = await client.getAvailableModels();
+            const first = models.find((m) => m.provider === provider);
+            if (first) { await client.setModel(first.provider, first.id); await this._loadModels(client); }
+        } catch (err) { logError(`select provider model failed: ${(err as Error).message}`); }
+    }
+
+    /** pi's agent directory (defaults to ~/.pi/agent; override with PI_CODING_AGENT_DIR) */
+    private _agentDir(): string {
+        const override = process.env.PI_CODING_AGENT_DIR?.trim();
+        return override || path.join(os.homedir(), '.pi', 'agent');
+    }
+
+    /** Merge an API key into auth.json (backup first, file mode 600) */
+    private _writeAuthKey(provider: string, key: string): void {
+        const file = path.join(this._agentDir(), 'auth.json');
+        let data: Record<string, unknown> = {};
+        try { data = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>; } catch { /* new file / unparsable: rebuild */ }
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        if (fs.existsSync(file)) { try { fs.copyFileSync(file, file + '.bak'); } catch { /* ignore */ } }
+        data[provider] = { type: 'api_key', key };
+        fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+    }
+
+    /** Merge a custom OpenAI-compatible endpoint into models.json (backup first) */
+    private _writeCustomProvider(p: { id: string; name: string; baseUrl: string; apiKey: string; modelId: string }): void {
+        const file = path.join(this._agentDir(), 'models.json');
+        let data: Record<string, unknown> = {};
+        try { data = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>; } catch { /* new file */ }
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        if (fs.existsSync(file)) { try { fs.copyFileSync(file, file + '.bak'); } catch { /* ignore */ } }
+        const providers = (data.providers as Record<string, Record<string, unknown> & { models?: Array<{ id: string }> }> | undefined) ?? {};
+        const existing = providers[p.id];
+        const models = existing?.models ? [...existing.models] : [];
+        if (!models.some((m) => m.id === p.modelId)) { models.push({ id: p.modelId }); }
+        providers[p.id] = { ...(existing ?? {}), name: p.name, baseUrl: p.baseUrl, api: 'openai-completions', apiKey: p.apiKey, models };
+        data.providers = providers;
+        fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+    }
+
+    // ---------- Provider management ----------
+
+    /** Provider management entry point (command / setup-checklist link) */
+    public async manageProviders(): Promise<void> {
+        await this._manageProviders();
+    }
+    /** List providers from auth.json / models.json with their status, and allow update / delete */
+    private async _manageProviders(): Promise<void> {
+        const known = this._collectProviders();
+        const statuses = await Promise.all(known.map(async (p) => ({ p, status: await this._checkProvider(p.id) })));
+        const items: Array<{ label: string; description?: string; detail?: string; id: string }> = [
+            { label: vscode.l10n.t('Add a provider…'), id: '__add__' },
+        ];
+        for (const { p, status } of statuses) {
+            const ok = status.status === 'ready';
+            const who = p.label ? `${p.label} (${p.id})` : p.id;
+            items.push({
+                label: (ok ? '✓ ' : '⚠ ') + who,
+                description: ok ? vscode.l10n.t('ready') : (status.reason || status.status || vscode.l10n.t('not ready')),
+                detail: p.sources.join(' · '),
+                id: p.id,
+            });
+        }
+        const pick = await vs.showQuickPick(items, {
+            title: vscode.l10n.t('Model providers'),
+            ignoreFocusOut: true,
+            matchOnDescription: true,
+            matchOnDetail: true,
+        });
+        if (!pick) { return; }
+        const id = (pick as { id?: string }).id;
+        if (!id || id === '__add__') { await this._connectProvider(); return; }
+        await this._manageProvider(id);
+    }
+
+    /** A single provider: update / delete / check status */
+    private async _manageProvider(id: string): Promise<void> {
+        const action = await vs.showQuickPick(
+            [
+                { label: vscode.l10n.t('Update API key'), id: 'update' },
+                { label: vscode.l10n.t('Delete'), id: 'delete' },
+                { label: vscode.l10n.t('Check status'), id: 'check' },
+            ],
+            { title: providerLabel(id) + ' · ' + id, ignoreFocusOut: true },
+        );
+        if (!action) { return; }
+        const a = (action as { id?: string }).id;
+        if (a === 'check') {
+            const s = await this._checkProvider(id);
+            void vs.showInformationMessage(`${id}: ${s.status ?? 'unknown'}${s.reason ? ' — ' + s.reason : ''}`);
+            return;
+        }
+        if (a === 'update') {
+            const key = await vs.showInputBox({
+                title: vscode.l10n.t('API key for {0}', providerLabel(id)),
+                password: true,
+                ignoreFocusOut: true,
+            });
+            if (!key) { return; }
+            if (this._hasModelEntry(id)) { this._updateModelApiKey(id, key.trim()); }
+            else { this._writeAuthKey(id, key.trim()); }
+            await this._verifyProvider(id);
+            return;
+        }
+        if (a === 'delete') {
+            const confirmed = await vs.showWarningMessage(
+                vscode.l10n.t('Remove the credentials for {0}?', providerLabel(id)),
+                { modal: true },
+                vscode.l10n.t('Delete'),
+            );
+            if (confirmed !== vscode.l10n.t('Delete')) { return; }
+            try { this._deleteProvider(id); } catch (err) {
+                this._postError(vscode.l10n.t('Failed to remove the provider: {0}', (err as Error).message));
+                return;
+            }
+            await this.restartClient();
+            await this._refreshAuthStatus();
+            void vs.showInformationMessage(vscode.l10n.t('Removed: {0}', providerLabel(id)));
+        }
+    }
+
+    /** Collect every provider seen in auth.json and models.json */
+    private _collectProviders(): Array<{ id: string; label?: string; sources: string[] }> {
+        const map = new Map<string, { id: string; label?: string; sources: string[] }>();
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(this._agentDir(), 'auth.json'), 'utf8')) as Record<string, unknown>;
+            for (const id of Object.keys(data ?? {})) { map.set(id, { id, sources: ['auth.json'] }); }
+        } catch { /* no auth.json */ }
+        try {
+            const data = JSON.parse(fs.readFileSync(path.join(this._agentDir(), 'models.json'), 'utf8')) as { providers?: Record<string, { name?: string }> };
+            for (const [id, v] of Object.entries(data.providers ?? {})) {
+                const entry = map.get(id) ?? { id, sources: [] };
+                entry.label = v?.name;
+                entry.sources.push('models.json');
+                map.set(id, entry);
+            }
+        } catch { /* no models.json */ }
+        return [...map.values()];
+    }
+
+    /** Raw result of `pi auth check` */
+    private async _checkProvider(id: string): Promise<{ status?: string; reason?: string }> {
+        try {
+            const res = await this._clientManager.runCli(
+                this._extensionPath,
+                ['auth', 'check', '--provider', id, '--json', '--no-refresh'],
+            );
+            return JSON.parse(res.stdout.trim()) as { status?: string; reason?: string };
+        } catch { return {}; }
+    }
+
+    private _readJsonFile(file: string): Record<string, unknown> {
+        try { return JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>; } catch { return {}; }
+    }
+
+    private _hasModelEntry(id: string): boolean {
+        const data = this._readJsonFile(path.join(this._agentDir(), 'models.json')) as { providers?: Record<string, unknown> };
+        return Boolean(data.providers && id in data.providers);
+    }
+
+    /** Update a provider's apiKey in models.json */
+    private _updateModelApiKey(id: string, key: string): void {
+        const file = path.join(this._agentDir(), 'models.json');
+        const data = JSON.parse(fs.readFileSync(file, 'utf8')) as { providers?: Record<string, Record<string, unknown>> };
+        const entry = data.providers?.[id];
+        if (!entry) { return; }
+        try { fs.copyFileSync(file, file + '.bak'); } catch { /* ignore */ }
+        entry.apiKey = key;
+        fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+    }
+
+    /** Delete a provider from auth.json and models.json (backup first) */
+    private _deleteProvider(id: string): void {
+        const authFile = path.join(this._agentDir(), 'auth.json');
+        const auth = this._readJsonFile(authFile);
+        if (id in auth) {
+            try { fs.copyFileSync(authFile, authFile + '.bak'); } catch { /* ignore */ }
+            delete auth[id];
+            fs.writeFileSync(authFile, JSON.stringify(auth, null, 2) + '\n', { mode: 0o600 });
+        }
+        const modelsFile = path.join(this._agentDir(), 'models.json');
+        const data = this._readJsonFile(modelsFile) as { providers?: Record<string, unknown> };
+        if (data.providers && id in data.providers) {
+            try { fs.copyFileSync(modelsFile, modelsFile + '.bak'); } catch { /* ignore */ }
+            delete data.providers[id];
+            fs.writeFileSync(modelsFile, JSON.stringify(data, null, 2) + '\n', { mode: 0o600 });
+        }
+    }
+
     public dispose() {
         this._disposed = true;
-        // 退出本面板的运行时；若该运行时已无其他面板则停掉其 pi 进程
+        // Leave this panel's runtime; stop its pi process when no other panel uses it
         this._runtimeUnsub?.();
         this._runtimeUnsub = undefined;
         this._runtime.panels.delete(this);

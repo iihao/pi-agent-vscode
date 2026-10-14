@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 上下文占用指示器（SVG 圆圈 + 快捷 compact）
+// Context-usage indicator (SVG ring + quick compact)
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext } from '../types';
@@ -13,15 +13,15 @@ let tip: HTMLElement;
 
 export function initContextUsage(c: WebviewContext): void {
     ctx = c;
-    // 结构化 tooltip（比纯文本 attr 更好排版）
+    // Structured tooltip (lays out better than a plain text attr)
     tip = document.createElement('div');
     tip.className = 'ctx-usage-tip';
     tip.setAttribute('role', 'tooltip');
     ctx.els.ctxUsage.appendChild(tip);
 
     ctx.els.ctxUsage.addEventListener('click', function () {
-        // 工具提示已提示「Click to compact」，直接触发压缩，
-        // 不再往输入框插入命令、也不用再去 suggest 菜单里选一次。
+        // The tooltip already says "Click to compact", so compact directly:
+        // no inserting a command into the composer and picking it from the suggest menu.
         ctx.vscode.postMessage({ type: 'compact' });
     });
 }
@@ -35,11 +35,11 @@ export function updateContextUsage(stats: { contextPercent?: number | null; cont
     ctx.els.ctxUsage.classList.remove('hidden');
     ctx.els.ctxUsagePct.textContent = String(Math.round(clamped));
 
-    // 更新 SVG 圆环
+    // Update the SVG ring
     const ring = ctx.els.ctxUsageRing;
     ring.style.strokeDasharray = RING_C.toFixed(2);
     ring.style.strokeDashoffset = (RING_C * (1 - clamped / 100)).toFixed(2);
-    // 颜色：默认淡化，>90% 时显示红色
+    // Color: muted by default, red above 90%
     ring.style.stroke = clamped > 90 ? 'var(--vscode-errorForeground, #f85149)' : '';
 
     renderTip(clamped, stats);

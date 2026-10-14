@@ -1,12 +1,12 @@
 /**
- * RPC 集成测试：验证 RpcClient 能启动 pi、接收流式事件与工具调用
- * 运行：node scripts/test-rpc.mjs
+ * RPC integration test: verify RpcClient can start pi and receive streaming events and tool calls.
+ * Run: node scripts/test-rpc.mjs
  */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RpcClient } from "@earendil-works/pi-coding-agent";
 
-// 动态解析包内的 CLI 入口（dist/index.js 同目录下的 cli.js）
+// Resolve the CLI entry inside the package (cli.js next to dist/index.js)
 const pkgEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"));
 const cliPath = join(dirname(pkgEntry), "cli.js");
 console.log("cliPath:", cliPath);
@@ -28,7 +28,7 @@ const unsub = client.onEvent((event) => {
     } else if (event.type === "tool_execution_start") {
         detail = event.toolName + " args=" + JSON.stringify(event.args ?? {}).slice(0, 80);
     } else if (event.type === "tool_execution_end") {
-        detail = event.toolName + (event.isError ? " (错误)" : " (成功)");
+        detail = event.toolName + (event.isError ? " (error)" : " (ok)");
     } else if (event.type === "message_end") {
         detail = "role=" + (event.message?.role ?? "?");
     } else if (event.type === "agent_end") {
@@ -40,27 +40,27 @@ const unsub = client.onEvent((event) => {
 });
 
 try {
-    console.log("=== 1. 启动 RPC 会话 ===");
+    console.log("=== 1. Start RPC session ===");
     await client.start();
-    console.log("✓ RpcClient 启动成功");
+    console.log("✓ RpcClient started");
 
     const state = await client.getState();
-    console.log("✓ 会话模型:", JSON.stringify(state.model));
+    console.log("✓ session model:", JSON.stringify(state.model));
 
-    console.log("\n=== 2. 发送 prompt（会触发工具调用）===");
+    console.log("\n=== 2. Send a prompt (triggers tool calls) ===");
     const disposition = await client.prompt(
-        "请读取 package.json 文件，用一句话告诉我 name 字段的值。"
+        "Read the package.json file and tell me the value of the name field in one sentence."
     );
-    console.log("✓ prompt 受理:", JSON.stringify(disposition));
+    console.log("✓ prompt accepted:", JSON.stringify(disposition));
 
     await client.waitForIdle();
-    console.log("\n=== 3. 完成（idle）===");
-    console.log("共收到", eventCount, "个事件");
+    console.log("\n=== 3. Done (idle) ===");
+    console.log("received", eventCount, "events");
 } catch (e) {
-    console.error("❌ 错误:", e.message);
+    console.error("❌ error:", e.message);
     console.error("stderr:", client.getStderr().slice(-800));
 } finally {
     unsub();
     await client.stop();
-    console.log("=== 已停止 ===");
+    console.log("=== stopped ===");
 }

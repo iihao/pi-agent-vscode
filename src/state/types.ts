@@ -1,10 +1,11 @@
 // ---------------------------------------------------------------------------
-// 会话运行时状态类型定义
+// Session-runtime state types
 //
-// 一个会话（ChatRuntime）持有一份 ChatState：绑定同一会话的多个面板共享它，
-// 从而「同一会话 → 镜像」；不同会话之间状态完全隔离（busy / contexts /
-// sessions / stats / models …）。渲染台账（已下发给某个 webview 的内容）
-// 才是面板私有的，不在这里。
+// One session (a ChatRuntime) owns one ChatState: panels bound to the same
+// session share it, which is what gives "same session -> mirrored". Different
+// sessions are fully isolated (busy / contexts / sessions / stats / models ...).
+// The render ledger (what a given webview has already been sent) is per panel
+// and does not live here.
 // ---------------------------------------------------------------------------
 
 import { ContextItem } from '../utils/context';
@@ -15,11 +16,11 @@ export interface TurnChange {
     rel: string;
     existed: boolean;
     edits: Array<{ oldText: string; newText: string }> | null;
-    /** 本回合首次触碰该文件前的内容快照（write 的 diff / 还原用） */
+    /** Snapshot of the file before the first touch this turn (diff / revert for write) */
     before?: string;
-    /** write 写入的内容（用于从快照生成 diff） */
+    /** Content written by write (diffed against the snapshot) */
     written?: string;
-    /** 已算好的整回合 diff（缓存，避免重复计算） */
+    /** Cached whole-turn diff (computed once) */
     diff?: string;
 }
 
@@ -34,36 +35,36 @@ export interface SessionStats {
 }
 
 export interface ChatState {
-    // UI 状态
+    // UI state
     busy: boolean;
 
-    // 本回合改动追踪（共享：多面板事件广播需要同步）
+    // Per-turn change tracking (shared so panels on one session stay in sync)
     turnChanges: TurnChange[];
 
-    // clear() 时若未连接，标记连接后需创建新会话
+    // Set when clear() runs while disconnected: create a session once connected
     pendingNewSession: boolean;
 
-    // 上下文状态
+    // Context state
     contexts: ContextItem[];
 
-    // 使用统计
+    // Usage stats
     lastUsage: PiUsage | undefined;
     stats: SessionStats | undefined;
 
-    // 会话状态
+    // Session state
     sessions: SessionInfo[];
     currentSessionId: string | undefined;
 
-    // 模型状态
+    // Model state
     models: PiModelInfo[];
     currentModel: { provider: string; id: string } | null;
     thinkingLevels: string[];
     currentThinking: string | null;
 
-    // 权限状态
+    // Permission state
     permissionMode: string;
 
-    // 连接状态
+    // Connection state
     connected: boolean;
     connecting: boolean;
 }

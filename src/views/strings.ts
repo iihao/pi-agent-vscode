@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Webview UI 文案（通过 vscode.l10n 本地化，由扩展宿主注入到 HTML）
+// Webview UI strings (localized via vscode.l10n, injected into the HTML by the host)
 // ---------------------------------------------------------------------------
 
 import * as vscode from 'vscode';
@@ -16,9 +16,12 @@ export interface UiStrings {
     setupPiAction: string;
     setupConnect: string;
     setupConnectAction: string;
+    setupProvider: string;
+    setupProviderAction: string;
     setupModel: string;
     setupModelAction: string;
     setupLogs: string;
+    setupManage: string;
     outlineTitle: string;
     noMessages: string;
     prevQuestion: string;
@@ -123,9 +126,12 @@ export function getUiStrings(): UiStrings {
         setupPiAction: t('Install pi'),
         setupConnect: t('Connected to pi'),
         setupConnectAction: t('Retry'),
+        setupProvider: t('Model provider ready'),
+        setupProviderAction: t('Connect'),
         setupModel: t('Model available'),
         setupModelAction: t('Sign in to pi'),
         setupLogs: t('Show logs'),
+        setupManage: t('Manage providers'),
         outlineTitle: t('Jump to a question'),
         noMessages: t('No questions yet'),
         prevQuestion: t('Previous question'),

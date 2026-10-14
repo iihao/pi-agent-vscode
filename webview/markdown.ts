@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Markdown 渲染引擎（markdown-it + highlight.js + KaTeX + Mermaid）
+// Markdown rendering (markdown-it + highlight.js + KaTeX + Mermaid)
 // ---------------------------------------------------------------------------
 
 import MarkdownIt from 'markdown-it';
@@ -109,7 +109,7 @@ export function renderMarkdown(md: MarkdownIt, src: string): string {
     return md.render(src || '');
 }
 
-/** Mermaid 按需懒加载（大库，仅在出现图时拉取） */
+/** Lazily load Mermaid (big library; only fetched when a diagram appears) */
 export function renderMermaid(chat: HTMLElement): Promise<void> {
     const nodes = Array.prototype.slice.call(chat.querySelectorAll('.mermaid:not([data-processed])'));
     if (!nodes.length) { return Promise.resolve(); }

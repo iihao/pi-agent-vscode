@@ -1,10 +1,11 @@
 /**
- * 构建 webview 资源 -> media/
+ * Build webview assets -> media/
  *
- * - ESM + 代码分割：主包 media/main.js；重库（mermaid）按需懒加载为 media/chunks/*
- * - katex 样式里的字体复制到 media/assets/*
- * - styles.css 与 katex 的 CSS 合并为 media/main.css
- * - 扩展侧用 webview.asWebviewUri 引用 media/main.js / media/main.css
+ * - ESM + code splitting: the main bundle is media/main.js; heavy libraries
+ *   (mermaid) are lazily loaded as media/chunks/*
+ * - Fonts referenced by the KaTeX CSS are copied to media/assets/*
+ * - styles.css and the KaTeX CSS are merged into media/main.css
+ * - The extension references media/main.js / media/main.css via webview.asWebviewUri
  */
 import esbuild from 'esbuild';
 import { rmSync } from 'node:fs';
@@ -12,18 +13,20 @@ import { readFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-/** 裁剪 elkjs（约 1.4MB）。Mermaid 未注册 elk 时会自动回退到 dagre。
- *  如需完整的 ELK 布局，删除下面 alias 即可。 */
+/** Trim elkjs (~1.4MB). Mermaid falls back to dagre when elk is not registered.
+ *  Delete the alias below if you need the full ELK layout. */
 const elkStub = fileURLToPath(new URL('./webview/elk-stub.js', import.meta.url));
 
 /**
- * KaTeX 的 CSS 同时引用了 woff2/woff/ttf 三种字体，但现代 VSCode（Chromium 内核）
- * 只需 woff2 即可渲染数学公式。此插件在打包时移除 woff/ttf 的 src 声明，
- * 使 esbuild 不会将这两类字体复制到 media/，减小 VSIX 体积。
+ * The KaTeX CSS references woff2/woff/ttf fonts, but modern VS Code (Chromium)
+ * only needs woff2 to render math. This plugin removes the woff/ttf src
+ * declarations while bundling so esbuild never copies them into media/,
+ * keeping the VSIX smaller.
  *
- * 匹配格式：,url(<path>.woff)  format("woff")
- *           ,url(<path>.ttf)   format("truetype")
- * 注意：必须保留开头的逗号，避免误删首条 src（首条无前导逗号）。
+ * Matches: ,url(<path>.woff)  format("woff")
+ *          ,url(<path>.ttf)   format("truetype")
+ * Note: the leading comma must be kept so the first src (which has no leading
+ * comma) is not removed by mistake.
  */
 const KATEX_FONT_REMOVAL = /,url\([^)]*?\.(?:woff|ttf)\)\s*format\("(?:woff|truetype)"\)/g;
 const KATEX_CSS_FILTER = /katex[\\/].*\.css$/;

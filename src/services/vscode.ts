@@ -1,40 +1,40 @@
 // ---------------------------------------------------------------------------
-// VSCode API 服务接口（交互 / 工作区 / 编辑器 / 环境的可测试封装）
+// VSCode API service interface (testable wrapper over interaction / workspace / editor / env)
 // ---------------------------------------------------------------------------
 
 import * as vscode from 'vscode';
 
 export interface IVSCodeService {
-    // 消息提示
+    // Notifications
     showInformationMessage(message: string, ...items: any[]): Thenable<string | undefined>;
     showWarningMessage(message: string, ...items: any[]): Thenable<string | undefined>;
     showErrorMessage(message: string, ...items: any[]): Thenable<string | undefined>;
 
-    // 输入
+    // Input
     showInputBox(options?: vscode.InputBoxOptions): Thenable<string | undefined>;
     showQuickPick<T = string>(items: readonly any[], options?: vscode.QuickPickOptions): Thenable<T | undefined>;
     showSaveDialog(options?: vscode.SaveDialogOptions): Thenable<vscode.Uri | undefined>;
     showOpenDialog(options?: vscode.OpenDialogOptions): Thenable<vscode.Uri[] | undefined>;
 
-    // 编辑器 / 文档
+    // Editor / documents
     showTextDocument(document: vscode.TextDocument, options?: vscode.TextDocumentShowOptions): Thenable<vscode.TextEditor>;
     openTextDocument(options: any): Thenable<vscode.TextDocument>;
     activeTextEditor: vscode.TextEditor | undefined;
     openEditorUris(): vscode.Uri[];
     applyEdit(edit: vscode.WorkspaceEdit): Thenable<boolean>;
 
-    // 配置 / 命令
+    // Configuration / commands
     getConfiguration(section?: string): vscode.WorkspaceConfiguration;
     registerCommand(command: string, callback: (...args: any[]) => any): vscode.Disposable;
     executeCommand<T = unknown>(command: string, ...args: any[]): Thenable<T | undefined>;
 
-    // 工作区
+    // Workspace
     workspaceFolders: readonly vscode.WorkspaceFolder[] | undefined;
     asRelativePath(pathOrUri: string | vscode.Uri, includeWorkspaceFolder?: boolean): string;
     getWorkspaceFolder(uri: vscode.Uri): vscode.WorkspaceFolder | undefined;
     findFiles(include: vscode.GlobPattern, exclude?: vscode.GlobPattern | null, maxResults?: number): Thenable<vscode.Uri[]>;
 
-    // 环境
+    // Environment
     clipboard: vscode.Clipboard;
     openExternal(target: vscode.Uri): Thenable<boolean>;
     language: string;
@@ -42,7 +42,7 @@ export interface IVSCodeService {
     version: string;
     windowFocused(): boolean;
 
-    // 命名空间（保持调用形态接近原生）
+    // Namespaces (kept as close to the native call shape as possible)
     uri: typeof vscode.Uri;
     fs: typeof vscode.workspace.fs;
     extensions: typeof vscode.extensions;
@@ -91,7 +91,7 @@ export class VSCodeService implements IVSCodeService {
         return vscode.window.activeTextEditor;
     }
 
-    /** 当前已打开（含各编辑器分组）的文本文件 Uri，按标签顺序 */
+    /** URIs of currently open text files (across editor groups), in tab order */
     public openEditorUris(): vscode.Uri[] {
         const uris: vscode.Uri[] = [];
         for (const group of vscode.window.tabGroups.all) {

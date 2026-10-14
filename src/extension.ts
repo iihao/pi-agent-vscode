@@ -3,10 +3,10 @@ import { ChatPanel } from './chatPanel';
 import { initLogger, setLogLevel, buildDiagnostics, logInfo, LogLevel } from './utils/logger';
 import { initRecentFiles } from './utils/recentFiles';
 
-/** 自动附件同步的防抖定时器 */
+/** Debounce timer for auto-attachment sync */
 let autoContextTimer: NodeJS.Timeout | undefined;
 
-/** 防抖调用 syncAutoContext（每次选区变化都触发，需要节流） */
+/** Debounced syncAutoContext (fires on every selection change, so it needs throttling) */
 function scheduleSyncAutoContext(): void {
     if (autoContextTimer) { clearTimeout(autoContextTimer); }
     autoContextTimer = setTimeout(() => {
@@ -21,10 +21,10 @@ export function activate(context: vscode.ExtensionContext) {
     initRecentFiles(context);
     logInfo('Pi Agent activated');
 
-    // 注册侧边栏聊天视图（activitybar 图标 → 聊天面板）
+    // Register the sidebar chat view (activity bar icon -> chat panel)
     ChatPanel.registerViewProvider(context, context.extensionPath);
 
-    // 当前编辑器/选区变化 → 同步输入框的自动文件附件（默认开启）
+    // Active editor / selection change -> sync the composer's auto file attachment (on by default)
     ChatPanel.syncAutoContext();
     context.subscriptions.push(
         vscode.window.onDidChangeActiveTextEditor(() => scheduleSyncAutoContext()),
@@ -36,28 +36,28 @@ export function activate(context: vscode.ExtensionContext) {
         }),
     );
 
-    // ---- 打开对话（聚焦侧边栏聊天视图）----
+    // ---- Open the chat (focus the sidebar chat view) ----
     const openChat = vscode.commands.registerCommand('pi-agent.openChat', () => {
         void ChatPanel.ensureView().catch((err: unknown) => {
             void vscode.window.showErrorMessage(`Pi: ${(err as Error).message}`);
         });
     });
 
-    // ---- 解释选中代码 ----
+    // ---- Explain the selected code ----
     const explainCode = vscode.commands.registerCommand('pi-agent.explainCode', () =>
         askAboutSelection((ctx) => vscode.l10n.t(
             'Explain the code at {0} line {1} (current selection):\n\n```{2}\n{3}\n```\n\nDescribe its overall purpose, key logic, and potential issues.',
             ctx.relPath, ctx.lineRange, ctx.languageId, ctx.code
         )));
 
-    // ---- 重构选中代码 ----
+    // ---- Refactor the selected code ----
     const refactorCode = vscode.commands.registerCommand('pi-agent.refactorCode', () =>
         askAboutSelection((ctx) => vscode.l10n.t(
             'Refactor the code at {0} line {1} (current selection):\n\n```{2}\n{3}\n```\n\nRequirements: improve readability, fix potential issues, keep external behavior unchanged. Edit the files directly and explain the changes.',
             ctx.relPath, ctx.lineRange, ctx.languageId, ctx.code
         )));
 
-    // ---- 生成代码 ----
+    // ---- Generate code ----
     const generateCode = vscode.commands.registerCommand('pi-agent.generateCode', async () => {
         const description = await vscode.window.showInputBox({
             prompt: vscode.l10n.t('Describe the code you want to generate'),
@@ -76,68 +76,72 @@ export function activate(context: vscode.ExtensionContext) {
         await panel.askQuestion(vscode.l10n.t('Please implement: {0}{1}', description, locationHint));
     });
 
-    // ---- 清空对话（同时开启全新 pi 会话）----
+    // ---- Clear the chat (also starts a fresh pi session) ----
     const clearChat = vscode.commands.registerCommand('pi-agent.clearChat', () =>
         withPanel((panel) => panel.clear()));
 
-    // ---- 新建对话 ----
+    // ---- New chat ----
     const newChat = vscode.commands.registerCommand('pi-agent.newChat', () =>
         withPanel((panel) => panel.newSession()));
 
-    // ---- 聚焦输入框 ----
+    // ---- Focus the composer ----
     const focusInput = vscode.commands.registerCommand('pi-agent.focusInput', () =>
         withPanel((panel) => panel.focusInput()));
 
-    // ---- 编辑上一条消息 ----
+    // ---- Edit the last message ----
     const editLastMessage = vscode.commands.registerCommand('pi-agent.editLastMessage', () =>
         withPanel((panel) => panel.editLastMessage()));
 
-    // ---- 切换模型 ----
+    // ---- Cycle model ----
     const cycleModel = vscode.commands.registerCommand('pi-agent.cycleModel', () =>
         withPanel((panel) => panel.cycleModel()));
 
-    // ---- 切换思考档位 ----
+    // ---- Cycle thinking level ----
     const cycleThinkingLevel = vscode.commands.registerCommand('pi-agent.cycleThinkingLevel', () =>
         withPanel((panel) => panel.cycleThinkingLevel()));
 
-    // ---- 压缩上下文 ----
+    // ---- Compact the context ----
     const compact = vscode.commands.registerCommand('pi-agent.compact', () =>
         withPanel((panel) => panel.compact()));
 
-    // ---- 生成 commit message ----
+    // ---- Generate a commit message ----
     const generateCommitMessage = vscode.commands.registerCommand('pi-agent.generateCommitMessage', () =>
         withPanel((panel) => panel.generateCommitMessage()));
 
-    // ---- 生成 PR 描述 ----
+    // ---- Generate a pull request description ----
     const generatePullRequestDescription = vscode.commands.registerCommand('pi-agent.generatePullRequestDescription', () =>
         withPanel((panel) => panel.generatePullRequestDescription()));
 
-    // ---- 撤销本回合改动 ----
+    // ---- Revert this turn's changes ----
     const revertLastTurn = vscode.commands.registerCommand('pi-agent.revertLastTurn', () =>
         withPanel((panel) => panel.revertLastTurn()));
 
-    // ---- 克隆当前会话 ----
+    // ---- Clone the current session ----
     const cloneSession = vscode.commands.registerCommand('pi-agent.cloneSession', () =>
         withPanel((panel) => panel.cloneSession()));
 
-    // ---- 在编辑器标签打开 ----
+    // ---- Open in an editor tab ----
     const openInEditor = vscode.commands.registerCommand('pi-agent.openInEditor', () => {
         ChatPanel.openInEditor(context.extensionPath, vscode.ViewColumn.Active);
     });
 
-    // ---- 在侧边（分栏）打开 ----
+    // ---- Open beside (split) ----
     const openInEditorToSide = vscode.commands.registerCommand('pi-agent.openInEditorToSide', () => {
         ChatPanel.openInEditor(context.extensionPath, vscode.ViewColumn.Beside);
     });
 
-    // ---- 在辅助侧边栏（右侧）打开 ----
+    // ---- Open in the secondary side bar (right) ----
     const openInSecondarySideBar = vscode.commands.registerCommand('pi-agent.openInSecondarySideBar', () => {
         void ChatPanel.openInSecondarySideBar().catch((err: unknown) => {
             void vscode.window.showErrorMessage(`Pi: ${(err as Error).message}`);
         });
     });
 
-    // ---- 附加编辑器上下文 ----
+    // ---- Manage model providers ----
+    const manageProviders = vscode.commands.registerCommand('pi-agent.manageProviders', () =>
+        withPanel((panel) => panel.manageProviders()));
+
+    // ---- Attach editor context ----
     const attachFile = vscode.commands.registerCommand('pi-agent.attachFile', () =>
         withPanel((panel) => panel.attachFile()));
     const attachSelection = vscode.commands.registerCommand('pi-agent.attachSelection', () =>
@@ -145,11 +149,11 @@ export function activate(context: vscode.ExtensionContext) {
     const attachFiles = vscode.commands.registerCommand('pi-agent.attachFiles', () =>
         withPanel((panel) => panel.attachFiles()));
 
-    // ---- 重启会话（权限模式 / 可执行路径变更后生效）----
+    // ---- Restart the session (takes effect after permission mode / executable changes) ----
     const restartSession = vscode.commands.registerCommand('pi-agent.restartSession', () =>
         withPanel((panel) => panel.restartClient()));
 
-    // ---- 导出诊断信息 ----
+    // ---- Export diagnostics ----
     const exportDiagnostics = vscode.commands.registerCommand('pi-agent.exportDiagnostics', async () => {
         const text = buildDiagnostics(context.extensionPath);
         const folder = vscode.workspace.workspaceFolders?.[0]?.uri;
@@ -164,7 +168,7 @@ export function activate(context: vscode.ExtensionContext) {
         }
     });
 
-    // 配置变更：日志级别 / 可执行路径 / 权限模式
+    // Config changes: log level / executable / permission mode
     const configWatcher = vscode.workspace.onDidChangeConfiguration((e) => {
         if (e.affectsConfiguration('pi-agent.diagnostics.level')) {
             applyLogLevel();
@@ -175,18 +179,18 @@ export function activate(context: vscode.ExtensionContext) {
         if (e.affectsConfiguration('pi-agent.pi.executable') ||
             e.affectsConfiguration('pi-agent.pi.arguments') ||
             e.affectsConfiguration('pi-agent.agent.permissionMode')) {
-            // 提示用户配置变更会导致会话重启
+            // Tell the user the config change will restart the session
             if (ChatPanel.currentView) {
                 void vscode.window.showInformationMessage(
                     vscode.l10n.t('Configuration changed; restarting Pi session…')
                 );
             }
-            // 所有会话运行时都重启，而不只当前面板绑定的那个
+            // Restart every session runtime, not just the one bound to the current panel
             void ChatPanel.restartAllClients();
         }
     });
 
-    // 状态栏按钮
+    // Status bar button
     const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     statusBar.text = '$(sparkle) Pi';
     statusBar.tooltip = vscode.l10n.t('Open Pi Agent (local pi agent)');
@@ -212,6 +216,7 @@ export function activate(context: vscode.ExtensionContext) {
         openInEditor,
         openInEditorToSide,
         openInSecondarySideBar,
+        manageProviders,
         attachFile,
         attachSelection,
         attachFiles,
@@ -228,13 +233,13 @@ function applyLogLevel(): void {
     setLogLevel(level);
 }
 
-/** 命令入口统一取面板：优先复用当前面板，否则在侧边栏创建 */
+/** Command entry point: reuse the current panel, otherwise create one in the sidebar */
 async function withPanel(run: (panel: ChatPanel) => void | Promise<void>): Promise<void> {
     const panel = ChatPanel.currentView ?? await ChatPanel.ensureView();
     await run(panel);
 }
 
-/** 取当前选区并按需构造提问发送给面板（无选区时由 getSelectionContext 提示并中止） */
+/** Take the current selection, build a question from it and send it (getSelectionContext warns and aborts when nothing is selected) */
 async function askAboutSelection(build: (ctx: SelectionContext) => string): Promise<void> {
     const ctx = getSelectionContext();
     if (!ctx) { return; }
@@ -249,7 +254,7 @@ export interface SelectionContext {
     lineRange: string;
 }
 
-/** 获取当前编辑器选区上下文（无选区时提示并返回 undefined） */
+/** Get the current editor selection context (warns and returns undefined when nothing is selected) */
 export function getSelectionContext(): SelectionContext | undefined {
     const editor = vscode.window.activeTextEditor;
     if (!editor || editor.selection.isEmpty) {
@@ -271,7 +276,7 @@ export function getSelectionContext(): SelectionContext | undefined {
 }
 
 export function deactivate() {
-    // 视图由 VSCode 自动销毁；停掉共享的 pi 客户端
+    // VS Code disposes the views; stop the shared pi client here
     if (autoContextTimer) {
         clearTimeout(autoContextTimer);
         autoContextTimer = undefined;

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// window message 路由（扩展宿主 → webview）
+// window message routing (extension host -> webview)
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext, PostMessage } from '../types';
@@ -36,7 +36,7 @@ function handle(m: PostMessage): void {
     try {
         _handle(m);
     } catch (err) {
-        // 防止单个消息处理失败阻塞后续消息
+        // Don't let one failed message block the rest
         console.error('[Pi Agent] message handler error:', err, m.type);
     }
 }
@@ -62,8 +62,9 @@ function _handle(m: PostMessage): void {
             }
             break;
 
-        // 新一轮思考 = 工具分组的分界：先收尾上一组，避免后续工具被塞回
-        // 上一组（那会让卡片显示在思考块上方，看起来像被“挤掉”）
+        // A new thinking block is a tool-group boundary: close the previous group
+        // first, otherwise later tools get appended to it (showing above the
+        // thinking block, which looks like they were pushed away).
         case 'thinkingStart': endToolGroup(); showThinking(); break;
         case 'thinkingDelta': appendThinking(m.text || ''); break;
         case 'thinkingEnd': hideThinking(); break;
@@ -125,8 +126,8 @@ function _handle(m: PostMessage): void {
 
         case 'error':
             hideThinking();
-            // 先落盘已经收到的正文（endAssistantStream 会渲染完整缓冲），
-            // 再展示错误：避免未揭示的部分随流一起被丢掉
+            // Flush the text received so far (endAssistantStream renders the whole
+            // buffer) before showing the error, so nothing unrevealed is lost.
             endAssistantStream();
             renderErrorActions(
                 addMessage('assistant', m.text || '', true),

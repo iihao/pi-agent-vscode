@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Webview 共享类型定义
+// Webview shared type definitions
 // ---------------------------------------------------------------------------
 
 export interface UiStringsData {
@@ -126,7 +126,7 @@ export interface ChatElements {
     ctxUsagePct: HTMLElement;
 }
 
-// ---- 领域模型 ----
+// ---- Domain models ----
 
 export interface ModelInfo {
     provider: string;
@@ -146,11 +146,11 @@ export interface ContextChip {
     type: string;
     path: string;
     lineRange?: string;
-    /** 由当前活动编辑器自动附加（可叉掉） */
+    /** Auto-attached from the active editor (removable) */
     auto?: boolean;
 }
 
-/** 用户消息回显用的文件/选区附件 */
+/** File / selection attachment shown on a sent user message */
 export interface MessageAttachment {
     type: string;
     path: string;
@@ -247,12 +247,12 @@ export interface VSCodeAPI {
     setState(state: unknown): void;
 }
 
-// ---- 消息类型 ----
+// ---- Message types ----
 
-// ---- 从共享契约重新导出消息协议 ----
+// ---- Re-export the message protocol from the shared contract ----
 export type { PostMessage, WebviewMessage, SetupStatus, ContextAttachment } from '../src/chatPanel/sharedTypes';
 
-// ---- 共享上下文 ----
+// ---- Shared context ----
 
 export interface WebviewContext {
     vscode: VSCodeAPI;
@@ -260,7 +260,7 @@ export interface WebviewContext {
     els: ChatElements;
     // Streaming state
     busy: boolean;
-    /** 忙碌时按下发送的行为：排队 / 插话 */
+    /** What sending does while busy: queue or steer */
     sendMode: 'queue' | 'steer';
     currentBody: HTMLElement | null;
     currentBuffer: string;
@@ -282,7 +282,7 @@ export interface WebviewContext {
     // Sessions
     sessionsList: SessionInfo[];
     currentSessionId: string | null;
-    /** 会话列表的搜索关键词 */
+    /** Session list search query */
     sessionQuery: string;
     // Contexts
     contexts: ContextChip[];

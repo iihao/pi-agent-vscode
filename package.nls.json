@@ -20,6 +20,7 @@
   "cmd.openInEditor": "Pi: Open Chat in Editor Tab",
   "cmd.openInEditorToSide": "Pi: Open Chat Beside",
   "cmd.openInSecondarySideBar": "Pi: Open Chat in Secondary Side Bar",
+  "cmd.manageProviders": "Pi: Manage Model Providers",
   "cmd.attachFile": "Pi: Attach Current File to Chat",
   "cmd.attachSelection": "Pi: Attach Selection to Chat",
   "cmd.attachFiles": "Pi: Attach Files from Workspace",

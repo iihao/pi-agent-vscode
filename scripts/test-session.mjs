@@ -1,8 +1,8 @@
 /**
- * 会话恢复能力测试：
- * 1. --continue 启动（续最近会话）
- * 2. getMessages() 返回的历史消息结构
- * 运行：node scripts/test-session.mjs
+ * Session-resume capability test:
+ * 1. start with --continue (resume the most recent session)
+ * 2. the history message structure returned by getMessages()
+ * Run: node scripts/test-session.mjs
  */
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,30 +11,30 @@ import { RpcClient } from "@earendil-works/pi-coding-agent";
 const pkgEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"));
 const cliPath = join(dirname(pkgEntry), "cli.js");
 
-// 用 --continue 续最近会话
+// Resume the most recent session with --continue
 const client = new RpcClient({ cliPath, args: ["--continue"] });
 
 try {
-    console.log("=== 1. 启动（--continue）===");
+    console.log("=== 1. Start (--continue) ===");
     await client.start();
-    console.log("✓ 启动成功");
+    console.log("✓ started");
 
     const state = await client.getState();
-    console.log("✓ 会话 ID:", state.sessionId, "| 消息数:", state.messageCount, "| 会话文件:", state.sessionFile ?? "(无)");
+    console.log("✓ session id:", state.sessionId, "| messages:", state.messageCount, "| session file:", state.sessionFile ?? "(none)");
 
-    console.log("\n=== 2. getMessages() 历史结构 ===");
+    console.log("\n=== 2. getMessages() history structure ===");
     const messages = await client.getMessages();
-    console.log("消息总数:", messages.length);
-    // 打印最后 2 条的结构（截断）
+    console.log("total messages:", messages.length);
+    // Print the structure of the last 2 messages (truncated)
     for (const m of messages.slice(-2)) {
         const summary = JSON.stringify(m, null, 1);
         console.log("---");
-        console.log(summary.length > 600 ? summary.slice(0, 600) + "\n…(截断)" : summary);
+        console.log(summary.length > 600 ? summary.slice(0, 600) + "\n...(truncated)" : summary);
     }
 } catch (e) {
-    console.error("❌ 错误:", e.message);
+    console.error("❌ error:", e.message);
     console.error("stderr:", client.getStderr().slice(-400));
 } finally {
     await client.stop();
-    console.log("\n=== 已停止 ===");
+    console.log("\n=== stopped ===");
 }

@@ -20,10 +20,11 @@
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
-    /* 通用隐藏工具类。
-       注意：以前每个组件都写 `.foo.hidden { display: none }`，新组件很容易漏写
-       （曾导致撤销按钮在未撤销时就显示）。这里统一提供一份，用 !important 保证
-       其优先级高于组件的默认 display（如 `display: inline-flex`）。 */
+    /* Generic hidden utility.
+       Note: components used to each declare `.foo.hidden { display: none }`, which
+       new components easily forgot (once left the Undo button visible before
+       anything was reverted). There is one shared rule here, using !important so
+       it beats a component's default display (e.g. `display: inline-flex`). */
     .hidden { display: none !important; }
 
     body {
@@ -117,13 +118,13 @@
         left: 14px;
         bottom: calc(100% - 6px);
         z-index: 1000;
-        /* 所有弹窗统一宽度：宽屏 380px，窄侧栏时收缩不溢出 */
+        /* One width for every popover: 380px on wide screens, shrinks on narrow sidebars so it never overflows */
         min-width: min(380px, calc(100% - 28px));
         max-width: min(480px, calc(100% - 28px));
         max-height: 320px;
         overflow-y: auto;
         padding: 5px;
-        /* 不透明背景：回退到菜单/编辑器面板，再回退到侧边栏底色，避免透出下方内容 */
+        /* Opaque background: falls back to menu/editor widget, then the sidebar color, so content below never shows through */
         background: var(--vscode-menu-background, var(--vscode-editorWidget-background, var(--cx-bg)));
         border: 1px solid var(--vscode-menu-border, var(--cx-border-strong));
         border-radius: 8px;
@@ -148,7 +149,7 @@
     .popover-item-main { font-family: var(--cx-mono); font-size: 11.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .popover-item-meta { margin-left: auto; font-family: var(--cx-mono); font-size: 10px; color: var(--cx-muted); flex-shrink: 0; }
     .popover-empty { padding: 8px 10px; font-size: 11px; color: var(--cx-muted); }
-    /* 「+ 添加上下文」菜单：分区标题 */
+    /* "Add context" menu: section heading */
     .popover-label {
         padding: 7px 9px 3px;
         font-size: 10px;
@@ -158,7 +159,7 @@
         color: var(--cx-muted);
     }
 
-    /* 粘贴的图片缩略图 */
+    /* Pasted image thumbnails */
     .image-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .image-row.hidden { display: none; }
     .image-thumb {
@@ -181,7 +182,7 @@
         display: grid; place-items: center;
     }
 
-    /* 输入框补全（斜杠命令 / @ 文件提及） */
+    /* Composer completion (slash commands / @ file mentions) */
     .suggest {
         position: absolute;
         left: 14px;
@@ -204,7 +205,7 @@
     .suggest-detail { font-size: 11px; color: var(--cx-muted); margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 55%; }
     .suggest-source { font-family: var(--cx-mono); font-size: 9.5px; color: var(--cx-muted); border: 1px solid var(--cx-border-strong); border-radius: 999px; padding: 0 5px; flex-shrink: 0; }
 
-    /* 问题跳转列表（头部按钮展开） */
+    /* Question jump list (opened from the header button) */
     .outline-panel {
         top: calc(100% + 4px);
         bottom: auto;
@@ -390,7 +391,7 @@
     .chat-container { flex: 1; overflow-y: auto; padding: 18px 16px 10px; display: flex; flex-direction: column; }
     .chat-container > * { flex-shrink: 0; }
 
-    /* ---------- 消息导航条（每个用户提问一个刻度） ---------- */
+    /* ---------- Message rail (one tick per user question) ---------- */
     .msg-rail {
         position: absolute;
         right: 10px;
@@ -429,7 +430,7 @@
     }
     .chat-container::-webkit-scrollbar-thumb:hover { background: var(--vscode-scrollbarSlider-hoverBackground, rgba(127, 127, 127, .55)); background-clip: padding-box; }
 
-    /* ---------- Welcome（空状态：极简 + 精致） ---------- */
+    /* ---------- Welcome (empty state: minimal + polished) ---------- */
     .welcome {
         margin: auto;
         padding: 24px 16px;
@@ -451,7 +452,7 @@
     }
     .welcome-logo svg { width: 32px; height: 32px; }
     .welcome-title { font-size: 19px; font-weight: 600; letter-spacing: .3px; margin-bottom: 24px; }
-    /* 首次环境自检清单 */
+    /* First-run setup checklist */
     .welcome-setup {
         width: 100%;
         max-width: 320px;
@@ -498,8 +499,9 @@
         cursor: pointer;
     }
     .setup-action:hover { background: var(--cx-accent-soft); }
+    .setup-foot { display: flex; gap: 12px; margin-top: 6px; }
+    .setup-manage,
     .setup-logs {
-        margin-top: 6px;
         padding: 0;
         background: transparent;
         border: none;
@@ -508,6 +510,7 @@
         text-decoration: underline;
         cursor: pointer;
     }
+    .setup-manage:hover,
     .setup-logs:hover { color: var(--cx-fg); }
     .quick-actions { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; max-width: 320px; }
     .quick-action {
@@ -547,7 +550,7 @@
 
     /* ---------- Messages ---------- */
     .message { margin-bottom: 24px; animation: fadeIn .18s ease; border-radius: 8px; }
-    /* 紧跟消息的通知（如“本回合用量”）不需要消息的整段底边距 */
+    /* Notices right after a message (e.g. "usage this turn") don't need the full message bottom margin */
     .message:has(+ .status-line) { margin-bottom: 2px; }
     .message.flash { background: var(--cx-accent-soft); transition: background .4s; }
     .message.editing { opacity: .45; }
@@ -582,7 +585,7 @@
         border: 1px solid var(--cx-border);
         display: block;
     }
-    /* 用户消息回显的文件/选区附件（让用户知道本条带了附件） */
+    /* File / selection attachments echoed on a user message (so the user knows it had attachments) */
     .message-attachments { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
     .msg-attachment {
         display: inline-flex;
@@ -622,14 +625,14 @@
 
     .message-body { overflow-wrap: anywhere; }
     .message.assistant .message-body { padding-left: 2px; }
-    /* 用户提问气泡：品牌色平铺（无边框、无渐变） */
+    /* User bubble: flat brand tint (no border, no gradient) */
     .message.user .message-body {
         background: var(--cx-accent-soft);
         padding: 10px 14px;
         border-radius: 10px;
     }
     .message.error .message-body { color: var(--vscode-errorForeground, #f85149); }
-    /* 错误气泡上的可操作按钮（重试 / 切模型 / 查看日志） */
+    /* Action buttons on an error bubble (retry / switch model / show logs) */
     .error-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }
     .error-action {
         padding: 3px 10px;
@@ -643,20 +646,20 @@
         transition: opacity .12s, background .12s;
     }
     .error-action:hover { opacity: 1; background: var(--cx-hover); }
-    /* 用户提问靠右：气泡自适应内容宽度，并给右侧导航 rail 留位 */
+    /* User messages align right: the bubble fits its content and leaves room for the rail */
     .message.user { display: flex; justify-content: flex-end; }
     .message.user .msg-main { max-width: min(560px, 85%); min-width: 0; margin-right: 28px; }
     .message.user.flash { background: transparent; }
     .message.user.flash .msg-main { background: var(--cx-accent-soft); border-radius: 10px; transition: background .4s; }
-    /* 用户提问：时间靠右上（镜像助手左侧的元信息），hover 操作按钮出现在其左侧 */
+    /* User messages: time sits top-right (mirroring the assistant's left meta); hover actions appear to its left */
     .message.user .message-header { justify-content: flex-end; }
     .message.user .message-actions { order: 1; margin-left: 0; }
     .message.user .pending-badge { order: 2; }
     .message.user .message-time { order: 3; }
 
-    /* Markdown 元素样式见文件末尾（markdown-it 标准标签） */
+    /* Markdown element styles are at the end of the file (standard markdown-it tags) */
 
-    /* ---------- Code blocks（扁平：无边框/无表头底色/无行号底色） ---------- */
+    /* ---------- Code blocks (flat: no border / no header tint / no line-number tint) ---------- */
     .code-block {
         margin: 10px 0;
         border-radius: 6px;
@@ -766,7 +769,7 @@
     @keyframes spin { to { transform: rotate(360deg); } }
     .status-line.notice { font-size: 11px; opacity: .7; }
 
-    /* ---------- 本回合改动审阅 ---------- */
+    /* ---------- This turn's change review ---------- */
     .turn-changes {
         margin: 6px 0 18px;
         border: 1px solid var(--cx-border);
@@ -835,7 +838,7 @@
     .turn-file-badge.mod { color: var(--vscode-charts-yellow, #d29922); }
     .turn-file-badge.add { color: var(--vscode-charts-green, #3fb950); }
     .turn-file-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
-    /* 行尾操作区：默认显示结果/锁定标记，悬停时显示 diff / 撤销按钮 */
+    /* Row-end action area: shows the result/locked marker by default, diff / revert on hover */
     .turn-file-action { flex-shrink: 0; min-width: 20px; height: 16px; display: flex; align-items: center; gap: 6px; justify-content: flex-end; position: relative; }
     .turn-file-diff-toggle {
         display: block;
@@ -888,11 +891,11 @@
     .turn-file-row.reverted, .turn-file-row.deleted { opacity: .5; }
     .turn-file-row.failed { background: color-mix(in srgb, var(--vscode-errorForeground, #f85149) 8%, transparent); }
     .turn-file-row.skipped { opacity: .7; }
-    /* 全部撤销完成：卡片泛绿，短暂庆祝 */
+    /* All reverted: the card turns green and briefly celebrates */
     .turn-changes.all-done { border-color: var(--cx-accent-border-strong); background: var(--cx-accent-soft); animation: cardCelebrate .5s ease; }
     .turn-changes.all-done .turn-changes-title { color: var(--cx-accent); }
     @keyframes cardCelebrate { 0% { transform: scale(1); } 45% { transform: scale(1.012); } 100% { transform: scale(1); } }
-    /* 成功后淡出 */
+    /* Fade out after success */
     .turn-changes.fade-out { opacity: 0; transition: opacity .35s ease; }
 
     /* ---------- Collapsible ---------- */
@@ -944,7 +947,7 @@
     }
     .thinking-detail:empty { display: none; }
 
-    /* 思考过程：扁平样式（Codex 风），不使用胶囊边框 */
+    /* Thinking: flat style (Codex-like), no pill border */
     .collapsible.flat {
         margin: 6px 0;
         border: none;
@@ -971,7 +974,7 @@
         font-size: 11.5px;
         line-height: 1.6;
     }
-    /* 思考中：标题右侧旋转指示（思考结束移除 thinking 类即停止） */
+    /* While thinking: spinner to the right of the title (stops when the thinking class is removed) */
     .collapsible.thinking .collapsible-header .title::after {
         content: '';
         display: inline-block;
@@ -984,7 +987,7 @@
         vertical-align: -1px;
         animation: spin .7s linear infinite;
     }
-    /* 折叠时在标题下方展示一行实时思考记录（更淡、更小、缩进两格） */
+    /* While collapsed, show one live line of thinking under the title (fainter, smaller, indented) */
     .thinking-preview {
         overflow: hidden;
         text-overflow: ellipsis;
@@ -997,7 +1000,7 @@
     }
     .collapsible:not(.collapsed) .thinking-preview { display: none; }
     .collapsible.thinking .collapsible-header .count { display: none; }
-    /* 思考中的实时 token 数与运行时长（token 变化时轻微跳动） */
+    /* Live token count and elapsed time while thinking (bumps when the count changes) */
     .thinking-meta {
         display: inline-block;
         margin-left: 8px;
@@ -1013,7 +1016,7 @@
         45% { transform: translateY(-1px) scale(1.03); opacity: 1; }
         100% { transform: translateY(0) scale(1); opacity: .85; }
     }
-    /* 持续运行指示：底部脉动圆点（order 保证始终在最后，填补阶段间空档） */
+    /* Ongoing-run indicator: pulsing dots at the bottom (ordered last, filling the gaps between phases) */
     .working {
         order: 9999;
         display: flex;
@@ -1098,7 +1101,7 @@
         padding: 4px 8px 8px 13px;
     }
     .composer-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 5px 4px; min-width: 0; flex: 1; }
-    /* 窄侧边栏：思考/权限收起文字只留图标，避免换行把 composer 抬得太高 */
+    /* Narrow sidebar: thinking/permission drop their text and keep only icons, so wrapping doesn't make the composer too tall */
     @media (max-width: 320px) {
         #thinkingBtn .pill-label,
         #permBtn .pill-label { display: none; }
@@ -1124,11 +1127,11 @@
     .send-button:hover { filter: brightness(1.1); }
     .send-button:active { transform: scale(.94); }
     .send-button.stop-button { background: var(--vscode-errorForeground, #f85149); }
-    /* 忙碌时的「排队 / 插话」切换：选到插话时用强调色 */
+    /* Queue / steer toggle while busy: the accent color when steer is selected */
     .mode-pill { font-family: var(--cx-mono); font-size: 10px; }
     .mode-pill.steer { color: var(--cx-accent); border-color: var(--cx-accent); }
 
-/* ---------- markdown-it 标准元素 ---------- */
+/* ---------- Standard markdown-it elements ---------- */
 .message-body p { margin: 0 0 8px; }
 .message-body p:last-child { margin-bottom: 0; }
 .message-body h1, .message-body h2, .message-body h3, .message-body h4, .message-body h5, .message-body h6 {
@@ -1182,7 +1185,7 @@
 .message-body tbody tr:nth-child(even) td { background: rgba(127, 127, 127, .04); }
 .message-body img { max-width: 100%; border-radius: 6px; }
 
-/* ---------- highlight.js 主题 ---------- */
+/* ---------- highlight.js theme ---------- */
 .hljs { background: transparent; color: var(--cx-fg); }
 .hljs-comment, .hljs-quote { color: #6a9955; font-style: italic; }
 .hljs-keyword, .hljs-selector-tag, .hljs-section, .hljs-doctag { color: #c586c0; }
@@ -1206,9 +1209,9 @@
 .vscode-light .hljs-literal, .vscode-light .hljs-operator, .vscode-light .hljs-tag, .vscode-light .hljs-name { color: #0000ff; }
 .vscode-light .hljs-deletion { color: #d73a49; }
 
-/* ---------- Tool activity（每个工具一张扁平可展开卡片） ---------- */
+/* ---------- Tool activity (one flat, expandable card per tool) ---------- */
 .activity { margin: 4px 0; }
-/* 连续工具调用的可折叠分组：默认折叠成一行摘要，正文不再被淹没 */
+/* Collapsible group for consecutive tool calls: one summary line by default so the answer isn't buried */
 .tool-group {
     margin: 5px 0 9px;
     border: 1px solid var(--cx-border);
@@ -1329,7 +1332,7 @@
     text-decoration: underline;
     cursor: pointer;
 }
-/* bash 类命令默认展开：输出占满卡片宽度，并给更大的浏览高度 */
+/* bash-style commands start expanded: output fills the card width with a taller viewport */
 .activity.bash .activity-body { padding: 2px 0 6px 0; }
 .activity.bash .activity-output { max-height: 420px; }
 .activity-diff {
@@ -1348,7 +1351,7 @@
 .activity-diff .diff-hunk { color: var(--cx-accent); }
 .activity-diff .diff-meta { color: var(--cx-muted); }
 
-/* ---------- Context chips（编辑器上下文） ---------- */
+/* ---------- Context chips (editor context) ---------- */
 .chip-row { display: flex; flex-wrap: wrap; gap: 6px; padding: 9px 10px 0; }
 .chip-row.hidden { display: none; }
 .chip {
@@ -1365,7 +1368,7 @@
     color: var(--cx-muted);
 }
 .chip-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* 自动附加（来自当前编辑器）：虚线边框 + 小圆点，区别于手动附加 */
+/* Auto-attached (from the active editor): dashed border + a dot, distinct from a manual attachment */
 .chip.auto { border-style: dashed; }
 .chip.auto::before {
     content: '';
@@ -1408,7 +1411,7 @@
 .katex-display { margin: 10px 0; overflow-x: auto; overflow-y: hidden; padding: 2px 0; }
 .katex { font-size: 1.05em; }
 
-/* ---------- 上下文状态指示（顶栏） ---------- */
+/* ---------- Context status indicator (header) ---------- */
 .ctx-stats {
     font-family: var(--cx-mono);
     font-size: 10px;
@@ -1420,7 +1423,7 @@
 .ctx-stats.danger { color: var(--vscode-errorForeground, #f85149); opacity: 1; font-weight: 600; }
 .ctx-stats.hidden { display: none; }
 
-/* ---------- 上下文占用圆圈（左下角，加号旁边） ---------- */
+/* ---------- Context-usage ring (bottom-left, next to the plus) ---------- */
 .ctx-usage {
     position: relative;
     width: 20px;
@@ -1463,7 +1466,7 @@
     font-variant-numeric: tabular-nums;
     line-height: 1;
 }
-/* hover tooltip：结构化行 */
+/* hover tooltip: structured rows */
 .ctx-usage-tip {
     position: absolute;
     bottom: calc(100% + 8px);

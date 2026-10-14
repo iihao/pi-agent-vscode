@@ -1,8 +1,9 @@
 // ---------------------------------------------------------------------------
-// Pi 客户端管理器
+// Pi client manager
 // ---------------------------------------------------------------------------
 
 import * as vscode from 'vscode';
+import { spawn } from 'child_process';
 import {
     PiRpcClient,
     PiAgentEvent,
@@ -16,7 +17,7 @@ import {
 } from './piTypes';
 import { logInfo, logError } from '../utils/logger';
 
-/** pi 启动相关错误（用于类型判断，避免依赖错误文案匹配） */
+/** Errors from starting pi (type-checked instead of matching message text) */
 export class PiStartError extends Error {
     constructor(message: string) {
         super(message);
@@ -24,7 +25,7 @@ export class PiStartError extends Error {
     }
 }
 
-/** 未找到 pi 可执行文件 */
+/** pi executable not found */
 export class PiNotFoundError extends PiStartError {
     constructor(message: string) {
         super(message);
@@ -32,7 +33,7 @@ export class PiNotFoundError extends PiStartError {
     }
 }
 
-/** 可注入的解析/加载依赖（默认用真实实现，测试时注入假实现） */
+/** Injectable resolve/load deps (real by default, fakes in tests) */
 export interface PiClientDeps {
     resolvePi(extensionPath: string, executable?: string): ResolvedPi | null;
     loadPiSdk(entryPath: string): Promise<PiSdkModule>;
@@ -40,7 +41,27 @@ export interface PiClientDeps {
 
 const defaultDeps: PiClientDeps = { resolvePi, loadPiSdk };
 
-/** 根据权限模式生成 pi 启动参数 */
+export interface PiCliResult { stdout: string; stderr: string; code: number | null }
+
+/** Run a process and collect its output (a non-zero exit is not an error, for commands like `pi auth check` where the exit code carries meaning) */
+export function runProcess(
+    cmd: string,
+    args: string[],
+    opts: { cwd?: string; timeoutMs?: number; env?: NodeJS.ProcessEnv } = {},
+): Promise<PiCliResult> {
+    return new Promise((resolve) => {
+        const child = spawn(cmd, args, { cwd: opts.cwd, env: opts.env, stdio: ['ignore', 'pipe', 'pipe'] });
+        let stdout = '';
+        let stderr = '';
+        const timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* ignore */ } }, opts.timeoutMs ?? 15000);
+        child.stdout?.on('data', (d) => { stdout += d.toString(); });
+        child.stderr?.on('data', (d) => { stderr += d.toString(); });
+        child.on('error', () => { clearTimeout(timer); resolve({ stdout, stderr, code: null }); });
+        child.on('close', (code) => { clearTimeout(timer); resolve({ stdout, stderr, code }); });
+    });
+}
+
+/** Build pi's start args from the permission mode */
 function permissionArgs(config: vscode.WorkspaceConfiguration): string[] {
     const args: string[] = [];
     const mode = config.get<string>('agent.permissionMode', 'ask');
@@ -49,11 +70,11 @@ function permissionArgs(config: vscode.WorkspaceConfiguration): string[] {
     return args;
 }
 
-/** pi 启动时的会话选择 */
+/** Session selection when starting pi */
 export interface PiStartOptions {
-    /** 继续最近的会话（默认 true）；false 时新建一个全新会话 */
+    /** Continue the most recent session (default true); false starts a brand-new session */
     continueRecent?: boolean;
-    /** 打开指定会话文件（优先于 continueRecent） */
+    /** Open a specific session file (takes precedence over continueRecent) */
     sessionFile?: string;
 }
 
@@ -109,9 +130,22 @@ export class PiClientManager {
         await this._resetClient();
     }
 
+    /** Run a pi CLI subcommand once (e.g. `auth check`) to probe credentials / provider status */
+    public async runCli(extensionPath: string, args: string[], timeoutMs = 15000): Promise<PiCliResult> {
+        const config = vscode.workspace.getConfiguration('pi-agent');
+        const executable = (config.get<string>('pi.executable') || '').trim();
+        const resolved = this._deps.resolvePi(extensionPath, executable || undefined);
+        if (!resolved) {
+            throw new PiNotFoundError(vscode.l10n.t('pi not found; please install it and retry: {0}', PI_INSTALL_HINT));
+        }
+        const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
+        return runProcess('node', [resolved.cliPath, ...args], { cwd, timeoutMs });
+    }
+
     /**
-     * 运行一次性生成任务（如生成 commit message）：启动独立、临时（--no-session）
-     * 的 pi 进程，prompt 后取助手文本并关闭。不进入聊天会话，不污染历史。
+     * Run a one-shot generation task (e.g. a commit message): start a separate,
+     * temporary pi process (--no-session), prompt it, read the assistant text and
+     * shut it down. It does not join the chat session or pollute history.
      */
     public async runOneShot(extensionPath: string, prompt: string, timeoutMs = 90000): Promise<string> {
         const config = vscode.workspace.getConfiguration('pi-agent');
@@ -130,7 +164,7 @@ export class PiClientManager {
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
         const client = new sdk.RpcClient({ cliPath: resolved.cliPath, cwd, args: ['--no-session', '--no-tools'] });
-        // 一次性生成期间若 pi 请求交互（确认/选择），直接回 cancelled，避免挂起到超时
+        // If pi asks for interaction (confirm/select) during a one-shot, reply cancelled to avoid hanging until timeout
         const unsubscribe = client.onEvent((event) => {
             if (event.type === 'extension_ui_request' && event.id) {
                 respondExtensionUI(client, event.id, { cancelled: true });
@@ -170,7 +204,7 @@ export class PiClientManager {
         }
 
         const cwd = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath || process.cwd();
-        // 会话选择：指定文件 > 继续最近 > 全新会话（不传 --continue 即新建）
+        // Session selection: explicit file > continue recent > brand new (no --continue starts fresh)
         const sessionArgs: string[] = [];
         if (options?.sessionFile) { sessionArgs.push('--session', options.sessionFile); }
         else if (options?.continueRecent !== false) { sessionArgs.push('--continue'); }
@@ -190,7 +224,7 @@ export class PiClientManager {
         try {
             await client.start();
         } catch (startErr) {
-            // 启动失败：先摘掉刚注册的监听，避免把已废弃客户端的订阅留在管理器上
+            // Start failed: drop the listener just registered so a dead client's subscription isn't left behind
             this._unsubscribe?.();
             this._unsubscribe = undefined;
             const stderr = client.getStderr().trim();
@@ -201,7 +235,7 @@ export class PiClientManager {
             throw new PiStartError(vscode.l10n.t('pi process failed to start: {0}', detail));
         }
 
-        // SDK 的 send 默认 30s 超时，对 compact / bash 这类长任务不够；放宽。
+        // The SDK's send has a hard-coded 30s timeout, too short for long tasks like compact / bash; widen it.
         patchLongRunningTimeouts(client);
 
         this._client = client;
@@ -217,7 +251,7 @@ export class PiClientManager {
         this._client = undefined;
         this._starting = undefined;
         if (client) {
-            // 等待进程真正退出，避免新旧客户端并存
+            // Wait for the process to actually exit so old and new clients never coexist
             await client.stop().catch((err) => { logError(`client.stop failed: ${(err as Error).message}`); });
         }
     }

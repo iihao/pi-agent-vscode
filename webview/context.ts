@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Webview 共享上下文
+// Webview shared context
 // ---------------------------------------------------------------------------
 
 import type { ChatElements, UiStrings, WebviewContext } from './types';

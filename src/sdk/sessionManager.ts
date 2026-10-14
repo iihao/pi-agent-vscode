@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 会话管理器
+// Session manager
 // ---------------------------------------------------------------------------
 
 import * as path from 'path';
@@ -14,17 +14,17 @@ export interface SessionInfo {
     createdAt: number;
     messageCount: number;
     name?: string;
-    /** 未命名时的默认显示名：第一条用户提问（已截断） */
+    /** Default display name when unnamed: the first user question (truncated) */
     preview?: string;
 }
 
-/** 读取会话元数据时的读取上限，避免把大文件整体读入内存 */
+/** Read cap when reading session metadata, so large files are never loaded whole */
 const HEAD_BYTES = 256 * 1024;
 const PREVIEW_MAX_CHARS = 60;
-/** 列表最多展示的会话数（按 mtime 取最近的；meta 有 mtime 缓存） */
+/** Max sessions listed (most recent by mtime; metadata is cached by mtime) */
 const SESSION_LIST_LIMIT = 60;
 
-/** 从会话文件头部的行中提取第一条用户提问（去除 context 块、压缩空白、截断） */
+/** Pull the first user question out of the session file's head lines (strip the context block, collapse whitespace, truncate) */
 function firstUserPreview(lines: string[]): string | undefined {
     for (const line of lines) {
         const t = line.trim();
@@ -69,7 +69,7 @@ export class SessionManager {
                 try {
                     const sessionDir = path.dirname(sessionFile);
                     if (fs.existsSync(sessionDir)) {
-                        // 先按 mtime 排序截断，再读取内容：避免为目录内所有会话文件做头部/尾部扫描
+                        // Sort by mtime and truncate first, then read: avoids head/tail scanning every session file in the directory
                         const candidates: Array<{ full: string; mtimeMs: number }> = [];
                         for (const f of fs.readdirSync(sessionDir)) {
                             if (!f.endsWith('.jsonl')) { continue; }
@@ -118,7 +118,7 @@ export class SessionManager {
         }
     }
 
-    /** 丢弃不再属于当前会话目录的缓存条目，避免缓存随会话文件无限增长 */
+    /** Drop cache entries outside the current session directory so the cache cannot grow unbounded */
     private _pruneFileCache(dir: string): void {
         for (const key of this._fileCache.keys()) {
             if (path.dirname(key) !== dir) { this._fileCache.delete(key); }
@@ -142,7 +142,7 @@ export class SessionManager {
         const session = this._sessions.find((s) => s.id === sessionId);
         if (!session || !session.file) { return false; }
         try {
-            // 恢复历史会话必须用 switchSession(sessionPath)；newSession() 是新建，不能用于切换。
+            // Resuming a session must use switchSession(sessionPath); newSession() creates a new one and cannot switch.
             const result = await client.switchSession(session.file);
             if (!result.cancelled) {
                 await this.loadSessions(client);
@@ -154,7 +154,7 @@ export class SessionManager {
         return false;
     }
 
-    /** 重命名会话。SDK 只作用于当前会话，必要时先切过去、改完再切回，避免状态脱节。 */
+    /** Rename a session. The SDK only acts on the current session, so switch to it first and switch back after, keeping state in sync. */
     public async renameSession(client: PiRpcClient, sessionId: string, name: string): Promise<boolean> {
         const originalId = this._currentSessionId;
         const isCurrent = sessionId === originalId;
@@ -178,8 +178,9 @@ export class SessionManager {
         }
     }
 
-    /** 读取会话文件元数据：真实 id（首行 header）与名称（最后一个 session_info）。
-     *  只读取文件头部与尾部，避免把大文件整体读入内存、阻塞扩展宿主。 */
+    /** Read session metadata: the real id (header on the first line) and the name
+     *  (the last session_info). Only the head and tail are read, so a large file
+     *  is never loaded whole and the extension host is not blocked. */
     private _readMeta(file: string, mtimeMs: number): { id: string; name?: string; preview?: string } {
         const cached = this._fileCache.get(file);
         if (cached && cached.mtimeMs === mtimeMs) {
@@ -212,7 +213,7 @@ export class SessionManager {
         return { id, name, preview };
     }
 
-    /** 读取 [start, start+len) 区间的文本 */
+    /** Read the text in [start, start+len) */
     private _readRange(file: string, start: number, len: number): string {
         if (len <= 0) { return ''; }
         const fd = fs.openSync(file, 'r');
@@ -225,14 +226,15 @@ export class SessionManager {
         }
     }
 
-    /** 从文件尾部向前分块扫描，返回最后一个 session_info 的名称。
-     *  每字节最多读一次，且总量不超过 MAX_TAIL_SCAN_BYTES。 */
+    /** Scan backwards from the end of the file in chunks and return the name of the
+     *  last session_info. Each byte is read at most once and the total stays under
+     *  MAX_TAIL_SCAN_BYTES. */
     private _readLastName(file: string, size: number): string | undefined {
         const fd = fs.openSync(file, 'r');
         try {
             let pos = size;
             let scanned = 0;
-            let pending = ''; // 右侧已扫描区块开头那段不完整的行
+            let pending = ''; // the incomplete line at the start of the already-scanned chunk
             while (pos > 0 && scanned < MAX_TAIL_SCAN_BYTES) {
                 const len = Math.min(TAIL_CHUNK_BYTES, pos, MAX_TAIL_SCAN_BYTES - scanned);
                 pos -= len;
@@ -241,7 +243,7 @@ export class SessionManager {
                 fs.readSync(fd, buf, 0, len, pos);
                 const lines = (buf.toString('utf8') + pending).split('\n');
                 pending = pos > 0 ? lines[0] : '';
-                // pos>0 时 lines[0] 可能被截断，跳过；文件头那一块则完整
+                // when pos>0, lines[0] may be truncated, so skip it; the file-head chunk is complete
                 for (let i = lines.length - 1; i >= (pos > 0 ? 1 : 0); i--) {
                     if (lines[i].indexOf('session_info') === -1) { continue; }
                     try {
@@ -250,7 +252,7 @@ export class SessionManager {
                             return (typeof o.name === 'string' ? o.name.trim() : '') || undefined;
                         }
                     } catch {
-                        // 跨块边界可能截断，忽略该行
+                        // may be truncated across a chunk boundary; ignore this line
                     }
                 }
             }

@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 消息渲染：用户/助手气泡、思考折叠、流式渲染、消息操作、回合改动
+// Message rendering: user/assistant bubbles, thinking folding, streaming, message actions, turn changes
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext, MessageAttachment } from '../types';
@@ -52,7 +52,7 @@ export function renderMessageImages(images: MessageImage[]): HTMLElement {
 
 const FILE_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
 
-/** 用户消息回显：本条携带的文件/选区附件 */
+/** User-message echo: the file / selection attachments this message carried */
 export function renderMessageAttachments(atts: MessageAttachment[]): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'message-attachments';
@@ -138,7 +138,7 @@ function stopThinkingTimer(): void {
     if (thinkingTimer !== undefined) { clearInterval(thinkingTimer); thinkingTimer = undefined; }
 }
 
-/** 耗时格式化：不足 1 秒显示毫秒，之后显示秒/分 */
+/** Elapsed formatting: milliseconds under 1s, then seconds / minutes */
 function formatElapsed(ms: number): string {
     if (ms < 1000) { return ms + 'ms'; }
     const totalSeconds = Math.floor(ms / 1000);
@@ -152,9 +152,9 @@ function updateThinkingMeta(): void {
     if (!thinkingMeta) { return; }
     const tokens = Math.ceil(ctx.thinkingContent.length / 4);
     const elapsed = Math.max(0, Date.now() - thinkingStartedAt);
-    // token 显示实际值（不做 k/M 简化）；耗时不足 1s 显示毫秒
+    // Show the exact token count (no k/M shorthand); elapsed time in ms under 1s
     thinkingMeta.textContent = (tokens > 0 ? tokens + ' tok · ' : '') + formatElapsed(elapsed);
-    // token 数变化时轻微跳动（节流，避免高频定时器导致动画过于频繁）
+    // Subtle bump when the token count changes (throttled so the fast timer doesn't animate too often)
     if (tokens !== thinkingLastTokens) {
         thinkingLastTokens = tokens;
         const now = Date.now();
@@ -175,12 +175,12 @@ function updateThinkingPreview(): void {
 
 export function showThinking(preserveContent = false): void {
     ctx.els.welcome.style.display = 'none';
-    // preserveContent：补齐漏掉的思考内容时复用已有内容，不要清空
+    // preserveContent: when backfilling missed thinking, reuse what we have instead of clearing
     if (!preserveContent) { ctx.thinkingContent = ''; }
     thinkingStartedAt = Date.now();
     thinkingLastTokens = -1;
     if (!ctx.thinkingLine) {
-        // 运行中默认折叠：只显示“思考中”动画 + token/时长，内容可手动展开
+        // Collapsed while running by default: just the "thinking" animation + tokens/duration; click to expand
         ctx.thinkingLine = createCollapsible(ctx.S.thinking, 0, true);
         const wrap = ctx.thinkingLine.closest('.collapsible') as HTMLElement | null;
         if (wrap) {
@@ -208,7 +208,7 @@ export function showThinking(preserveContent = false): void {
 export function appendThinking(text: string): void {
     if (!text) { return; }
     ctx.thinkingContent += text;
-    // 兜底：思考行已被收起（hideThinking）时重新展开，避免补齐的内容不可见
+    // Safety net: re-open the thinking line if hideThinking already closed it, so backfilled content stays visible
     if (!ctx.thinkingLine) { showThinking(true); }
     const line = ctx.thinkingLine;
     if (!line) { return; }
@@ -222,7 +222,7 @@ export function appendThinking(text: string): void {
     detail.textContent = ctx.thinkingContent;
     updateThinkingMeta();
     updateThinkingPreview();
-    // 折叠时（运行中默认）无需滚动；用户展开时才跟随最新内容
+    // No scrolling while collapsed (the running default); follow the newest content only when expanded
     const wrap = line.closest('.collapsible') as HTMLElement | null;
     if (wrap && !wrap.classList.contains('collapsed') && isElNearBottom(wrap)) {
         wrap.scrollTop = wrap.scrollHeight;
@@ -233,13 +233,13 @@ export function hideThinking(): void {
     stopThinkingTimer();
     const line = ctx.thinkingLine;
     ctx.thinkingLine = null;
-    thinkingMeta = null; // 停止更新；最终数值保留在折叠的表头里
+    thinkingMeta = null; // stop updating; the final values stay in the collapsed header
     thinkingPreview = null;
     if (line) {
         const wrap = line.closest('.collapsible') as HTMLElement | null;
         const content = ctx.thinkingContent;
         if (!content.trim()) {
-            // 没有任何思考内容：移除占位，避免留下空行
+            // No thinking content at all: remove the placeholder so no empty line remains
             if (wrap) { wrap.remove(); }
         } else {
             let detail = line.querySelector('.thinking-detail') as HTMLElement | null;
@@ -251,15 +251,15 @@ export function hideThinking(): void {
             }
             detail.textContent = content;
             if (wrap) {
-                wrap.classList.remove('thinking'); // 停止动画
-                wrap.classList.add('collapsed');   // 结束后默认折叠，用户可展开
+                wrap.classList.remove('thinking'); // stop the animation
+                wrap.classList.add('collapsed');   // collapse by default once done; the user can expand
             }
         }
     }
     refreshWorking();
 }
 
-/** 丢弃进行中的思考指示（清空/切换会话时调用，避免定时器泄漏） */
+/** Drop the in-progress thinking indicator (called on clear / session switch to avoid leaking the timer) */
 export function resetThinking(): void {
     stopThinkingTimer();
     thinkingMeta = null;
@@ -267,7 +267,7 @@ export function resetThinking(): void {
     ctx.thinkingContent = '';
 }
 
-// ---- 持续运行指示（填补各阶段之间的空档，避免“卡顿”观感） ----
+// ---- Ongoing-run indicator (fills the gaps between phases so it never looks stuck) ----
 
 export function showWorking(): void {
     if (workingEl) { return; }
@@ -282,19 +282,19 @@ export function hideWorking(): void {
     if (workingEl) { workingEl.remove(); workingEl = null; }
 }
 
-/** 工具/bash 卡片进入运行态（占用一个动画位） */
+/** A tool/bash card entered the running state (takes one animation slot) */
 export function activityBegin(): void {
     activityActive++;
     refreshWorking();
 }
 
-/** 工具/bash 卡片运行结束 */
+/** A tool/bash card finished running */
 export function activityEnd(): void {
     if (activityActive > 0) { activityActive--; }
     refreshWorking();
 }
 
-/** 仅当“忙碌且无思考行、无运行中卡片”时，用底部圆点填补空档 */
+/** Show the bottom dots only while busy with no thinking line and no running cards */
 function refreshWorking(): void {
     const show = ctx.busy && activityActive === 0 && !ctx.thinkingLine;
     if (show) { showWorking(); } else { hideWorking(); }
@@ -305,7 +305,7 @@ export function resetWorking(): void {
     hideWorking();
 }
 
-// ---- 流式渲染（时间驱动的打字机揭示，与分块到达时机无关） ----
+// ---- Streaming render (time-driven typewriter reveal, independent of chunk timing) ----
 
 let revealRaf: number | undefined;
 let revealedLen = 0;
@@ -321,7 +321,7 @@ function revealTick(): void {
     const target = ctx.currentBuffer.length;
     if (revealedLen >= target) { return; }
     const pending = target - revealedLen;
-    // 平时约 3–6 字/帧；落后越多追得越快，避免长回复积压
+    // About 3-6 chars per frame normally; catch up faster when further behind so long replies don't queue up
     const step = Math.max(3, Math.ceil(pending / 5));
     revealedLen = Math.min(target, revealedLen + step);
     const stick = isNearBottom(ctx.els.chat);
@@ -345,8 +345,8 @@ export function startAssistantStream(): void {
 
 export function appendAssistantChunk(text: string): void {
     if (!text) { return; }
-    // 兜底：气泡不存在（漏了 assistantStart / webview 重建）时补开一个，
-    // 保证任何一段正文都不会被静默丢掉。
+    // Safety net: if the bubble is missing (an assistantStart was dropped or the
+    // webview was recreated), open one so no text is ever silently lost.
     if (!ctx.currentBody) { startAssistantStream(); }
     ctx.currentBuffer += text;
     scheduleReveal();
@@ -376,9 +376,9 @@ export function abortAssistantStream(): void {
     }
 }
 
-// ---- 消息操作：编辑/删除/复制/裁剪在 inputHandling 模块 ----
+// ---- Message actions: edit/delete/copy/trim live in the inputHandling module ----
 
-// ---- 本回合改动审阅 ----
+// ---- This turn's change review ----
 
 const REVERT_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M4 9h11a5 5 0 0 1 0 10h-1"></path></svg>';
 const UNDO_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 14 20 9 15 4"></polyline><path d="M20 9H9a5 5 0 0 0 0 10h1"></path></svg>';
@@ -402,14 +402,14 @@ function turnFileRow(f: { path: string; status: 'created' | 'modified'; revertib
         '<span class="turn-file-path" title="' + escapeHtml(f.path) + '">' + escapeHtml(f.path) + '</span>' +
         '<span class="turn-file-action">' + result + diffBtn + revertBtn + '</span>' +
         '</div>';
-    // 内联 diff（点击 ± 展开），让“改了哪些文件”不只是文件名
+    // Inline diff (click ± to expand), so "which files changed" is more than names
     const diffBlock = f.diff
         ? '<div class="turn-file-diff hidden" data-path="' + escapeHtml(f.path) + '"><div class="turn-file-diff-inner">' + diffHtml(f.diff) + '</div></div>'
         : '';
     return row + diffBlock;
 }
 
-/** 把简易 diff 文本渲染成带颜色的行（+ 绿 / - 红） */
+/** Render simple diff text as colored lines (+ green / - red) */
 function diffHtml(diff: string): string {
     return diff.split('\n').map(function (line) {
         let cls = 'turn-diff-line';
@@ -421,6 +421,8 @@ function diffHtml(diff: string): string {
 
 export function renderTurnChanges(files: Array<{ path: string; status: 'created' | 'modified'; revertible: boolean; state?: string }>): void {
     const S = ctx.S;
+    // Record the user's intent to follow first (most accurate before the card is added/removed)
+    const stick = isNearBottom(ctx.els.chat);
     const existing = ctx.els.chat.querySelector('.turn-changes');
     if (existing) { existing.remove(); }
     if (!files || !files.length) { return; }
@@ -436,11 +438,18 @@ export function renderTurnChanges(files: Array<{ path: string; status: 'created'
         '<button class="turn-changes-undo hidden" data-act="undo" title="' + escapeHtml(S.undoRevertHint) + '">' + UNDO_ICON + escapeHtml(S.undoRevert) + '</button>' +
         revertAll +
         '</div><div class="turn-changes-list">' + rows + '</div>';
+    // The card grows as soon as it is added; checking after append would misread a multi-file card as "not at the bottom" and skip the scroll.
     ctx.els.chat.appendChild(el);
-    if (isNearBottom(ctx.els.chat)) { scrollToBottom(ctx.els.chat); }
+    if (!stick) { return; }
+    const chat = ctx.els.chat;
+    scrollToBottom(chat);
+    // When the card is taller than the viewport, align to its top so reading starts at the first file
+    if (el.getBoundingClientRect().height > chat.clientHeight) {
+        chat.scrollTop += el.getBoundingClientRect().top - chat.getBoundingClientRect().top;
+    }
 }
 
-/** 原地更新卡片的逐文件撤销结果：打勾弹出、更新头部与 Undo 按钮 */
+/** Update the card's per-file revert results in place: check marks, header and Undo button */
 export function updateTurnChangesResult(
     results: Array<{ path: string; result: 'reverted' | 'deleted' | 'failed' | 'skipped'; error?: string }>,
     files: Array<{ path: string; status: 'created' | 'modified'; revertible: boolean; state?: string }>,
@@ -470,7 +479,7 @@ export function updateTurnChangesResult(
         }
     });
 
-    // 待撤销的文件（仍可单独撤销）保持不变
+    // Files still pending revert (each can still be reverted individually) stay unchanged
     const pendingCount = files.filter((f) => (f.state || 'pending') === 'pending').length;
     const successCount = results.filter((r) => r.result === 'reverted' || r.result === 'deleted').length;
     const failedCount = results.length - successCount;
@@ -478,7 +487,7 @@ export function updateTurnChangesResult(
     const headTitle = card.querySelector('.turn-changes-title') as HTMLElement;
     if (headTitle) {
         if (failedCount === 0) {
-            // 仍有待撤销文件时显示总文件数（含已撤销的），全部完成时显示完成文案
+            // While files are still pending, show the total count (including reverted ones); show the done text when finished
             headTitle.textContent = pendingCount > 0
                 ? S.changedFiles + ' (' + card.querySelectorAll('.turn-file-row').length + ')'
                 : S.allRestored;
@@ -487,7 +496,7 @@ export function updateTurnChangesResult(
         }
     }
 
-    // Undo 按钮
+    // Undo button
     const undoBtn = card.querySelector('.turn-changes-undo') as HTMLButtonElement | null;
     if (undoBtn) {
         undoBtn.classList.toggle('hidden', !canUndo);
@@ -495,7 +504,7 @@ export function updateTurnChangesResult(
         undoBtn.disabled = false;
     }
 
-    // 没有待撤销文件时隐藏「Revert all」（尤其是失败后无法重试的场景）
+    // Hide "Revert all" when nothing is pending (especially after a failure that can't be retried)
     const revertAllBtn = card.querySelector('.turn-changes-revert') as HTMLButtonElement | null;
     if (revertAllBtn && pendingCount === 0) {
         revertAllBtn.remove();
@@ -504,12 +513,12 @@ export function updateTurnChangesResult(
         revertAllBtn.disabled = false;
     }
 
-    // 全部撤销完成 → 绿色完成态
+    // All reverted -> green done state
     if (failedCount === 0 && pendingCount === 0) {
         card.classList.add('all-done');
         if (canUndo) {
-            // 保留「再撤回」入口：卡片不自动消失，直到下一个回合 / 新会话
-            // （给用户充分的安全感：随时能把这次撤销撤销回去）
+            // Keep the undo-of-revert entry: the card stays until the next turn /
+            // new session (so the user always feels safe reverting again).
             return;
         }
         setTimeout(function () {
@@ -519,7 +528,7 @@ export function updateTurnChangesResult(
     }
 }
 
-/** 撤销完成后：淡出卡片并给出温暖反馈 */
+/** After a revert completes: fade the card out and give warm feedback */
 export function finishUndoRevert(text: string): void {
     const card = ctx.els.chat.querySelector('.turn-changes') as HTMLElement | null;
     if (card) {
@@ -530,15 +539,16 @@ export function finishUndoRevert(text: string): void {
 }
 
 export function addNotice(text: string): void {
-    // 通知不应清掉空状态：新会话/空会话切换后仍需保留引导与 logo
+    // A notice must not clear the empty state: the guide and logo should remain after a new / empty session
     const el = document.createElement('div');
     el.className = 'status-line notice';
     el.textContent = text;
+    const stick = isNearBottom(ctx.els.chat);
     ctx.els.chat.appendChild(el);
-    if (isNearBottom(ctx.els.chat)) { scrollToBottom(ctx.els.chat); }
+    if (stick) { scrollToBottom(ctx.els.chat); }
 }
 
-/** 错误气泡上的可操作按钮（重试 / 切模型 / 查看日志） */
+/** Action buttons on an error bubble (retry / switch model / show logs) */
 export function renderErrorActions(body: HTMLElement, actions?: Array<{ id: string; label: string }>): void {
     if (!body || !actions || !actions.length) { return; }
     const row = document.createElement('div');
@@ -561,12 +571,13 @@ export function setBusy(value: boolean): void {
     els.input.placeholder = value ? S.inputBusyPlaceholder : S.inputPlaceholder;
     updateSendAffordances();
     if (value) {
-        // 运行中立即给出“思考中”反馈（无正在流式的正文时）
+        // Give immediate "thinking" feedback while running (when no text is streaming yet)
         if (!ctx.currentBody) { showThinking(); }
     } else {
         hideThinking();
-        // 安全网：如果 busy 变为 false 时助手流仍未关闭（扩展侧遗漏了 assistantEnd），
-        // 用已缓冲的内容结束流式渲染，避免光标永久悬停。
+        // Safety net: if the assistant stream is still open when busy turns false
+        // (a missed assistantEnd from the host), close it with the buffered content
+        // so the cursor never hangs forever.
         if (ctx.currentBody && ctx.currentBuffer.length > 0) {
             endAssistantStream();
         }
@@ -575,8 +586,8 @@ export function setBusy(value: boolean): void {
 }
 
 /**
- * 根据忙碌状态与发送模式刷新「发送 / 停止 / 排队·插话」控件。
- * 空闲：只显示发送；忙碌：额外显示停止按钮与「排队 / 插话」切换。
+ * Refresh the "send / stop / queue·steer" controls from the busy state and send
+ * mode. Idle: send only. Busy: also show the stop button and the queue/steer toggle.
  */
 export function updateSendAffordances(): void {
     const S = ctx.S;

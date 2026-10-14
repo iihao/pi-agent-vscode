@@ -2,9 +2,10 @@ import { describe, it, expect } from 'vitest';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// l10n 回归：源码里每个 vscode.l10n.t('…') 的字面量都必须同时存在于
-// l10n/bundle.l10n.json（英文基准）与 l10n/bundle.l10n.zh-cn.json（中文），
-// 否则中文界面会漏出英文。新增文案时忘了补翻译，这个测试会挡下来。
+// l10n regression: every `vscode.l10n.t('...')` literal in the source must exist in
+// both l10n/bundle.l10n.json (English baseline) and l10n/bundle.l10n.zh-cn.json
+// (Chinese), otherwise the Chinese UI leaks English. This test catches new strings
+// that were added without a translation.
 
 function decode(raw: string): string {
     return raw

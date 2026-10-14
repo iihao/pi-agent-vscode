@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 斜杠命令 / @ 文件提及
+// Slash commands / @ file mentions
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext, SuggestToken, SuggestItem } from '../types';
@@ -31,7 +31,7 @@ export function updateSuggest(): void {
     ctx.suggestEnd = token.end;
     const f = token.filter.toLowerCase();
     if (token.mode === 'slash') {
-        // 合并 Pi SDK 命令和内置命令
+        // Merge pi SDK commands with built-ins
         const allCommands = BUILTIN_COMMANDS.concat(ctx.slashCommands.map(function (c) {
             return { name: c.name, description: c.description || '' };
         }));
@@ -99,7 +99,7 @@ export function setSuggestIndex(i: number): void {
     ctx.suggestIndex = i;
 }
 
-/** 内置斜杠命令列表（用于 suggest 展示） */
+/** Built-in slash commands (shown in the suggest list) */
 export interface BuiltinCommand {
     name: string;
     description: string;
@@ -119,7 +119,7 @@ export const BUILTIN_COMMANDS: BuiltinCommand[] = [
     { name: 'help', description: 'Show available commands' },
 ];
 
-/** 内置命令的 suggest 项 */
+/** Suggest items for the built-in commands */
 export function builtinSuggestItems(): SuggestItem[] {
     return BUILTIN_COMMANDS.map(function (c) {
         return { label: '/' + c.name, detail: c.description, source: '', insert: '/' + c.name + ' ' };

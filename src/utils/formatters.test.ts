@@ -59,14 +59,14 @@ describe('extractToolOutput', () => {
     });
 
     it('truncates output with a notice when it exceeds the cap', () => {
-        // 显式传入上限，验证「只在真的超过上限时才截断，且必须写明」
+        // Pass the cap explicitly to verify "truncate only when actually over the cap, and always say so"
         const out = extractToolOutput({ content: [{ type: 'text', text: 'x'.repeat(2500) }] }, 1000);
         expect(out).toContain('output truncated');
         expect(out.length).toBeLessThan(1100);
     });
 
     it('keeps realistically long tool output intact (no second truncation)', () => {
-        // 实测最长工具输出约 5 万字符：扩展不应再截断一次，避免丢内容
+        // The longest tool output is ~50k chars: the extension must not truncate again and lose content
         const text = 'x'.repeat(60000);
         expect(extractToolOutput({ content: [{ type: 'text', text }] })).toBe(text);
     });

@@ -11,6 +11,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Provider management & credential-aware errors.**
+  - `Pi: Manage Model Providers` lists every provider found in `auth.json` /
+    `models.json` with its live `pi auth check` status (`✓` / `⚠ reason`), and
+    lets you **update the key**, **delete** the provider, or re-check it.
+  - The first-run checklist has a **Manage providers** link as well.
+  - When a turn fails because a provider has no credentials, the error bubble
+    now offers **Add API key** and **Sign in with pi** inline, next to the
+    existing Retry / Switch model / Show logs.
+
+- **Guided “connect a provider” flow for first-run.** The setup checklist now
+  asks whether the current provider actually has credentials (`pi auth check
+  --json`) instead of merely “is there a model list”, and its **Connect** button
+  walks you through it without leaving VS Code:
+  - **Add an API key** for a built-in provider (Anthropic, OpenAI, DeepSeek,
+    Gemini, OpenRouter, …) — written to pi's own `auth.json`;
+  - **Add a custom OpenAI-compatible endpoint** (third-party gateway,
+    self-hosted, Ollama/LM Studio) — written to pi's `models.json`;
+  - **Sign in with pi** in a terminal for OAuth providers.
+
+  After saving it restarts the client, re-checks the provider and auto-selects a
+  usable model so you can send your first message immediately. Credential files
+  are backed up (`*.bak`) before writing and written `0600`; `PI_CODING_AGENT_DIR`
+  is respected.
+
 - **First-run setup checklist.** When nothing is set up yet, the empty state
   shows a small checklist — workspace trusted, `pi` installed, connected,
   model available — each unfinished item with a one-click action (install `pi`
@@ -81,6 +105,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     marked and explained instead of silently skipped.
 
 ### Fixed
+
+- **The “Changed files” card is no longer clipped after a turn.** It was only
+  scrolled into view when the chat was already near the bottom — but that check
+  ran *after* the card was appended, so a multi-file card grew taller than the
+  threshold, the check failed, and the view stayed put with only the first row
+  visible (you had to scroll again to see the rest). The scroll intent is now
+  captured *before* the card is added, and if the card is taller than the
+  viewport it aligns to its top so you read from the first file.
 
 - **`write` (whole-file overwrite) now shows a diff and can be reverted.** The
   extension snapshots the file right before the first tool touches it, so a

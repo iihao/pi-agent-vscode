@@ -64,6 +64,7 @@
     "onCommand:pi-agent.openInEditor",
     "onCommand:pi-agent.openInEditorToSide",
     "onCommand:pi-agent.openInSecondarySideBar",
+    "onCommand:pi-agent.manageProviders",
     "onCommand:pi-agent.restartSession",
     "onCommand:pi-agent.exportDiagnostics",
     "onCommand:pi-agent.attachFile",
@@ -156,6 +157,11 @@
         "command": "pi-agent.openInSecondarySideBar",
         "title": "%cmd.openInSecondarySideBar%",
         "icon": "$(layout-sidebar-right)"
+      },
+      {
+        "command": "pi-agent.manageProviders",
+        "title": "%cmd.manageProviders%",
+        "icon": "$(settings-gear)"
       },
       {
         "command": "pi-agent.attachFile",

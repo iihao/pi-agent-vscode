@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 纯工具函数（无状态依赖）
+// Pure helpers (no shared state)
 // ---------------------------------------------------------------------------
 
 import type { SessionInfo, UiStrings } from './types';
@@ -59,7 +59,7 @@ export function isElNearBottom(el: HTMLElement): boolean {
     return (el.scrollHeight - el.scrollTop - el.clientHeight) < 40;
 }
 
-/** 提取纯净文本：克隆后剔除代码行号，避免复制/导出/搜索混入行号 */
+/** Extract plain text: clone and drop code line numbers so copy/export/search stay clean */
 export function bashId(): string {
     return 'bash-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 6);
 }

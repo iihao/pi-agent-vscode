@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 服务入口：目前只暴露 VS Code API 适配层，便于测试替换与集中访问。
+// Service entry: exposes only the VS Code API adapter layer, so it can be swapped in tests and reached in one place.
 // ---------------------------------------------------------------------------
 
 import { IVSCodeService, VSCodeService } from './vscode';

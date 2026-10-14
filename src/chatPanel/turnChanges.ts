@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// 本回合改动追踪与还原
+// Per-turn change tracking and revert
 // ---------------------------------------------------------------------------
 
 import { TurnChange } from '../state/types';
@@ -20,18 +20,19 @@ export function parseEdits(args: { edits?: unknown } | undefined): Array<{ oldTe
 }
 
 export function isRevertible(change: TurnChange): boolean {
-    if (!change.existed) { return true; }          // 本回合新建 -> 删除
-    if (!change.edits) { return change.before !== undefined; }  // 覆盖写 -> 有快照才能还原
+    if (!change.existed) { return true; }          // created this turn -> delete
+    if (!change.edits) { return change.before !== undefined; }  // overwritten (write) -> revertible only with a snapshot
     return change.edits.every((e) => e.newText.length > 0);
 }
 
 /**
- * 行级 diff（LCS），用于「快照 → 当前内容」的对比（主要是 write）。
- * 上下文行以空格开头，删除行 `-`，新增行 `+`，与 webview 的渲染约定一致。
- * 大文件退化为整体替换，并限制总行数。
+ * Line-level diff (LCS) comparing "snapshot -> current content" (mainly for write).
+ * Context lines start with a space, removals with `-` and additions with `+`,
+ * matching how the webview renders diffs. Huge files fall back to a whole-file
+ * replace, and the total line count is capped.
  */
 export function lineDiff(before: string, after: string, maxLines = 120): string {
-    // 空字符串视为「没有行」（新文件 / 清空），而不是「一个空行」
+    // Treat an empty string as "no lines" (new / cleared file), not "one empty line"
     const a = before === '' ? [] : before.split('\n');
     const b = after === '' ? [] : after.split('\n');
     const MAX = 900;
@@ -40,7 +41,7 @@ export function lineDiff(before: string, after: string, maxLines = 120): string 
     }
     const n = a.length;
     const m = b.length;
-    // dp[i][j] = a[i:] 与 b[j:] 的 LCS 长度
+    // dp[i][j] = LCS length of a[i:] and b[j:]
     const dp: number[][] = Array.from({ length: n + 1 }, () => new Array<number>(m + 1).fill(0));
     for (let i = n - 1; i >= 0; i--) {
         for (let j = m - 1; j >= 0; j--) {
@@ -67,7 +68,7 @@ function clip(lines: string[], maxLines: number): string {
     return lines.join('\n');
 }
 
-/** 把记录的 edit 对渲染成一段简易 unified diff（预览用，非严格算法） */
+/** Render recorded edit pairs as a simple unified diff (preview only; not a strict algorithm) */
 export function editsToDiff(edits: Array<{ oldText: string; newText: string }>, maxLines = 60): string {
     const lines: string[] = [];
     for (const e of edits) {
@@ -80,7 +81,7 @@ export function editsToDiff(edits: Array<{ oldText: string; newText: string }>, 
     return lines.join('\n');
 }
 
-/** 把 newText 反向替换回 oldText（倒序），失败返回 null */
+/** Replace newText back with oldText in reverse order; returns null when it no longer matches */
 export function revertEdits(content: string, edits: Array<{ oldText: string; newText: string }>): string | null {
     let out = content;
     for (let i = edits.length - 1; i >= 0; i--) {

@@ -20,7 +20,7 @@ describe('missingSuffix', () => {
     });
 
     it('falls back to the authoritative text when the stream does not match', () => {
-        // 增量丢失/被改写：宁可重复，也不能漏
+        // Deltas lost / rewritten: duplicating is better than missing
         expect(missingSuffix('hello', 'HEL')).toEqual({ suffix: 'hello', mismatch: true });
     });
 });
@@ -80,7 +80,7 @@ describe('planAssistantCompletion', () => {
     });
 
     it('surfaces the failure message pi uses for failed turns', () => {
-        // pi 的失败回合就是一条空助手消息 + errorMessage
+        // A failed pi turn is an empty assistant message + errorMessage
         const plan = planAssistantCompletion(
             assistant([{ type: 'text', text: '' }], { stopReason: 'error', errorMessage: 'Request timed out.' }),
             { text: '', thinking: '' },
@@ -92,8 +92,8 @@ describe('planAssistantCompletion', () => {
     });
 
     it('marks a user-stopped turn as aborted, not as an error', () => {
-        // 用户点停止：pi 会带 errorMessage 但 stopReason 是 aborted，
-        // 不能当成失败回合弹「重试/切换模型/查看日志」
+        // User pressed stop: pi carries an errorMessage but stopReason is aborted,
+        // so it must not be treated as a failure with retry / switch model / logs
         const plan = planAssistantCompletion(
             assistant([{ type: 'text', text: '' }], { stopReason: 'aborted', errorMessage: 'Request aborted' }),
             { text: '', thinking: '' },
