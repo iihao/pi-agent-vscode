@@ -20,7 +20,7 @@ coding agent — a Claude Code / Codex-style chat UI that runs entirely on
 > activates **only in trusted workspaces**. Use at your own discretion.
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/iihao/pi-agent-vscode/main/docs/images/pi-vscode-main.png" alt="Pi Agent chat panel in the VS Code sidebar: streaming answers, code blocks, question navigator and the composer with model / thinking / permission controls" width="440">
+  <img src="https://raw.githubusercontent.com/iihao/pi-agent-vscode/main/docs/images/pi-vscode-main.png" alt="Pi Agent in VS Code: the sidebar chat and the editor-tab panel side by side, with streaming answers, code blocks, and the composer with model / thinking / permission controls" width="100%">
 </div>
 
 ---
@@ -55,12 +55,18 @@ Then install it either way:
    ```bash
    npm install -g @earendil-works/pi-coding-agent
    ```
-2. Run `pi` once to log in and pick a model.
+2. Connect a model provider. The easiest way is from inside VS Code: open the
+   **Pi** view (next step), then press **Connect** on the first-run checklist to
+   add an API key (Anthropic, OpenAI, DeepSeek, OpenRouter, …), point pi at a
+   custom OpenAI-compatible endpoint (third-party gateway, self-hosted,
+   Ollama/LM Studio), or sign in with OAuth in a terminal. Running `pi` once
+   yourself works too.
 3. Open a **trusted** folder in VS Code, then click the **Pi** icon in the
    Activity Bar (or run **Pi: Open Chat**).
 
-The extension stores **no API keys** — it reuses your existing `~/.pi`
-configuration (models, sessions, skills, prompts).
+The extension keeps **no credentials of its own** — it reuses your existing
+`~/.pi` configuration (models, sessions, skills, prompts) and, only when you ask
+it to, writes to pi's own credential files (`auth.json` / `models.json`).
 
 ---
 

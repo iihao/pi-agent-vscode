@@ -19,7 +19,7 @@
 > **读写工作区文件、执行 shell 命令**。仅在你的**受信任工作区**中激活，请自行判断风险。
 
 <div align="center">
-  <img src="https://raw.githubusercontent.com/iihao/pi-agent-vscode/main/docs/images/pi-vscode-main.png" alt="Pi Agent 侧边栏聊天面板：流式回答、代码块、问题导航，以及带模型 / 思考级别 / 权限控制的输入栏" width="440">
+  <img src="https://raw.githubusercontent.com/iihao/pi-agent-vscode/main/docs/images/pi-vscode-main.png" alt="Pi Agent 在 VS Code 中：侧边栏对话与编辑器标签面板并排，流式回答、代码块，以及带模型 / 思考级别 / 权限控制的输入栏" width="100%">
 </div>
 
 ---
@@ -54,11 +54,15 @@
    ```bash
    npm install -g @earendil-works/pi-coding-agent
    ```
-2. 先运行一次 `pi` 完成登录并选择模型。
+2. 连接模型供应商。最方便的是在 VS Code 里：打开 **Pi** 视图（下一步），
+   在首次自检清单里点 **连接** —— 添加 API Key（Anthropic、OpenAI、DeepSeek、
+   OpenRouter…）、指向自定义 OpenAI 兼容端点（三方中转 / 自建 / Ollama / LM Studio），
+   或在终端用 OAuth 登录。自己先运行一次 `pi` 也可以。
 3. 在 VS Code 中打开一个**受信任**的文件夹，然后点击活动栏的 **Pi** 图标
    （或运行 **Pi: 打开对话**）。
 
-插件**不保存任何 API Key** —— 它复用你现有的 `~/.pi` 配置（模型、会话、技能、提示模板）。
+插件**不保存任何凭据** —— 它复用你现有的 `~/.pi` 配置（模型、会话、技能、提示模板）；
+只有在你主动操作时，才会写入 pi 自己的凭据文件（`auth.json` / `models.json`）。
 
 ---
 
