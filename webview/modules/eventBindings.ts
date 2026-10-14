@@ -93,11 +93,9 @@ function bindSearchEvents(): void {
 function bindInputEvents(): void {
     const els = ctx.els;
     els.sendBtn.addEventListener('click', function () {
-        // While busy: send with the current mode (queue / steer); otherwise just send
-        send(ctx.busy ? ctx.sendMode : undefined);
-    });
-    els.stopBtn.addEventListener('click', function () {
-        ctx.vscode.postMessage({ type: 'abort' });
+        // One button, two roles: send when idle, stop while a turn is running.
+        // Sending while busy is done with Enter (queue / steer per the toggle).
+        if (ctx.busy) { ctx.vscode.postMessage({ type: 'abort' }); } else { send(); }
     });
     els.modeBtn.addEventListener('click', function () {
         ctx.sendMode = ctx.sendMode === 'queue' ? 'steer' : 'queue';

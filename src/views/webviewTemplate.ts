@@ -160,13 +160,10 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
                         <span id="permLabel" class="pill-label">${escapeAttr(S.permission)}</span>
                         <span class="pill-caret">▾</span>
                     </button>
-                    <button id="modeBtn" class="pill mode-pill hidden" title="${escapeAttr(S.modeTitle)}">
+                    <button id="modeBtn" class="pill mode-pill hidden">
                         <span id="modeLabel" class="pill-label"></span>
                     </button>
                 </div>
-                <button id="stop" class="send-button stop-button hidden" title="${escapeAttr(S.stopTitle)}" aria-label="${escapeAttr(S.stopTitle)}">
-                    <svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"></rect></svg>
-                </button>
                 <button id="send" class="send-button" title="${escapeAttr(S.sendTitle)}" aria-label="${escapeAttr(S.sendTitle)}">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>
                 </button>

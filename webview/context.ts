@@ -11,7 +11,6 @@ function collectElements(): ChatElements {
         welcomeSetup: document.getElementById('welcomeSetup')!,
         input: document.getElementById('input') as HTMLTextAreaElement,
         sendBtn: document.getElementById('send') as HTMLButtonElement,
-        stopBtn: document.getElementById('stop') as HTMLButtonElement,
         modeBtn: document.getElementById('modeBtn') as HTMLButtonElement,
         modeLabel: document.getElementById('modeLabel')!,
         attachBtn: document.getElementById('attachBtn') as HTMLButtonElement,

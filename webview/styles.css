@@ -1126,7 +1126,7 @@
     .send-button svg { width: 15px; height: 15px; }
     .send-button:hover { filter: brightness(1.1); }
     .send-button:active { transform: scale(.94); }
-    .send-button.stop-button { background: var(--vscode-errorForeground, #f85149); }
+    .send-button.stopping { background: var(--vscode-errorForeground, #f85149); }
     /* Queue / steer toggle while busy: the accent color when steer is selected */
     .mode-pill { font-family: var(--cx-mono); font-size: 10px; }
     .mode-pill.steer { color: var(--cx-accent); border-color: var(--cx-accent); }

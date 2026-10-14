@@ -564,11 +564,20 @@ export function renderErrorActions(body: HTMLElement, actions?: Array<{ id: stri
     body.appendChild(row);
 }
 
+const SEND_ICON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"></line><polyline points="5 12 12 5 19 12"></polyline></svg>';
+const STOP_ICON = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="7" y="7" width="10" height="10" rx="2"></rect></svg>';
+
 export function setBusy(value: boolean): void {
     const S = ctx.S;
     const els = ctx.els;
     ctx.busy = value;
     els.input.placeholder = value ? S.inputBusyPlaceholder : S.inputPlaceholder;
+    // One button, two roles: send when idle, stop while a turn is running.
+    els.sendBtn.innerHTML = value ? STOP_ICON : SEND_ICON;
+    els.sendBtn.classList.toggle('stopping', value);
+    const label = value ? S.stopTitle : S.sendTitle;
+    els.sendBtn.title = label;
+    els.sendBtn.setAttribute('aria-label', label);
     updateSendAffordances();
     if (value) {
         // Give immediate "thinking" feedback while running (when no text is streaming yet)
@@ -586,25 +595,17 @@ export function setBusy(value: boolean): void {
 }
 
 /**
- * Refresh the "send / stop / queue·steer" controls from the busy state and send
- * mode. Idle: send only. Busy: also show the stop button and the queue/steer toggle.
+ * Refresh the queue / steer toggle from the busy state and send mode.
+ * While a turn is running the primary button is Stop, so this toggle only
+ * decides how Enter sends (queue vs steer).
  */
 export function updateSendAffordances(): void {
     const S = ctx.S;
     const els = ctx.els;
-    const busy = ctx.busy;
-    els.stopBtn.classList.toggle('hidden', !busy);
-    els.modeBtn.classList.toggle('hidden', !busy);
-    if (busy) {
-        const queue = ctx.sendMode === 'queue';
-        els.modeLabel.textContent = queue ? S.modeQueue : S.modeSteer;
-        els.modeBtn.title = S.modeTitle;
-        els.modeBtn.classList.toggle('steer', !queue);
-        const label = queue ? S.queueTitle : S.steerTitle;
-        els.sendBtn.title = label;
-        els.sendBtn.setAttribute('aria-label', label);
-    } else {
-        els.sendBtn.title = S.sendTitle;
-        els.sendBtn.setAttribute('aria-label', S.sendTitle);
-    }
+    els.modeBtn.classList.toggle('hidden', !ctx.busy);
+    if (!ctx.busy) { return; }
+    const queue = ctx.sendMode === 'queue';
+    els.modeLabel.textContent = queue ? S.modeQueue : S.modeSteer;
+    els.modeBtn.title = queue ? S.queueTitle : S.steerTitle;
+    els.modeBtn.classList.toggle('steer', !queue);
 }

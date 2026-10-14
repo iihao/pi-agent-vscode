@@ -81,7 +81,6 @@ export interface ChatElements {
     welcomeSetup: HTMLElement;
     input: HTMLTextAreaElement;
     sendBtn: HTMLButtonElement;
-    stopBtn: HTMLButtonElement;
     modeBtn: HTMLButtonElement;
     modeLabel: HTMLElement;
     attachBtn: HTMLButtonElement;

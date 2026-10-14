@@ -18,8 +18,6 @@ export interface UiStrings {
     setupConnectAction: string;
     setupProvider: string;
     setupProviderAction: string;
-    setupModel: string;
-    setupModelAction: string;
     setupLogs: string;
     setupManage: string;
     outlineTitle: string;
@@ -75,7 +73,6 @@ export interface UiStrings {
     stopTitle: string;
     queueTitle: string;
     steerTitle: string;
-    modeTitle: string;
     modeQueue: string;
     modeSteer: string;
     historyDivider: string;
@@ -128,8 +125,6 @@ export function getUiStrings(): UiStrings {
         setupConnectAction: t('Retry'),
         setupProvider: t('Model provider ready'),
         setupProviderAction: t('Connect'),
-        setupModel: t('Model available'),
-        setupModelAction: t('Sign in to pi'),
         setupLogs: t('Show logs'),
         setupManage: t('Manage providers'),
         outlineTitle: t('Jump to a question'),
@@ -160,7 +155,7 @@ export function getUiStrings(): UiStrings {
         kbdHistory: t('history'),
         kbdJump: t('jump questions'),
         inputPlaceholder: t('Describe a task for pi… (@ file, / command, ! shell)'),
-        inputBusyPlaceholder: t('Pi is working — press Enter to send'),
+        inputBusyPlaceholder: t('Pi is working — Enter sends, ■ stops'),
         queued: t('Queued'),
         steering: t('Steering'),
         bashTruncated: t('Output truncated'),
@@ -185,7 +180,6 @@ export function getUiStrings(): UiStrings {
         stopTitle: t('Stop'),
         queueTitle: t('Queue for after the current turn'),
         steerTitle: t('Steer the running turn (insert now)'),
-        modeTitle: t('How to send while pi is working'),
         modeQueue: t('Queue'),
         modeSteer: t('Steer'),
         historyDivider: t('History above'),
