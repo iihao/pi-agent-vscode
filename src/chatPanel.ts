@@ -2408,11 +2408,21 @@ export class ChatPanel {
         void vs.showInformationMessage(vscode.l10n.t('Provider connected: {0}', providerLabel(provider)));
     }
 
-    /** Set the provider's first model as current so the user can start right away */
+    /**
+     * Make sure the user can send a message right away.
+     *
+     * pi picks a startup model automatically once a provider has credentials
+     * (`defaultProvider` / `defaultModel` are "Automatic"), so we only fill in a
+     * model when pi ended up with none (e.g. a brand-new custom provider). Never
+     * override pi's choice: the model list is not sorted by preference, so the
+     * "first" entry would often be an older model and downgrade the default.
+     */
     private async _selectProviderModel(provider: string): Promise<void> {
         const client = this._clientManager.client;
         if (!client || typeof client.setModel !== 'function') { return; }
         try {
+            // pi already picked one — leave it alone.
+            if ((await client.getState()).model?.id) { return; }
             const models = await client.getAvailableModels();
             const first = models.find((m) => m.provider === provider);
             if (first) { await client.setModel(first.provider, first.id); await this._loadModels(client); }
