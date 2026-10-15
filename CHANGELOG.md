@@ -18,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Starting a new session no longer carries over the previous one's tool
+  boxes.** `clear` removed a fixed list of element classes and missed the
+  tool-group wrapper, so a collapsed "Bash, Read …" box from the previous
+  session stayed in the transcript — visible and expandable, but empty because
+  its cards *had* been removed. The transcript is now swept by dropping every
+  child of the container except the empty state, so no renderer (including ones
+  added later) can leak into the next session.
 - **Reloading a session no longer kills a running turn silently.** The command
   replaced the pi process outright, throwing away the current turn and whatever
   had not reached the session file yet. It now asks first, aborts the turn

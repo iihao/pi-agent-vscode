@@ -23,6 +23,7 @@ import { autoResizeInput, editMessage } from './inputHandling';
 import { renderImages } from './imagePaste';
 import { updateContextUsage, resetContextUsage } from './contextUsage';
 import { renderHistory } from './historyRenderer';
+import { clearTranscript } from './transcript';
 
 let ctx: WebviewContext;
 
@@ -245,7 +246,7 @@ function _handle(m: PostMessage): void {
             break;
 
         case 'clear':
-            els.chat.querySelectorAll('.message, .status-line, .activity, .history-divider, .collapsible, .turn-changes').forEach(function (el) { el.remove(); });
+            clearTranscript(els.chat);
             els.welcome.style.display = '';
             ctx.currentBody = null;
             ctx.currentBuffer = '';
