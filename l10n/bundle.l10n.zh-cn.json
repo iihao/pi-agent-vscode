@@ -202,7 +202,6 @@
   "Overwritten — undo in your editor (Ctrl+Z)": "已被覆盖——请在编辑器中撤销（Ctrl+Z）",
   "Overwritten — undo in your editor (⌘Z)": "已被覆盖——请在编辑器中撤销（⌘Z）",
   "Pi chat view could not be created within 5 seconds. Please check if the extension is properly activated and try again.": "Pi 聊天视图在 5 秒内未能创建。请确认扩展已正确激活后重试。",
-  "Pi turn timed out after 10 minutes; you can send a new message": "Pi 回合超过 10 分钟已超时；你可以发送新消息",
   "Pi turn was aborted and did not settle within {0} seconds; you can send a new message": "Pi 回合已中止，但 {0} 秒内未收尾；你可以发送新消息",
   "Queue": "排队",
   "Queue for after the current turn": "排到当前回合之后执行",

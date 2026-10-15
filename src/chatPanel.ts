@@ -2305,22 +2305,15 @@ export class ChatPanel {
 
     // ---------- User messages ----------
 
-    /** Busy timeout guard: auto-unlock when the pi process misbehaves so the user is never stuck */
+    /**
+     * Timer for the abort-recovery fallback (see `_abortIfBusy`). There is
+     * deliberately no timeout on how long a turn may run: a long turn is normal
+     * (a big refactor, a slow model, a build the agent is polling), and cutting
+     * the UI loose while pi is still working lets the user send into a running
+     * turn. Recovery is explicit instead — **Stop** aborts and force-unlocks
+     * after 30s, and **Reload Session** replaces the process.
+     */
     private _busyTimeout: NodeJS.Timeout | undefined;
-    private static readonly BUSY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
-
-    private _startBusyTimeout(): void {
-        this._clearBusyTimeout();
-        this._busyTimeout = setTimeout(() => {
-            if (this._busy) {
-                logError('Busy timeout reached; force resetting busy state');
-                this._busy = false;
-                this._post({ type: 'toolSettle' });
-                this._post({ type: 'setBusy', busy: false });
-                this._postError(vscode.l10n.t('Pi turn timed out after 10 minutes; you can send a new message'));
-            }
-        }, ChatPanel.BUSY_TIMEOUT_MS);
-    }
 
     private _clearBusyTimeout(): void {
         if (this._busyTimeout) {
@@ -2352,7 +2345,6 @@ export class ChatPanel {
             images: images && images.length ? images : undefined,
         });
         this._busy = true;
-        this._startBusyTimeout();
         this._post({ type: 'setBusy', busy: true });
 
         try {

@@ -202,7 +202,6 @@
   "Overwritten — undo in your editor (Ctrl+Z)": "Overwritten — undo in your editor (Ctrl+Z)",
   "Overwritten — undo in your editor (⌘Z)": "Overwritten — undo in your editor (⌘Z)",
   "Pi chat view could not be created within 5 seconds. Please check if the extension is properly activated and try again.": "Pi chat view could not be created within 5 seconds. Please check if the extension is properly activated and try again.",
-  "Pi turn timed out after 10 minutes; you can send a new message": "Pi turn timed out after 10 minutes; you can send a new message",
   "Pi turn was aborted and did not settle within {0} seconds; you can send a new message": "Pi turn was aborted and did not settle within {0} seconds; you can send a new message",
   "Queue": "Queue",
   "Queue for after the current turn": "Queue for after the current turn",

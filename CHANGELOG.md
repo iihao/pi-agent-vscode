@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A long turn is no longer cut loose after 10 minutes.** A watchdog reset the
+  busy state and reported *"Pi turn timed out after 10 minutes; you can send a
+  new message"* once a turn had run that long. A long turn is normal, though — a
+  big refactor, a slow model, a build the agent is polling — and the extension's
+  own log shows the watchdog firing one second after `turn_start` while bash
+  output was still streaming in. The UI was unlocked while pi was still working,
+  so a message could be sent into the running turn. There is no duration cap any
+  more; recovery is explicit instead: **Stop** aborts and force-unlocks if the
+  turn does not settle within 30 seconds, and **Reload Session** replaces the
+  process.
 - **A new session now starts on the model the composer shows.** pi's `set_model`
   applies to the running session only, and a brand-new session falls back to the
   first entry of the model list — so picking a model and then hitting **New
