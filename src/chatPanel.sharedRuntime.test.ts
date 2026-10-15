@@ -248,4 +248,60 @@ describe('panels sharing a runtime', () => {
         b.dispose();
         expect(armed()).toBe(false);
     });
+
+    it('clear() refreshes every panel of the session, not just the clicked one', async () => {
+        const { webA, webB, a, b, rt } = makePair();
+        (rt as unknown as { clientManager: unknown }).clientManager = {
+            client: {},
+            isConnected: true,
+            abort: () => Promise.resolve(),
+            onEvent: () => () => { /* noop */ },
+        };
+        (rt as unknown as { sessionManager: unknown }).sessionManager = {
+            sessions: [{ id: 's2', file: '/sessions/s2.jsonl', createdAt: 1, messageCount: 0 }],
+            currentSessionId: 's2',
+            createNewSession: () => Promise.resolve(true),
+        };
+
+        await a.clear();
+
+        // a new session is a change to the shared runtime: the sibling panel must
+        // leave its old transcript behind instead of showing a stale conversation
+        for (const web of [webA, webB]) {
+            const clears = web.posted.filter((m) => m.type === 'clear');
+            expect(clears.length).toBe(1);
+            expect(clears[0].boot).toBe(false);   // the empty session is known-empty
+            expect(web.posted.filter((m) => m.type === 'setBusy').map((m) => m.busy)).toContain(false);
+            expect(web.posted.filter((m) => m.type === 'sessions').length).toBe(1);
+            expect(web.posted.filter((m) => m.type === 'turnChanges').length).toBe(1);
+        }
+        expect((b as unknown as { _webviewSynced: boolean })._webviewSynced).toBe(false);
+    });
+
+    it('replays only the panels that are actually missing their transcript', async () => {
+        const { a, b, rt } = makePair();
+        (rt as unknown as { clientManager: unknown }).clientManager = {
+            client: {},
+            onEvent: () => () => { /* noop */ },
+        };
+        const inner = a as unknown as { _webviewSynced: boolean; _replayPendingPanels(): Promise<void>; _restoreHistory(c: unknown): Promise<void> };
+        const sib = b as unknown as { _webviewSynced: boolean; _restoreHistory: (c: unknown) => Promise<void> };
+        const spySelf = vi.fn(() => Promise.resolve());
+        // stubs mimic the real contract: a replay marks the panel as holding content
+        const spySibling = vi.fn(() => { sib._webviewSynced = true; return Promise.resolve(); });
+        inner._restoreHistory = spySelf;
+        sib._restoreHistory = spySibling;
+
+        // this panel already holds its transcript (freshly replayed by _ensureClient);
+        // the sibling was cleared and must be filled
+        inner._webviewSynced = true;
+        sib._webviewSynced = false;
+
+        await inner._replayPendingPanels();
+
+        expect(spySelf).not.toHaveBeenCalled();
+        expect(spySibling).toHaveBeenCalledTimes(1);
+        // replaying marks the panel as holding content again
+        expect(sib._webviewSynced).toBe(true);
+    });
 });

@@ -134,6 +134,39 @@ export class ChatPanel {
     }
 
     /**
+     * Post to every panel bound to this session. For runtime-level state
+     * (session list, turn-change reset) whose presentation must not diverge
+     * between two views of one session; per-turn streaming posts stay
+     * panel-local because each panel holds its own render ledger.
+     */
+    private _postRuntime(message: PostMessage): void {
+        for (const panel of this._runtime.panels) { panel._post(message); }
+    }
+
+    /**
+     * Session-level transcript reset: every view of this session, not just the
+     * panel the user acted in. A new/cloned/reloaded session is a change to the
+     * shared runtime; leaving a sibling panel showing the old transcript makes
+     * two views of one session disagree about what the conversation is.
+     */
+    private _broadcastClearTranscript(boot = true): void {
+        for (const panel of this._runtime.panels) { panel._clearTranscript(boot); }
+    }
+
+    /**
+     * Replay the session file into every panel that was just cleared but not
+     * filled yet — the panel that ran `_ensureClient` has already replayed
+     * itself, the others would otherwise sit in their boot state forever.
+     */
+    private async _replayPendingPanels(): Promise<void> {
+        const client = this._clientManager.client;
+        if (!client) { return; }
+        for (const panel of this._runtime.panels) {
+            if (!panel._webviewSynced) { await panel._restoreHistory(client); }
+        }
+    }
+
+    /**
      * Set the shared busy state and tell every panel bound to this runtime.
      * Busy lives on the runtime, so reconciling it from pi (a reconnect) would
      * otherwise leave the other panels' webviews showing a stale state.
@@ -344,9 +377,9 @@ export class ChatPanel {
         this._runtime.firstUserMessage = undefined;
         this._resetTurnChanges();
         // The new session is empty by definition: no boot state, the empty state
-        // can be shown straight away
-        this._clearTranscript(false);
-        this._post({ type: 'setBusy', busy: false });
+        // can be shown straight away — in every panel of this session
+        this._broadcastClearTranscript(false);
+        this._broadcastBusy(false);
         this._postContexts();
         const client = this._clientManager.client;
         if (this._clientManager.isConnected && client) {
@@ -391,10 +424,11 @@ export class ChatPanel {
         this._turnHadText = false;
         this._contexts = this._contexts.filter((c) => c.auto);
         this._resetTurnChanges();
-        this._clearTranscript();
-        this._post({ type: 'setBusy', busy: false });
+        this._broadcastClearTranscript();
+        this._broadcastBusy(false);
         this._postContexts();
         await this._ensureClient();
+        await this._replayPendingPanels();
         return true;
     }
 
@@ -689,13 +723,14 @@ export class ChatPanel {
             const res = await client.clone();
             if (res.cancelled) { return; }
             await this._sessionManager.loadSessions(client);
-            this._clearTranscript();
+            this._broadcastClearTranscript();
             this._busy = false;
             this._turnHadText = false;
             this._runtime.firstUserMessage = undefined;
             this._resetTurnChanges();
-            this._post({ type: 'setBusy', busy: false });
+            this._broadcastBusy(false);
             await this._restoreHistory(client);
+            await this._replayPendingPanels();
             this._postSessionList();
             this._post({ type: 'notice', text: vscode.l10n.t('Session cloned') });
         } catch (err) {
@@ -856,7 +891,7 @@ export class ChatPanel {
         this._turnChanges = [];
         this._pendingTrack.clear();
         this._runtime.revertSnapshot.clear();
-        this._post({ type: 'turnChanges', turnFiles: [] });
+        this._postRuntime({ type: 'turnChanges', turnFiles: [] });
     }
 
     /** Record edit/write targets at tool_execution_start (without reading the file, to avoid a half-written state) */
@@ -1616,7 +1651,7 @@ export class ChatPanel {
             preview: s.preview,
         }));
         this._patch({ sessions: this._sessionManager.sessions, currentSessionId: this._sessionManager.currentSessionId });
-        this._post({
+        this._postRuntime({
             type: 'sessions',
             sessions,
             current: this._sessionManager.currentSessionId || null,

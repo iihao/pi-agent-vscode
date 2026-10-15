@@ -53,6 +53,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   notice as company. The same limit now lives once in the shared protocol
   (`MAX_MESSAGE_CHARS`); the webview checks it first and leaves the text in
   place. A duplicated limit had already drifted once between the two sides.
+- **New chat / Reload Session / Clone refresh every view of the session.** A
+  session belongs to the runtime, but these actions only cleared the panel
+  they were triggered from: the sidebar could start a fresh session while the
+  editor tab on the same runtime kept showing — and streaming into — the old
+  transcript. The transcript clear, the busy unlock, the turn-change reset and
+  the session list are broadcast to all bound panels now, and a reload replays
+  the session file into every panel that is missing its content.
 - **A failed tool is still rolled back when the panel that recorded it goes away
   mid-tool.** With one session open in two panels (the sidebar and an editor tab),
   only the first panel records turn changes into the runtime — but the bookkeeping
