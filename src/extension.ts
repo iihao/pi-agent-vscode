@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { ChatPanel } from './chatPanel';
 import { initLogger, setLogLevel, buildDiagnostics, logInfo, LogLevel } from './utils/logger';
 import { initRecentFiles } from './utils/recentFiles';
+import { initModelPreference } from './chatPanel/modelPreference';
 
 /** Debounce timer for auto-attachment sync */
 let autoContextTimer: NodeJS.Timeout | undefined;
@@ -19,6 +20,7 @@ export function activate(context: vscode.ExtensionContext) {
     const output = initLogger();
     applyLogLevel();
     initRecentFiles(context);
+    initModelPreference(context);
     logInfo('Pi Agent activated');
 
     // Register the sidebar chat view (activity bar icon -> chat panel)

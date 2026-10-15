@@ -25,6 +25,7 @@ import { buildCommitPrompt, buildPrPrompt, buildNamePrompt } from './chatPanel/p
 import { parseEdits, isRevertible, revertEdits, editsToDiff, lineDiff } from './chatPanel/turnChanges';
 import { planAssistantCompletion, planToolResultCompletion, missingSuffix } from './chatPanel/turnReconcile';
 import { KNOWN_PROVIDERS, providerLabel } from './chatPanel/providers';
+import { preferredModel, rememberModel } from './chatPanel/modelPreference';
 
 /** All VS Code access goes through the service container (easier to test and swap) */
 const vs = getVSCodeService();
@@ -731,7 +732,11 @@ export class ChatPanel {
         }
         try {
             const res = await client.cycleModel();
-            if (res && res.model) { this._post({ type: 'notice', text: vscode.l10n.t('Model switched: {0}', res.model.id || '') }); }
+            if (res && res.model) {
+                const model = res.model;
+                if (model.provider && model.id) { rememberModel(model.provider, model.id); }
+                this._post({ type: 'notice', text: vscode.l10n.t('Model switched: {0}', model.id || '') });
+            }
             await this._loadModels(client);
         } catch (err) {
             this._post({ type: 'notice', text: vscode.l10n.t('Failed to switch model: {0}', (err as Error).message) });
@@ -1304,6 +1309,7 @@ export class ChatPanel {
 
             // Load models and slash commands
             await this._loadModels(client);
+            await this._applyPreferredModel(client);
             await this._loadCommands(client);
             await this._loadStats(client);
 
@@ -1686,11 +1692,46 @@ export class ChatPanel {
         }
     }
 
+    /**
+     * Make a brand-new session use the model the user picked in the composer.
+     *
+     * pi's `set_model` is session-scoped, and a new session starts on the first
+     * entry of the model list, so without this the composer would announce one
+     * model while the session answered with another.
+     *
+     * Sessions that already ran are left alone: pi restores their model from the
+     * session log, and overriding it would silently rewrite what that
+     * conversation actually used. A fresh session is recognisable without asking
+     * pi anything — the session file only appears once the first entry is
+     * written, so its absence means nothing has run yet.
+     */
+    private async _applyPreferredModel(client: PiRpcClient): Promise<void> {
+        const file = this._runtime.sessionFile;
+        if (file && fs.existsSync(file)) { return; }
+        const preferred = preferredModel();
+        if (!preferred) { return; }
+        try {
+            const state = await client.getState();
+            if (state.model?.provider === preferred.provider && state.model?.id === preferred.id) { return; }
+            // The remembered model may not exist here (another workspace's provider set)
+            const available = await client.getAvailableModels();
+            if (!available.some((m) => m.provider === preferred.provider && m.id === preferred.id)) { return; }
+            logInfo(`new session: applying the preferred model ${preferred.provider}/${preferred.id}`);
+            await client.setModel(preferred.provider, preferred.id);
+            await this._loadModels(client);
+        } catch (err) {
+            // Not worth interrupting the session over: the composer keeps showing
+            // whatever the session actually uses
+            logError(`applying the preferred model failed: ${(err as Error).message}`);
+        }
+    }
+
     private async _handleSetModel(provider: string, modelId: string): Promise<void> {
         try {
             const client = this._clientManager.client;
             if (!client) { return; }
             await client.setModel(provider, modelId);
+            rememberModel(provider, modelId);
             this._post({ type: 'notice', text: vscode.l10n.t('Model switched: {0}', modelId) });
             await this._loadModels(client);
         } catch (err) {

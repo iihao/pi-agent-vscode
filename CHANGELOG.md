@@ -27,6 +27,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A new session now starts on the model the composer shows.** pi's `set_model`
+  applies to the running session only, and a brand-new session falls back to the
+  first entry of the model list — so picking a model and then hitting **New
+  chat** silently ran the new conversation on a different model than the
+  composer announced (pi does not persist the choice either, so it stayed wrong
+  across reloads). The composer's pick is remembered now and re-applied to fresh
+  sessions; a session that has already run keeps the model recorded in its own
+  log, since overriding that would rewrite what the conversation actually used.
 - **The first-run checklist no longer flashes when the view opens.** It was shown
   whenever `connected` / `authReady` were not both true — which also covers
   "still connecting" and "credentials not checked yet". On a healthy setup (the
