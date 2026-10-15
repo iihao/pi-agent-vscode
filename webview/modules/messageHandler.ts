@@ -61,7 +61,7 @@ function _handle(m: PostMessage): void {
                 // Legacy text-only replay (pi builds without the get_entries RPC)
                 settleBoot();
                 els.welcome.style.display = 'none';
-                m.messages.forEach(function (msg) { addMessage(msg.role, msg.text, false, undefined, msg.images as never, msg.attachments); });
+                m.messages.forEach(function (msg) { addMessage(msg.role, msg.text, false, undefined, msg.images, msg.attachments); });
                 const div = document.createElement('div');
                 div.className = 'history-divider';
                 div.textContent = S.historyDivider;
@@ -158,21 +158,21 @@ function _handle(m: PostMessage): void {
 
         case 'showHelp': {
             const lines = [
-                'Available commands:',
+                S.helpTitle,
                 '',
-                '/compact — Compact session (summarize older turns)',
-                '/clear — Clear the conversation',
-                '/new — Start a new session',
-                '/clone — Clone the current session',
-                '/model — Switch model',
-                '/thinking — Set thinking level',
-                '/permission — Set permission mode',
-                '/sessions — Switch session',
-                '/export — Export conversation as Markdown',
-                '/search — Search messages (Ctrl+F)',
-                '/help — Show this help',
+                S.helpCompact,
+                S.helpClear,
+                S.helpNew,
+                S.helpClone,
+                S.helpModel,
+                S.helpThinking,
+                S.helpPermission,
+                S.helpSessions,
+                S.helpExport,
+                S.helpSearch,
+                S.helpHelp,
                 '',
-                'Pi SDK commands (from /help in pi):',
+                S.helpSdk,
             ];
             if (ctx.slashCommands.length) {
                 ctx.slashCommands.forEach(function (c) {

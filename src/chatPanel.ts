@@ -1142,7 +1142,7 @@ export class ChatPanel {
                 } else if (message.action === 'connect') {
                     await this._connectProvider();
                 } else if (message.action === 'login') {
-                    const term = vscode.window.createTerminal('Pi login');
+                    const term = vscode.window.createTerminal(vscode.l10n.t('Pi login'));
                     term.show();
                     term.sendText('pi');
                     void vs.showInformationMessage(vscode.l10n.t('In pi, type /login to sign in with OAuth'));
@@ -2631,7 +2631,7 @@ export class ChatPanel {
         switch (action) {
             case 'install': {
                 await vs.clipboard.writeText(PI_INSTALL_HINT);
-                const term = vscode.window.createTerminal('Pi setup');
+                const term = vscode.window.createTerminal(vscode.l10n.t('Pi setup'));
                 term.show();
                 term.sendText(PI_INSTALL_HINT);
                 void vs.showInformationMessage(vscode.l10n.t('Install command copied — run it in the terminal, then Retry'));
@@ -2679,7 +2679,7 @@ export class ChatPanel {
         if (id === 'builtin') { await this._addBuiltinProvider(); }
         else if (id === 'custom') { await this._addCustomProvider(); }
         else if (id === 'oauth') {
-            const term = vscode.window.createTerminal('Pi login');
+            const term = vscode.window.createTerminal(vscode.l10n.t('Pi login'));
             term.show();
             term.sendText('pi');
             void vs.showInformationMessage(vscode.l10n.t('In pi, type /login to sign in with OAuth'));

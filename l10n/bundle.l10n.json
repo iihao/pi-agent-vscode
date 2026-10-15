@@ -255,5 +255,20 @@
   "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.": "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.",
   "Re-read the session list from disk": "Re-read the session list from disk",
   "Stop and reload": "Stop and reload",
-  "Permission mode: {0} (reloading session…)": "Permission mode: {0} (reloading session…)"
+  "Permission mode: {0} (reloading session…)": "Permission mode: {0} (reloading session…)",
+  "/clear — Clear the conversation": "/clear — Clear the conversation",
+  "/clone — Clone the current session": "/clone — Clone the current session",
+  "/compact — Compact session (summarize older turns)": "/compact — Compact session (summarize older turns)",
+  "/export — Export conversation as Markdown": "/export — Export conversation as Markdown",
+  "/help — Show this help": "/help — Show this help",
+  "/model — Switch model": "/model — Switch model",
+  "/new — Start a new session": "/new — Start a new session",
+  "/permission — Set permission mode": "/permission — Set permission mode",
+  "/search — Search messages (Ctrl+F)": "/search — Search messages (Ctrl+F)",
+  "/sessions — Switch session": "/sessions — Switch session",
+  "/thinking — Set thinking level": "/thinking — Set thinking level",
+  "Available commands:": "Available commands:",
+  "Pi SDK commands (from /help in pi):": "Pi SDK commands (from /help in pi):",
+  "Pi login": "Pi login",
+  "Pi setup": "Pi setup"
 }

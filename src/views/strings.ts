@@ -87,6 +87,20 @@ export interface UiStrings {
     exportHeader: string;
     exportTime: string;
     exportEmpty: string;
+    /** Composer help panel (`/help`), one line per command */
+    helpTitle: string;
+    helpCompact: string;
+    helpClear: string;
+    helpNew: string;
+    helpClone: string;
+    helpModel: string;
+    helpThinking: string;
+    helpPermission: string;
+    helpSessions: string;
+    helpExport: string;
+    helpSearch: string;
+    helpHelp: string;
+    helpSdk: string;
     remove: string;
     copyMsg: string;
     editMsg: string;
@@ -198,6 +212,19 @@ export function getUiStrings(): UiStrings {
         exportHeader: t('# Pi Agent Conversation'),
         exportTime: t('Exported: '),
         exportEmpty: t('No messages to export'),
+        helpTitle: t('Available commands:'),
+        helpCompact: t('/compact — Compact session (summarize older turns)'),
+        helpClear: t('/clear — Clear the conversation'),
+        helpNew: t('/new — Start a new session'),
+        helpClone: t('/clone — Clone the current session'),
+        helpModel: t('/model — Switch model'),
+        helpThinking: t('/thinking — Set thinking level'),
+        helpPermission: t('/permission — Set permission mode'),
+        helpSessions: t('/sessions — Switch session'),
+        helpExport: t('/export — Export conversation as Markdown'),
+        helpSearch: t('/search — Search messages (Ctrl+F)'),
+        helpHelp: t('/help — Show this help'),
+        helpSdk: t('Pi SDK commands (from /help in pi):'),
         remove: t('Remove'),
         copyMsg: t('Copy message'),
         editMsg: t('Reuse as a new message (Pi still sees the original)'),

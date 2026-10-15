@@ -255,5 +255,20 @@
   "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.": "Pi 正在工作。重新载入会中断当前这一轮；已写入会话文件的内容都会保留。",
   "Re-read the session list from disk": "从磁盘重新读取会话列表",
   "Stop and reload": "停止并重新载入",
-  "Permission mode: {0} (reloading session…)": "权限模式：{0}（重新载入会话中…）"
+  "Permission mode: {0} (reloading session…)": "权限模式：{0}（重新载入会话中…）",
+  "/clear — Clear the conversation": "/clear — 清空对话",
+  "/clone — Clone the current session": "/clone — 克隆当前会话",
+  "/compact — Compact session (summarize older turns)": "/compact — 压缩会话（摘要化较早的轮次）",
+  "/export — Export conversation as Markdown": "/export — 导出对话为 Markdown",
+  "/help — Show this help": "/help — 显示这条帮助",
+  "/model — Switch model": "/model — 切换模型",
+  "/new — Start a new session": "/new — 新建会话",
+  "/permission — Set permission mode": "/permission — 设置权限模式",
+  "/search — Search messages (Ctrl+F)": "/search — 搜索消息（Ctrl+F）",
+  "/sessions — Switch session": "/sessions — 切换会话",
+  "/thinking — Set thinking level": "/thinking — 设置思考级别",
+  "Available commands:": "可用命令：",
+  "Pi SDK commands (from /help in pi):": "Pi SDK 命令（来自 pi 的 /help）：",
+  "Pi login": "Pi 登录",
+  "Pi setup": "Pi 设置"
 }
