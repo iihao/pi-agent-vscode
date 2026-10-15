@@ -187,4 +187,65 @@ describe('panels sharing a runtime', () => {
             (vscodeMock.workspace as { openTextDocument: unknown }).openTextDocument = original;
         }
     });
+
+    it('still rolls a failed tool back when ownership moved between its start and its end', () => {
+        const { a, b, rt, evt } = makePair();
+        evt(a, {
+            type: 'tool_execution_start',
+            toolName: 'edit',
+            toolCallId: 't1',
+            args: { path: 'a.txt', edits: [{ oldText: 'x', newText: 'y' }] },
+        });
+        expect(rt.state.turnChanges).toHaveLength(1);
+
+        // The panel that recorded the change goes away while the tool is running
+        a.dispose();
+
+        evt(b, { type: 'tool_execution_end', toolName: 'edit', toolCallId: 't1', isError: true });
+
+        // A failed tool must not leave a change behind. With the bookkeeping kept
+        // panel-local the new owner could not find what to roll back, and "revert"
+        // would then offer to touch a file that was never changed.
+        expect(rt.state.turnChanges).toHaveLength(0);
+    });
+
+    it('tells every panel why the composer unlocked when a stop never settles', async () => {
+        vi.useFakeTimers();
+        const { webA, webB, a } = makePair();
+        const inner = a as unknown as { _runtime: ChatRuntime & { clientManager: unknown }; _busy: boolean };
+        inner._runtime.clientManager = {
+            client: { clearQueue: () => Promise.resolve({ steering: [], followUp: [] }) },
+            abort: () => Promise.resolve(),
+            onEvent: () => () => { /* noop */ },
+        };
+        inner._busy = true;
+        webA.emit({ type: 'abort' });
+        await vi.advanceTimersByTimeAsync(100);
+        await vi.advanceTimersByTimeAsync(31_000);
+
+        // Both windows were unlocked, so both must be told why — a composer that
+        // silently becomes writable again reads as a bug
+        const said = (web: typeof webA) => web.posted.filter((m) => m.type === 'notice').map((m) => String(m.text));
+        expect(said(webA).some((t) => t.includes('did not settle'))).toBe(true);
+        expect(said(webB).some((t) => t.includes('did not settle'))).toBe(true);
+    });
+
+    it('keeps the recovery fallback while a panel is left to unlock, and drops it with the last one', () => {
+        vi.useFakeTimers();
+        const { a, b, rt } = makePair();
+        const armed = () => rt.abortRecovery !== undefined;
+        const arm = (p: ChatPanel) => (p as unknown as { _armAbortRecovery(): void })._armAbortRecovery();
+
+        arm(a);
+        expect(armed()).toBe(true);
+
+        // b is still bound to the session and still needs the fallback, so the
+        // timer outlives the panel that armed it
+        a.dispose();
+        expect(armed()).toBe(true);
+
+        // Nobody is left to unlock: no timer may outlive the session
+        b.dispose();
+        expect(armed()).toBe(false);
+    });
 });

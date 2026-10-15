@@ -86,8 +86,14 @@ export class ChatPanel {
     private _fileListAt = 0;
     /** Last user message sent (for the error bubble's "Retry") */
     private _lastUserMessage: { text: string; images?: ImageAttachment[] } | undefined;
-    /** Tool call -> change state before this record (rolled back when the tool fails) */
-    private readonly _pendingTrack = new Map<string, { rel: string; prev: TurnChange | undefined }>();
+    /**
+     * Tool call -> the change record as it was before that call, so a failed tool can
+     * roll its record back. Runtime-scoped (see `ChatRuntime.pendingToolTracks`): the
+     * records it guards are shared, and the panel that writes them can change mid-tool.
+     */
+    private get _pendingTrack(): Map<string, { rel: string; prev: TurnChange | undefined }> {
+        return this._runtime.pendingToolTracks;
+    }
     /** Whether the last connect failed because pi is not installed (for the setup checklist) */
     private _piMissing = false;
     /** Credential status of the current provider (from `pi auth check`) */
@@ -1778,23 +1784,32 @@ export class ChatPanel {
     }
 
     /** Fallback for a stop whose agent_settled never arrives (see `_abortIfBusy`) */
+    /**
+     * Abort-recovery fallback (see `_abortIfBusy`).
+     *
+     * There is deliberately no timeout on how long a turn may run: a long turn is
+     * normal (a big refactor, a slow model, a build the agent is polling), and cutting
+     * the UI loose while pi is still working lets the user send into a running turn.
+     * Recovery is explicit instead — **Stop** aborts and force-unlocks after 30s, and
+     * **Reload Session** replaces the process.
+     */
     private _armAbortRecovery(): void {
         this._clearBusyTimeout();
-        this._busyTimeout = setTimeout(() => {
-            this._busyTimeout = undefined;
-            if (this._busy) {
-                logError('Abort recovery timeout reached; force resetting busy state');
-                this._busy = false;
-                // busy is runtime-level: every panel of this session is still
-                // showing a running turn and must be unlocked, not just this one
-                for (const panel of this._runtime.panels) {
-                    panel._post({ type: 'toolSettle' });
-                    panel._post({ type: 'setBusy', busy: false });
-                }
-                // Unlocking is a recovery step, not a failure of the turn the user stopped
-                this._post({ type: 'notice', text: vscode.l10n.t('Pi turn was aborted and did not settle within {0} seconds; you can send a new message', ChatPanel.ABORT_RECOVERY_MS / 1000) });
+        const timer = setTimeout(() => {
+            this._runtime.abortRecovery = undefined;
+            if (!this._busy) { return; }
+            logError('Abort recovery timeout reached; force resetting busy state');
+            this._busy = false;
+            // busy is runtime-level: every panel of this session is still showing a
+            // running turn and must be unlocked — not just the one that stopped it —
+            // and each of them needs to know why its composer became writable again
+            for (const panel of this._runtime.panels) {
+                panel._post({ type: 'toolSettle' });
+                panel._post({ type: 'setBusy', busy: false });
+                panel._post({ type: 'notice', text: vscode.l10n.t('Pi turn was aborted and did not settle within {0} seconds; you can send a new message', ChatPanel.ABORT_RECOVERY_MS / 1000) });
             }
         }, ChatPanel.ABORT_RECOVERY_MS);
+        this._runtime.abortRecovery = { cancel: () => clearTimeout(timer) };
     }
 
     /**
@@ -2352,21 +2367,12 @@ export class ChatPanel {
 
     // ---------- User messages ----------
 
-    /**
-     * Timer for the abort-recovery fallback (see `_abortIfBusy`). There is
-     * deliberately no timeout on how long a turn may run: a long turn is normal
-     * (a big refactor, a slow model, a build the agent is polling), and cutting
-     * the UI loose while pi is still working lets the user send into a running
-     * turn. Recovery is explicit instead — **Stop** aborts and force-unlocks
-     * after 30s, and **Reload Session** replaces the process.
-     */
-    private _busyTimeout: NodeJS.Timeout | undefined;
-
+    /** Drop the pending abort-recovery fallback, if any (turn settled, replaced, or no panel left) */
     private _clearBusyTimeout(): void {
-        if (this._busyTimeout) {
-            clearTimeout(this._busyTimeout);
-            this._busyTimeout = undefined;
-        }
+        // The handle is runtime-scoped so any panel of the session can drop it,
+        // whoever armed it (see ChatRuntime.abortRecovery)
+        this._runtime.abortRecovery?.cancel();
+        this._runtime.abortRecovery = undefined;
     }
 
     /**
@@ -2960,6 +2966,11 @@ export class ChatPanel {
         this._runtimeUnsub?.();
         this._runtimeUnsub = undefined;
         this._runtime.panels.delete(this);
+        // The abort-recovery timer unlocks every panel of the session, so it must
+        // survive this panel as long as one is left to unlock; only the last panel
+        // out drops it. (Rebinding to another session clears it in `_bindRuntime`,
+        // where the callback's runtime would otherwise be the wrong one.)
+        if (this._runtime.panels.size === 0) { this._clearBusyTimeout(); }
         void ChatPanel._registry.release(this._runtime);
         ChatPanel._instances = ChatPanel._instances.filter((p) => p !== this);
         if (ChatPanel.currentView === this) {

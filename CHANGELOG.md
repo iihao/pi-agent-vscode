@@ -7,26 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.1.5] - 2026-10-15
-
-### Changed
-
-- **The empty state no longer flashes when the view opens.** Starting pi and
-  reading the transcript from disk takes about a second, and the view used to
-  spend it showing the full welcome screen — logo, quick actions and shortcut
-  hints — which a session with history then replaced. It now shows just the logo
-  and title for that moment, in the place they end up (the space is reserved, so
-  nothing reflows); an empty session simply reveals the extras once it is known
-  to be empty.
-- **`Pi: Restart Session` is now `Pi: Reload Session`** (⟳ icon). "Restart" read
-  as "re-open / wipe this conversation" — which is what `/clear` and **New chat**
-  do — while this command replaces this session's pi process and rebuilds its
-  transcript from the session file. The session list also gained its own ⟳ that
-  re-reads the session directory from disk, for when another pi process created,
-  renamed or appended sessions.
-
 ### Fixed
 
+- **A failed tool is still rolled back when the panel that recorded it goes away
+  mid-tool.** With one session open in two panels (the sidebar and an editor tab),
+  only the first panel records turn changes into the runtime — but the bookkeeping
+  that undoes a failed tool's record was kept per panel, so closing that panel
+  between a tool's start and its end left a phantom "changed file" that
+  **Revert** would then have touched. The bookkeeping now lives with the shared
+  turn state it guards, like the revert snapshot already did.
+- **A stop whose turn never settles is explained to every panel.** The 30-second
+  fallback unlocked every panel of the session but told only the one that pressed
+  Stop, so the other panels' composers became writable with no explanation.
+- **The abort-recovery fallback belongs to the session now, not to a panel.** It
+  was held (and could only be cleared) by the panel that armed it, so it could
+  neither be dropped by the panel that outlived it nor guaranteed to go away with
+  the last one; it is now cancelled by the first `agent_settled` or by the last
+  panel leaving.
 - **A failed transcript replay no longer leaves the empty state half-drawn.** If
   reading the session log back threw, no transcript state was posted, and the
   webview stays in its boot state until one arrives — so the empty state showed
@@ -64,6 +61,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   across reloads). The composer's pick is remembered now and re-applied to fresh
   sessions; a session that has already run keeps the model recorded in its own
   log, since overriding that would rewrite what the conversation actually used.
+
+## [0.1.5] - 2026-10-15
+
+### Changed
+
+- **The empty state no longer flashes when the view opens.** Starting pi and
+  reading the transcript from disk takes about a second, and the view used to
+  spend it showing the full welcome screen — logo, quick actions and shortcut
+  hints — which a session with history then replaced. It now shows just the logo
+  and title for that moment, in the place they end up (the space is reserved, so
+  nothing reflows); an empty session simply reveals the extras once it is known
+  to be empty.
+- **`Pi: Restart Session` is now `Pi: Reload Session`** (⟳ icon). "Restart" read
+  as "re-open / wipe this conversation" — which is what `/clear` and **New chat**
+  do — while this command replaces this session's pi process and rebuilds its
+  transcript from the session file. The session list also gained its own ⟳ that
+  re-reads the session directory from disk, for when another pi process created,
+  renamed or appended sessions.
+
+### Fixed
+
 - **The first-run checklist no longer flashes when the view opens.** It was shown
   whenever `connected` / `authReady` were not both true — which also covers
   "still connecting" and "credentials not checked yet". On a healthy setup (the

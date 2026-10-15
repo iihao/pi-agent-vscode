@@ -13,7 +13,7 @@
 
 import { PiClientManager, PiStartOptions } from '../sdk/clientManager';
 import { SessionManager } from '../sdk/sessionManager';
-import { ChatState, getInitialState } from '../state/types';
+import { ChatState, TurnChange, getInitialState } from '../state/types';
 import { logError } from '../utils/logger';
 import type { ChatPanel } from '../chatPanel';
 
@@ -54,6 +54,29 @@ export class ChatRuntime {
 
     /** Per-turn revert snapshot (undo of a revert), isolated per session */
     readonly revertSnapshot = new Map<string, { content: string | null; existed: boolean }>();
+
+    /**
+     * Tool call -> the change record as it was before that call, so a failed tool
+     * can roll its record back.
+     *
+     * Lives on the runtime, like `revertSnapshot`: the records it guards
+     * (`state.turnChanges`) are shared, and only one panel records them. Keeping
+     * the bookkeeping panel-local meant that if that panel went away between a
+     * tool's start and its end, the surviving panel could not roll the record
+     * back and a phantom "changed file" stayed revertible.
+     */
+    readonly pendingToolTracks = new Map<string, { rel: string; prev: TurnChange | undefined }>();
+
+    /**
+     * Pending abort-recovery fallback: armed by whichever panel stops a turn, and
+     * cancelled by the first `agent_settled` or by any panel that needs to drop it
+     * (the last one leaving).
+     *
+     * It belongs to the session, not to a panel: what it does is unlock every panel
+     * of the session, so a panel-local copy could neither be cleared from the panel
+     * that outlives it nor safely outlive the session.
+     */
+    abortRecovery: { cancel(): void } | undefined;
 
     /**
      * End a running turn before the pi process is replaced: ask pi to abort, then
