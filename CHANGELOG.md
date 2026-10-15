@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **The first-run checklist no longer flashes when the view opens.** It was shown
+  whenever `connected` / `authReady` were not both true — which also covers
+  "still connecting" and "credentials not checked yet". On a healthy setup (the
+  common case) the first screen therefore showed its "connecting / checking"
+  rows and removed them again a moment later, on every single open. It is now
+  shown only when something is actually wrong *and* the user can act on it:
+  workspace not trusted, pi missing, a connection attempt that failed, or a
+  provider known to have no credentials. In-progress states stay hidden and are
+  left to the header's connection dot. Re-rendering identical markup is skipped
+  as well, so a button the user is already reaching for is not replaced under
+  the cursor.
 - **Starting a new session no longer carries over the previous one's tool
   boxes.** `clear` removed a fixed list of element classes and missed the
   tool-group wrapper, so a collapsed "Bash, Read …" box from the previous

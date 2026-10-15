@@ -4,12 +4,16 @@
 
 import type { WebviewContext, PermissionOption, SetupStatus, SessionInfo } from '../types';
 import { escapeHtml, escapeAttr, formatTokens, sessionDisplayName } from '../utils';
+import { needsSetupAttention } from './setupStatus';
 
 let ctx: WebviewContext;
 
 export function initPanels(c: WebviewContext): void {
     ctx = c;
 }
+
+/** Last checklist markup, so an unchanged status doesn't repaint the block */
+let renderedSetupHtml = '';
 
 function permissionOptions(): PermissionOption[] {
     const S = ctx.S;
@@ -218,9 +222,11 @@ export function updateConnectionStatus(status: string): void {
 export function renderSetup(status: SetupStatus | undefined): void {
     const S = ctx.S;
     const el = ctx.els.welcomeSetup;
-    if (!status || (status.connected && status.authReady === true)) {
+    // Hidden unless the user can actually do something about it (see setupStatus.ts)
+    if (!status || !needsSetupAttention(status)) {
         el.classList.add('hidden');
         el.innerHTML = '';
+        renderedSetupHtml = '';
         return;
     }
     el.classList.remove('hidden');
@@ -254,6 +260,10 @@ export function renderSetup(status: SetupStatus | undefined): void {
         '<button type="button" class="setup-manage" data-action="manage">' + escapeHtml(S.setupManage) + '</button>' +
         '<button type="button" class="setup-logs" data-action="logs">' + escapeHtml(S.setupLogs) + '</button>' +
         '</div>';
+    // Re-rendering identical markup would drop the hover/focus of a button the
+    // user is already reaching for, and repaint the block for nothing
+    if (html === renderedSetupHtml) { return; }
+    renderedSetupHtml = html;
     el.innerHTML = html;
 }
 
