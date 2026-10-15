@@ -76,6 +76,10 @@ export interface UiStrings {
     modeQueue: string;
     modeSteer: string;
     historyDivider: string;
+    /** Transcript replay: a checkpoint left by pi's auto-compaction */
+    compactedHere: string;
+    /** Transcript replay: how many older items were left out */
+    historyTrimmed: string;
     exportHeader: string;
     exportTime: string;
     exportEmpty: string;
@@ -183,6 +187,8 @@ export function getUiStrings(): UiStrings {
         modeQueue: t('Queue'),
         modeSteer: t('Steer'),
         historyDivider: t('History above'),
+        compactedHere: t('Context compacted here'),
+        historyTrimmed: t('Earlier transcript not shown ({0} items) — the full history stays in the session file'),
         exportHeader: t('# Pi Agent Conversation'),
         exportTime: t('Exported: '),
         exportEmpty: t('No messages to export'),

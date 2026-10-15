@@ -31,6 +31,33 @@ export interface SetupStatus {
     provider?: string;
 }
 
+/**
+ * One renderable transcript item, replayed after a reconnect or session switch.
+ * The shapes mirror the live events (addUserMessage / thinking / toolCall /
+ * toolEnd ...) so the webview can reuse the very same renderers and a restored
+ * transcript looks identical to the one that was streamed.
+ */
+export interface HistoryItem {
+    kind: 'user' | 'assistant' | 'thinking' | 'tool' | 'toolResult' | 'compaction' | 'notice';
+    text?: string;
+    /** tool / toolResult: tool name */
+    tool?: string;
+    toolCallId?: string;
+    /** Tool card title (one-line summary of the arguments) */
+    detail?: string;
+    /** Full tool arguments (tool card body) */
+    args?: string;
+    isError?: boolean;
+    durationMs?: number;
+    diff?: string;
+    output?: string;
+    truncated?: boolean;
+    fullOutputPath?: string;
+    /** user: attached files / images carried by the message */
+    images?: PiImageBlock[];
+    attachments?: ContextAttachment[];
+}
+
 // ---- extension host -> webview ----
 
 export interface PostMessage {
@@ -43,6 +70,10 @@ export interface PostMessage {
     /** First-run setup */
     setup?: SetupStatus;
     messages?: Array<{ role: string; text: string; images?: PiImageBlock[]; attachments?: ContextAttachment[] }>;
+    /** Full-fidelity transcript replay (used instead of `messages` when available) */
+    items?: HistoryItem[];
+    /** How many earlier items were left out of `items` (kept in the session file) */
+    hidden?: number;
     models?: Array<{ provider: string; id: string }>;
     current?: { provider: string; id: string } | string | null;
     levels?: string[];

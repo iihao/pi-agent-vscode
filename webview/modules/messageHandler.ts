@@ -2,7 +2,7 @@
 // window message routing (extension host -> webview)
 // ---------------------------------------------------------------------------
 
-import type { WebviewContext, PostMessage } from '../types';
+import type { WebviewContext, PostMessage, HistoryItem } from '../types';
 import { scrollToBottom, getMessageText } from '../utils';
 import { renderMermaid } from '../markdown';
 import {
@@ -22,6 +22,7 @@ import { renderRail } from './navigator';
 import { autoResizeInput, editMessage } from './inputHandling';
 import { renderImages } from './imagePaste';
 import { updateContextUsage, resetContextUsage } from './contextUsage';
+import { renderHistory } from './historyRenderer';
 
 let ctx: WebviewContext;
 
@@ -50,7 +51,10 @@ function _handle(m: PostMessage): void {
             break;
 
         case 'history':
-            if (m.messages && m.messages.length) {
+            if (m.items && m.items.length) {
+                renderHistory(m.items as HistoryItem[], m.hidden);
+            } else if (m.messages && m.messages.length) {
+                // Legacy text-only replay (pi builds without the get_entries RPC)
                 els.welcome.style.display = 'none';
                 m.messages.forEach(function (msg) { addMessage(msg.role, msg.text, false, undefined, msg.images as never, msg.attachments); });
                 const div = document.createElement('div');

@@ -18,6 +18,7 @@ import { initInputHandling } from './modules/inputHandling';
 import { initEventBindings } from './modules/eventBindings';
 import { initMessageHandler } from './modules/messageHandler';
 import { initContextUsage } from './modules/contextUsage';
+import { initHistoryRenderer } from './modules/historyRenderer';
 
 const ctx = createContext();
 
@@ -35,6 +36,7 @@ initInputHandling(ctx);
 initEventBindings(ctx);
 initMessageHandler(ctx);
 initContextUsage(ctx);
+initHistoryRenderer(ctx);
 
 // Initial render
 scrollToBottom(ctx.els.chat);

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Reloading a session no longer throws away most of the transcript.** The
+  reload path rebuilt the chat from `get_messages`, which returns the *model
+  context*: everything before the last compaction was already summarized away,
+  no tool call, tool result, diff or thinking block was in it, and only the last
+  30 text messages were kept. It now replays pi's own session log
+  (`get_entries`) instead, following the current branch through `parentId` so
+  abandoned forks stay hidden. Tool cards come back with their output, duration,
+  error state, diff and truncation note, thinking blocks come back collapsed,
+  user messages keep their attachments, and a compaction checkpoint is shown as
+  a foldable marker rather than silently dropping the summarized range. The
+  replay is capped at the most recent 4000 items, cut at a turn boundary (a tool
+  result never loses its tool call), and anything left out is reported instead
+  of vanishing. Older pi builds without `get_entries` fall back to
+  `get_messages`, which no longer drops everything but the last 30 messages.
+- **A reconnect during a running turn no longer wipes or duplicates the
+  transcript.** `_ensureClient` decided whether to clear the webview from the
+  runtime's busy flag, which is shared by every panel on the same session — so a
+  panel switched to a session another panel was running mid-turn could end up
+  cleared with nothing replayed, while a panel reconnecting mid-turn appended a
+  second copy of the history. Clearing and replaying now go together, driven by
+  whether *that* webview holds the runtime's transcript.
+
 ## [0.1.4] - 2026-10-14
 
 ### Added

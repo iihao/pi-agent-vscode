@@ -268,5 +268,7 @@
   "Update API key": "Update API key",
   "not ready": "not ready",
   "ready": "ready",
-  "Pi is working — Enter sends, ■ stops": "Pi is working — Enter sends, ■ stops"
+  "Pi is working — Enter sends, ■ stops": "Pi is working — Enter sends, ■ stops",
+  "Context compacted here": "Context compacted here",
+  "Earlier transcript not shown ({0} items) — the full history stays in the session file": "Earlier transcript not shown ({0} items) — the full history stays in the session file"
 }

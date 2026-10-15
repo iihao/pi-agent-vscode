@@ -249,7 +249,7 @@ export interface VSCodeAPI {
 // ---- Message types ----
 
 // ---- Re-export the message protocol from the shared contract ----
-export type { PostMessage, WebviewMessage, SetupStatus, ContextAttachment } from '../src/chatPanel/sharedTypes';
+export type { PostMessage, WebviewMessage, SetupStatus, ContextAttachment, HistoryItem } from '../src/chatPanel/sharedTypes';
 
 // ---- Shared context ----
 

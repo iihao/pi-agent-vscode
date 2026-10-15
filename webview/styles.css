@@ -1060,6 +1060,39 @@
         background: var(--cx-border);
     }
 
+    /* ---------- Compaction checkpoint (transcript replay) ---------- */
+    .compaction-marker {
+        margin: 14px 0;
+        border: 1px dashed var(--cx-border);
+        border-radius: 6px;
+        overflow: hidden;
+    }
+    .compaction-marker-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 10px;
+        font-family: var(--cx-mono);
+        font-size: 10px;
+        letter-spacing: .4px;
+        color: var(--cx-muted);
+        cursor: pointer;
+        user-select: none;
+    }
+    .compaction-marker-head.plain { cursor: default; }
+    .compaction-marker .chevron { transition: transform .15s ease; }
+    .compaction-marker.collapsed .chevron { transform: rotate(-90deg); }
+    .compaction-marker.collapsed .compaction-marker-summary { display: none; }
+    .compaction-marker-summary {
+        padding: 0 10px 10px;
+        font-size: 12px;
+        line-height: 1.6;
+        color: var(--vscode-descriptionForeground, var(--cx-muted));
+        white-space: pre-wrap;
+        max-height: 260px;
+        overflow-y: auto;
+    }
+
     .highlight { background: var(--vscode-findMatchHighlightBackground, rgba(255, 214, 0, .3)); border-radius: 3px; }
 
     /* ---------- Composer ---------- */

@@ -249,6 +249,8 @@ export interface PiRawMessage {
     isError?: boolean;
     /** toolResult: duration */
     durationMs?: number;
+    /** toolResult: tool details (diff / patch / truncation) as persisted in the session log */
+    details?: PiToolResultDetails;
 }
 
 /** A tool-call block inside an assistant message */
@@ -266,6 +268,26 @@ export interface PiToolResultMessage {
     durationMs?: number;
     content?: PiToolResultBlock[] | string;
     details?: PiToolResultDetails;
+}
+
+/**
+ * One entry of pi's persisted session log (`sessions/<cwd>/<id>.jsonl`), as
+ * returned by the `get_entries` RPC. Entries form a tree via `parentId`, so the
+ * transcript of the current branch is the chain from `leafId` back to the root.
+ * Unlike `get_messages` (the compaction-aware model context) this keeps every
+ * tool call, tool result and thinking block ever produced.
+ */
+export interface PiSessionEntry {
+    id?: string;
+    parentId?: string;
+    /** 'session' | 'message' | 'session_info' | 'model_change' | 'thinking_level_change' | 'context_edit' | 'compaction' */
+    type?: string;
+    timestamp?: string;
+    message?: PiRawMessage;
+    /** compaction: the summary that replaced the summarized range */
+    summary?: string;
+    tokensBefore?: number;
+    firstKeptEntryId?: string;
 }
 
 export interface PiRpcClient {
@@ -295,6 +317,12 @@ export interface PiRpcClient {
     setSessionName(name: string): Promise<void>;
     getState(): Promise<PiSessionState>;
     getMessages(): Promise<PiRawMessage[]>;
+    /**
+     * The full session log in append order (pi >= 1.1). Preferred over
+     * `getMessages()` when restoring a transcript: `getMessages()` returns the
+     * model context, which loses everything before the last compaction.
+     */
+    getEntries?(since?: string): Promise<{ entries: PiSessionEntry[]; leafId?: string }>;
     getAvailableModels(): Promise<PiModelInfo[]>;
     /** Available slash commands / prompt templates / skills */
     getCommands?(): Promise<PiSlashCommand[]>;

@@ -12,14 +12,14 @@ import { PiClientManager, PiStartError, PiNotFoundError } from './sdk/clientMana
 import { SessionManager } from './sdk/sessionManager';
 import { summarizeToolArgs, formatToolArgs, formatUsage, validateMessage, extractToolOutput } from './utils/formatters';
 import { buildContextBlock, stripContextBlock, parseContextRefs, ContextItem, ContextRef, AUTO_CONTEXT_ID } from './utils/context';
-import { PI_INSTALL_HINT, extractMessageText, extractMessageImages, PiAgentEvent, PiRawMessage, PiImageBlock, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, PiUsage, respondExtensionUI } from './sdk/piTypes';
+import { PI_INSTALL_HINT, extractMessageText, extractMessageImages, PiAgentEvent, PiRawMessage, PiRpcClient, PiModelInfo, PiSessionStats, PiSlashCommand, PiUsage, PiSessionEntry, PiToolResultBlock, respondExtensionUI } from './sdk/piTypes';
 import { selectBusy, selectContexts, selectLastUsage, selectPermissionMode, selectTurnChanges, selectPendingNewSession } from './state';
 import { TurnChange, ChatState } from './state/types';
 import { ChatRuntime, ChatRuntimeRegistry } from './chatPanel/runtime';
 import { logInfo, logError, showLogs } from './utils/logger';
 import { getRecentFiles, addRecentFile } from './utils/recentFiles';
 import { getVSCodeService } from './services';
-import { WebviewMessage, PostMessage, ImageAttachment } from './chatPanel/types';
+import { WebviewMessage, PostMessage, ImageAttachment, HistoryItem } from './chatPanel/types';
 import { getGitAPI, pickGitRepository } from './chatPanel/git';
 import { buildCommitPrompt, buildPrPrompt, buildNamePrompt } from './chatPanel/prompts';
 import { parseEdits, isRevertible, revertEdits, editsToDiff, lineDiff } from './chatPanel/turnChanges';
@@ -28,6 +28,13 @@ import { KNOWN_PROVIDERS, providerLabel } from './chatPanel/providers';
 
 /** All VS Code access goes through the service container (easier to test and swap) */
 const vs = getVSCodeService();
+
+/**
+ * Cap on replayed transcript items. A very long session would otherwise create
+ * tens of thousands of DOM nodes on every reconnect; the full log always stays
+ * on disk, and anything dropped is reported to the user instead of vanishing.
+ */
+const HISTORY_MAX_ITEMS = 4000;
 
 /** Whether an error is a "pi process / connection" problem (checked by type/code, not localized text) */
 function isProcessError(err: unknown): boolean {
@@ -95,6 +102,21 @@ export class ChatPanel {
 
     private get _busy(): boolean { return selectBusy(this._runtime.state); }
     private set _busy(v: boolean) { this._patch({ busy: v }); }
+
+    /**
+     * Whether this webview currently holds transcript content for the bound
+     * runtime. Session state is shared between panels, so "is a turn running"
+     * cannot answer it: one panel may be mid-turn while another (just opened,
+     * or switched to a session it has never rendered) has an empty webview.
+     * Cleared whenever the transcript is wiped, set when content is rendered.
+     */
+    private _webviewSynced = false;
+
+    /** Wipe the transcript and record that the webview no longer has content */
+    private _clearTranscript(): void {
+        this._webviewSynced = false;
+        this._post({ type: 'clear' });
+    }
 
     // The render ledger must be panel-private: the sidebar and the editor tab are
     // separate webviews, and sharing "what was already rendered" makes the second
@@ -286,7 +308,7 @@ export class ChatPanel {
         this._contextWarned = false;
         this._runtime.firstUserMessage = undefined;
         this._resetTurnChanges();
-        this._post({ type: 'clear' });
+        this._clearTranscript();
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
         const client = this._clientManager.client;
@@ -312,7 +334,7 @@ export class ChatPanel {
         this._turnHadText = false;
         this._contexts = this._contexts.filter((c) => c.auto);
         this._resetTurnChanges();
-        this._post({ type: 'clear' });
+        this._clearTranscript();
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
         await this._ensureClient();
@@ -609,7 +631,7 @@ export class ChatPanel {
             const res = await client.clone();
             if (res.cancelled) { return; }
             await this._sessionManager.loadSessions(client);
-            this._post({ type: 'clear' });
+            this._clearTranscript();
             this._busy = false;
             this._turnHadText = false;
             this._runtime.firstUserMessage = undefined;
@@ -1168,11 +1190,13 @@ export class ChatPanel {
         this._postSetupStatus();
         // If a turn is streaming (e.g. the user sent a message before the editor
         // panel's ready arrived), do not clear the webview or the rendering is wiped.
-        if (!this._busy) {
-            // Clear the existing chat so history isn't appended twice on reconnect
-            this._post({ type: 'clear' });
+        // A replay into content that is already there would duplicate it, so the
+        // clear and the replay always go together.
+        if (this._webviewSynced) {
+            logInfo('_ensureClient: keeping the existing transcript');
         } else {
-            logInfo('_ensureClient: skipping clear (turn in progress)');
+            // Clear so the replayed history isn't appended to anything
+            this._clearTranscript();
         }
         try {
             const client = await this._clientManager.ensureConnected(this._extensionPath, this._runtime.startOptions);
@@ -1201,8 +1225,8 @@ export class ChatPanel {
                 }
             }
 
-            // Restore history
-            await this._restoreHistory(client);
+            // Restore history (into the webview we just cleared)
+            if (!this._webviewSynced) { await this._restoreHistory(client); }
 
             // Announce a successful connection
             let folderName = vs.workspaceFolders?.[0]?.name;
@@ -1246,29 +1270,161 @@ export class ChatPanel {
         }
     }
 
+    /**
+     * Replay the current session's transcript into a webview that was just cleared.
+     *
+     * Prefers pi's own session log (`get_entries`) over `get_messages()`: the
+     * latter returns the *model context*, so everything before the last
+     * compaction is already gone and no tool call, tool result, diff or thinking
+     * block is in it. Replaying the log keeps a reloaded panel looking like the
+     * one that was streamed.
+     */
     private async _restoreHistory(client: PiRpcClient): Promise<void> {
         try {
-            const messages = await client.getMessages();
-            const items: Array<{ role: string; text: string; images?: PiImageBlock[]; attachments?: Array<{ type: string; path: string; lineRange?: string }> }> = [];
-            for (const m of messages) {
-                const text = extractMessageText(m);
+            const items = await this._historyItems(client);
+            if (!items.length) { return; }
+            const capped = this._capHistory(items);
+            this._post({ type: 'history', items: capped.items, hidden: capped.hidden });
+        } catch (err) {
+            logError(`_restoreHistory failed: ${(err as Error).message}`);
+        } finally {
+            // Either way the webview now reflects this runtime, so a later
+            // reconnect must not replay on top of it.
+            this._webviewSynced = true;
+        }
+    }
+
+    /** Build the transcript to replay, preferring pi's full session log */
+    private async _historyItems(client: PiRpcClient): Promise<HistoryItem[]> {
+        const getEntries = client.getEntries;
+        if (typeof getEntries !== 'function') {
+            logInfo('get_entries is unavailable (older pi build): replaying get_messages instead');
+            return this._historyFromMessages(client);
+        }
+        let entries: PiSessionEntry[] | undefined;
+        let leafId: string | undefined;
+        try {
+            ({ entries, leafId } = await getEntries.call(client));
+        } catch (err) {
+            // Never leave the panel empty just because the log could not be read
+            logError(`get_entries failed, falling back to get_messages: ${(err as Error).message}`);
+            return this._historyFromMessages(client);
+        }
+        if (!Array.isArray(entries) || !entries.length) { return this._historyFromMessages(client); }
+        const items: HistoryItem[] = [];
+        for (const entry of this._branchEntries(entries, leafId)) {
+            if (entry.type === 'compaction') {
+                // Keep the checkpoint visible instead of silently dropping the summarized range
+                items.push({ kind: 'compaction', text: entry.summary });
+                continue;
+            }
+            if (entry.type !== 'message' || !entry.message) { continue; }
+            const m = entry.message;
+
+            if (m.role === 'user') {
+                const text = extractMessageText(m) || '';
                 const images = extractMessageImages(m);
-                // History user messages carry a context block: strip it for display and parse attachments to echo
+                if (!text && !images.length) { continue; }
+                // History user messages carry a context block: strip it for display and echo the refs instead
                 const refs = text ? parseContextRefs(text) : [];
-                if (text || images.length) {
-                    items.push({
-                        role: m.role ?? 'assistant',
-                        text: text ? stripContextBlock(text) : '',
-                        images: images.length ? images : undefined,
-                        attachments: refs.length ? refs.map((r) => ({ type: r.type, path: r.path, lineRange: r.lineRange })) : undefined,
-                    });
+                items.push({
+                    kind: 'user',
+                    text: text ? stripContextBlock(text) : '',
+                    images: images.length ? images : undefined,
+                    attachments: refs.length ? refs.map((r) => ({ type: r.type, path: r.path, lineRange: r.lineRange })) : undefined,
+                });
+                continue;
+            }
+
+            if (m.role === 'assistant') {
+                if (!Array.isArray(m.content)) { continue; }
+                for (const raw of m.content) {
+                    const block = raw as { type?: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: unknown };
+                    if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim()) {
+                        items.push({ kind: 'thinking', text: block.thinking });
+                    } else if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
+                        items.push({ kind: 'assistant', text: block.text });
+                    } else if (block.type === 'toolCall') {
+                        items.push({
+                            kind: 'tool',
+                            tool: block.name ?? 'tool',
+                            toolCallId: block.id,
+                            detail: summarizeToolArgs(block.arguments) || undefined,
+                            args: formatToolArgs(block.arguments) || undefined,
+                        });
+                    }
                 }
+                continue;
             }
-            const recent = items.slice(-30);
-            if (recent.length > 0) {
-                this._post({ type: 'history', messages: recent });
+
+            if (m.role === 'toolResult') {
+                items.push({
+                    kind: 'toolResult',
+                    toolCallId: m.toolCallId,
+                    tool: m.toolName,
+                    isError: Boolean(m.isError),
+                    durationMs: m.durationMs,
+                    diff: m.details?.diff,
+                    output: extractToolOutput({ content: m.content as PiToolResultBlock[] | string | undefined, details: m.details }) || undefined,
+                    truncated: Boolean(m.details?.truncation?.truncated),
+                    fullOutputPath: m.details?.fullOutputPath,
+                });
             }
-        } catch (err) { logError(`_restoreHistory failed: ${(err as Error).message}`); }
+        }
+        return items;
+    }
+
+    /**
+     * The current branch: follow `parentId` from the leaf back to the root.
+     * Entries form a tree (fork / clone / context edits), so replaying the raw
+     * file order would also show branches the user has since left.
+     */
+    private _branchEntries(entries: PiSessionEntry[], leafId?: string): PiSessionEntry[] {
+        const byId = new Map<string, PiSessionEntry>();
+        for (const e of entries) { if (e.id) { byId.set(e.id, e); } }
+        let cursor: PiSessionEntry | undefined = (leafId ? byId.get(leafId) : undefined) ?? entries[entries.length - 1];
+        const path: PiSessionEntry[] = [];
+        const seen = new Set<string>();
+        while (cursor) {
+            if (cursor.id) {
+                if (seen.has(cursor.id)) { break; }   // corrupt / cyclic log: stop instead of looping forever
+                seen.add(cursor.id);
+            }
+            path.push(cursor);
+            cursor = cursor.parentId ? byId.get(cursor.parentId) : undefined;
+        }
+        return path.reverse();
+    }
+
+    /** Fallback for pi builds without `get_entries` (text bubbles only) */
+    private async _historyFromMessages(client: PiRpcClient): Promise<HistoryItem[]> {
+        const messages = await client.getMessages();
+        const items: HistoryItem[] = [];
+        for (const m of messages) {
+            const text = extractMessageText(m);
+            const images = extractMessageImages(m);
+            if (!text && !images.length) { continue; }
+            const refs = text ? parseContextRefs(text) : [];
+            items.push({
+                kind: m.role === 'user' ? 'user' : 'assistant',
+                text: text ? stripContextBlock(text) : '',
+                images: images.length ? images : undefined,
+                attachments: refs.length ? refs.map((r) => ({ type: r.type, path: r.path, lineRange: r.lineRange })) : undefined,
+            });
+        }
+        return items;
+    }
+
+    /**
+     * Bound a replay, cutting at a turn boundary so a tool result never loses
+     * the tool call it belongs to (which would leave a card spinning forever).
+     */
+    private _capHistory(items: HistoryItem[]): { items: HistoryItem[]; hidden: number } {
+        if (items.length <= HISTORY_MAX_ITEMS) { return { items, hidden: 0 }; }
+        let start = items.length - HISTORY_MAX_ITEMS;
+        while (start < items.length && items[start].kind !== 'user') { start++; }
+        if (start >= items.length) { start = items.length - HISTORY_MAX_ITEMS; }
+        return { items: items.slice(start), hidden: start };
     }
 
     /** Session stats (cumulative tokens + context usage) -> header indicator */
@@ -1521,7 +1677,7 @@ export class ChatPanel {
         const runtime = ChatPanel._registry.create({ continueRecent: false });
         ChatPanel._registry.bindSurface(this._surfaceKey, runtime);
         this._bindRuntime(runtime);
-        this._post({ type: 'clear' });
+        this._clearTranscript();
         this._busy = false;
         this._contextWarned = false;
         this._resetTurnChanges();
@@ -1560,7 +1716,7 @@ export class ChatPanel {
             // If the owner's current session changed unexpectedly (switch-back error), reload history for its panels
             if (owner.sessionManager.currentSessionId !== before) {
                 for (const panel of owner.panels) {
-                    panel._post({ type: 'clear' });
+                    panel._clearTranscript();
                     panel._busy = false;
                     panel._clearBusyTimeout();
                     panel._resetTurnChanges();
@@ -1598,7 +1754,7 @@ export class ChatPanel {
         if (existing) {
             ChatPanel._registry.bindSurface(this._surfaceKey, existing);
             this._bindRuntime(existing);
-            this._post({ type: 'clear' });
+            this._clearTranscript();
             this._busy = existing.state.busy;
             this._post({ type: 'setBusy', busy: this._busy });
             this._postContexts();
@@ -1613,7 +1769,7 @@ export class ChatPanel {
         runtime.sessionFile = session.file;
         ChatPanel._registry.bindSurface(this._surfaceKey, runtime);
         this._bindRuntime(runtime);
-        this._post({ type: 'clear' });
+        this._clearTranscript();
         this._busy = false;
         this._contextWarned = false;
         this._resetTurnChanges();
@@ -1644,6 +1800,8 @@ export class ChatPanel {
             case 'agent_start':
                 this._busy = true;
                 this._turnHadText = false;
+                // This panel is rendering the turn from now on
+                this._webviewSynced = true;
                 this._resetTurnLedger();
                 this._lastUsage = undefined;
                 this._turnChanges = [];
@@ -2087,6 +2245,7 @@ export class ChatPanel {
         }
 
         const attachments = this._currentAttachments();
+        this._webviewSynced = true;
         this._post({
             type: 'addUserMessage',
             text: userText,
@@ -2147,6 +2306,7 @@ export class ChatPanel {
         const steering = mode === 'steer';
         const attachments = this._currentAttachments();
         // Show the user message first (with a pending state) so it isn't lost if queueing fails
+        this._webviewSynced = true;
         this._post({
             type: 'addUserMessage',
             text: userText,

@@ -259,6 +259,22 @@ export function hideThinking(): void {
     refreshWorking();
 }
 
+/**
+ * Render an already-finished thinking block (transcript replay). Same collapsed
+ * presentation as a live one, but the live timer is skipped so a replayed block
+ * is not stamped with a bogus duration.
+ */
+export function addHistoryThinking(text: string): void {
+    if (!text.trim()) { return; }
+    showThinking();
+    const line = ctx.thinkingLine;
+    stopThinkingTimer();
+    appendThinking(text);
+    hideThinking();
+    const meta = (line?.closest('.collapsible') as HTMLElement | null)?.querySelector('.thinking-meta') as HTMLElement | null;
+    if (meta) { meta.textContent = Math.ceil(text.length / 4) + ' tok'; }
+}
+
 /** Drop the in-progress thinking indicator (called on clear / session switch to avoid leaking the timer) */
 export function resetThinking(): void {
     stopThinkingTimer();

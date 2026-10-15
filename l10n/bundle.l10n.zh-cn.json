@@ -268,5 +268,7 @@
   "Update API key": "更新 API Key",
   "not ready": "未就绪",
   "ready": "就绪",
-  "Pi is working — Enter sends, ■ stops": "Pi 正在工作 —— Enter 发送，■ 停止"
+  "Pi is working — Enter sends, ■ stops": "Pi 正在工作 —— Enter 发送，■ 停止",
+  "Context compacted here": "上下文已在此压缩",
+  "Earlier transcript not shown ({0} items) — the full history stays in the session file": "更早的记录未显示（{0} 项）—— 完整历史仍保存在会话文件中"
 }
