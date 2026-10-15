@@ -2882,8 +2882,8 @@ export class ChatPanel {
     /** Merge an API key into auth.json (backup first, file mode 600) */
     private _writeAuthKey(provider: string, key: string): void {
         const file = path.join(this._agentDir(), 'auth.json');
-        let data: Record<string, unknown> = {};
-        try { data = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>; } catch { /* new file / unparsable: rebuild */ }
+        // Throws (before the .bak is touched) when an existing file is broken
+        const data = this._readJsonForWrite(file);
         fs.mkdirSync(path.dirname(file), { recursive: true });
         if (fs.existsSync(file)) { try { fs.copyFileSync(file, file + '.bak'); } catch { /* ignore */ } }
         data[provider] = { type: 'api_key', key };
@@ -2893,8 +2893,9 @@ export class ChatPanel {
     /** Merge a custom OpenAI-compatible endpoint into models.json (backup first) */
     private _writeCustomProvider(p: { id: string; name: string; baseUrl: string; apiKey: string; modelId: string }): void {
         const file = path.join(this._agentDir(), 'models.json');
-        let data: Record<string, unknown> = {};
-        try { data = JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>; } catch { /* new file */ }
+        // Same rule as _writeAuthKey: an unparsable file aborts the write instead
+        // of being rebuilt from nothing
+        const data = this._readJsonForWrite(file);
         fs.mkdirSync(path.dirname(file), { recursive: true });
         if (fs.existsSync(file)) { try { fs.copyFileSync(file, file + '.bak'); } catch { /* ignore */ } }
         const providers = (data.providers as Record<string, Record<string, unknown> & { models?: Array<{ id: string }> }> | undefined) ?? {};
@@ -2965,8 +2966,15 @@ export class ChatPanel {
                 ignoreFocusOut: true,
             });
             if (!key) { return; }
-            if (this._hasModelEntry(id)) { this._updateModelApiKey(id, key.trim()); }
-            else { this._writeAuthKey(id, key.trim()); }
+            try {
+                if (this._hasModelEntry(id)) { this._updateModelApiKey(id, key.trim()); }
+                else { this._writeAuthKey(id, key.trim()); }
+            } catch (err) {
+                // A broken models.json/auth.json must surface, not vanish: this
+                // path had no handler and the key was silently not updated
+                this._postError(vscode.l10n.t('Failed to save the API key: {0}', (err as Error).message));
+                return;
+            }
             await this._verifyProvider(id);
             return;
         }
@@ -3017,19 +3025,40 @@ export class ChatPanel {
         } catch { return {}; }
     }
 
-    private _readJsonFile(file: string): Record<string, unknown> {
-        try { return JSON.parse(fs.readFileSync(file, 'utf8')) as Record<string, unknown>; } catch { return {}; }
+    /**
+     * Read one of pi's config files for a *write*.
+     *
+     * "File does not exist" and "file cannot be parsed" are fundamentally
+     * different: every writer used to treat both as "rebuild from {}", which
+     * silently dropped all other providers — and then copied the broken state
+     * over the .bak, destroying the backup too. A parse failure now aborts the
+     * write before anything on disk is touched.
+     */
+    private _readJsonForWrite(file: string): Record<string, unknown> {
+        if (!fs.existsSync(file)) { return {}; }
+        let raw: string;
+        try { raw = fs.readFileSync(file, 'utf8'); } catch (err) {
+            throw new Error(vscode.l10n.t('{0} could not be read ({1}) — nothing was changed', file, (err as Error).message));
+        }
+        try {
+            return JSON.parse(raw) as Record<string, unknown>;
+        } catch (err) {
+            throw new Error(vscode.l10n.t(
+                '{0} could not be parsed ({1}) — nothing was changed, the previous settings are safe in {0}.bak',
+                file, (err as Error).message,
+            ));
+        }
     }
 
     private _hasModelEntry(id: string): boolean {
-        const data = this._readJsonFile(path.join(this._agentDir(), 'models.json')) as { providers?: Record<string, unknown> };
+        const data = this._readJsonForWrite(path.join(this._agentDir(), 'models.json')) as { providers?: Record<string, unknown> };
         return Boolean(data.providers && id in data.providers);
     }
 
     /** Update a provider's apiKey in models.json */
     private _updateModelApiKey(id: string, key: string): void {
         const file = path.join(this._agentDir(), 'models.json');
-        const data = JSON.parse(fs.readFileSync(file, 'utf8')) as { providers?: Record<string, Record<string, unknown>> };
+        const data = this._readJsonForWrite(file) as { providers?: Record<string, Record<string, unknown>> };
         const entry = data.providers?.[id];
         if (!entry) { return; }
         try { fs.copyFileSync(file, file + '.bak'); } catch { /* ignore */ }
@@ -3040,14 +3069,16 @@ export class ChatPanel {
     /** Delete a provider from auth.json and models.json (backup first) */
     private _deleteProvider(id: string): void {
         const authFile = path.join(this._agentDir(), 'auth.json');
-        const auth = this._readJsonFile(authFile);
+        const modelsFile = path.join(this._agentDir(), 'models.json');
+        // Both files are read strictly BEFORE either is mutated, so a broken
+        // models.json cannot leave auth.json already half-deleted
+        const auth = this._readJsonForWrite(authFile);
+        const data = this._readJsonForWrite(modelsFile) as { providers?: Record<string, unknown> };
         if (id in auth) {
             try { fs.copyFileSync(authFile, authFile + '.bak'); } catch { /* ignore */ }
             delete auth[id];
             fs.writeFileSync(authFile, JSON.stringify(auth, null, 2) + '\n', { mode: 0o600 });
         }
-        const modelsFile = path.join(this._agentDir(), 'models.json');
-        const data = this._readJsonFile(modelsFile) as { providers?: Record<string, unknown> };
         if (data.providers && id in data.providers) {
             try { fs.copyFileSync(modelsFile, modelsFile + '.bak'); } catch { /* ignore */ }
             delete data.providers[id];

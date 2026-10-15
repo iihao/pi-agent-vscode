@@ -220,6 +220,8 @@
   "Connect a model provider": "Connect a model provider",
   "Display name": "Display name",
   "Failed to save the API key: {0}": "Failed to save the API key: {0}",
+  "{0} could not be read ({1}) — nothing was changed": "{0} could not be read ({1}) — nothing was changed",
+  "{0} could not be parsed ({1}) — nothing was changed, the previous settings are safe in {0}.bak": "{0} could not be parsed ({1}) — nothing was changed, the previous settings are safe in {0}.bak",
   "Failed to save the endpoint: {0}": "Failed to save the endpoint: {0}",
   "In pi, type /login to sign in with OAuth": "In pi, type /login to sign in with OAuth",
   "Model id": "Model id",

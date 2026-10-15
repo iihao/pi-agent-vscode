@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A broken auth.json / models.json can no longer erase every saved provider.**
+  All four writers treated “the file cannot be parsed” like “the file does not
+  exist” and rebuilt from `{}` — one truncated write on pi's side and the next
+  API key you saved silently dropped every other credential, while the .bak
+  copy then preserved the *broken* state over the good backup. Reads for
+  writing are strict now: a parse failure aborts before anything is touched,
+  names the file, and points at `<file>.bak`; `_deleteProvider` reads both
+  files before mutating either so a broken models.json cannot leave auth.json
+  half-deleted.
+
 - **Long replies stream without the stutter.** A typewriter frame re-parsed the
   entire already-revealed prefix with markdown-it + highlight.js — at 60fps the
   same growing message was re-highlighted sixty times a second, an O(n²) total

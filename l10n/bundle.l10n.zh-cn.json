@@ -220,6 +220,8 @@
   "Connect a model provider": "连接模型供应商",
   "Display name": "显示名称",
   "Failed to save the API key: {0}": "保存 API Key 失败：{0}",
+  "{0} could not be read ({1}) — nothing was changed": "无法读取 {0}（{1}）——未做任何修改",
+  "{0} could not be parsed ({1}) — nothing was changed, the previous settings are safe in {0}.bak": "无法解析 {0}（{1}）——未做任何修改，之前的设置仍安全保留在 {0}.bak 备份中",
   "Failed to save the endpoint: {0}": "保存端点失败：{0}",
   "In pi, type /login to sign in with OAuth": "在 pi 中输入 /login 进行 OAuth 登录",
   "Model id": "模型 id",
