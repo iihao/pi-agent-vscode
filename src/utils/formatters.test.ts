@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { formatUsage, validateMessage, summarizeToolArgs, extractToolOutput } from './formatters';
+import { MAX_MESSAGE_CHARS } from '../chatPanel/sharedTypes';
 
 describe('formatUsage', () => {
     it('formats input / output / cache read', () => {
@@ -20,7 +21,9 @@ describe('validateMessage', () => {
     });
 
     it('rejects overly long messages', () => {
-        expect(validateMessage('x'.repeat(10001)).valid).toBe(false);
+        expect(validateMessage('x'.repeat(MAX_MESSAGE_CHARS + 1)).valid).toBe(false);
+        // boundary is the shared constant the webview pre-check also uses — one number, both sides
+        expect(validateMessage('x'.repeat(MAX_MESSAGE_CHARS)).valid).toBe(true);
     });
 
     it('accepts normal messages', () => {

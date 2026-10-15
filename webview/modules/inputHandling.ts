@@ -3,10 +3,12 @@
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext } from '../types';
+import { MAX_MESSAGE_CHARS } from '../../src/chatPanel/sharedTypes';
 import { updateMessageCount, togglePopover } from './panels';
 import { renderRail } from './navigator';
 import { renderImages } from './imagePaste';
 import { addBashRunning } from './toolRenderer';
+import { addNotice } from './messageRenderer';
 import { bashId, escapeHtml } from '../utils';
 import { getAllMessages } from './search';
 
@@ -28,6 +30,12 @@ export function send(mode?: string): void {
     const text = input.value.trim();
     const images = ctx.pendingImages.map(function (i) { return { type: 'image', data: i.data, mimeType: i.mimeType }; });
     if (!text && !images.length) { return; }
+    // The host would refuse this after the composer is already cleared — checking
+    // the shared limit here keeps the text where the user can still reach it
+    if (text.length > MAX_MESSAGE_CHARS) {
+        addNotice(ctx.S.messageTooLong.replace('{0}', String(MAX_MESSAGE_CHARS)));
+        return;
+    }
     // Save to input history
     if (text && (ctx.messageHistory.length === 0 || ctx.messageHistory[ctx.messageHistory.length - 1] !== text)) {
         ctx.messageHistory.push(text);

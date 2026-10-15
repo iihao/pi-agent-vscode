@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An over-long message is refused before the composer is cleared.** The host
+  rejects prompts above 10,000 characters, but the webview had already emptied
+  the input by then — so the user's long paste was simply gone, with only a
+  notice as company. The same limit now lives once in the shared protocol
+  (`MAX_MESSAGE_CHARS`); the webview checks it first and leaves the text in
+  place. A duplicated limit had already drifted once between the two sides.
 - **A failed tool is still rolled back when the panel that recorded it goes away
   mid-tool.** With one session open in two panels (the sidebar and an editor tab),
   only the first panel records turn changes into the runtime — but the bookkeeping

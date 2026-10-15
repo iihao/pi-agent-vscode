@@ -7,6 +7,14 @@
 
 import { PiImageBlock } from '../sdk/piTypes';
 
+/**
+ * Longest prompt the host accepts, shared by the host validation and the
+ * webview's pre-send check. Kept in one place on purpose: a duplicated limit
+ * drifted once already, and the webview must refuse an over-long message
+ * *before* it clears the composer, or the user's text is simply gone.
+ */
+export const MAX_MESSAGE_CHARS = 10000;
+
 export type ImageAttachment = { type?: string; data?: string; mimeType?: string };
 
 /** File / selection reference (composer attachment and message echo) */

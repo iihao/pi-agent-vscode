@@ -13,6 +13,7 @@
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { send, editMessage, deleteMessage, initInputHandling } from '../webview/modules/inputHandling';
+import { MAX_MESSAGE_CHARS } from '../src/chatPanel/sharedTypes';
 import { initPanels } from '../webview/modules/panels';
 import { initNavigator } from '../webview/modules/navigator';
 import { initImagePaste } from '../webview/modules/imagePaste';
@@ -81,7 +82,7 @@ describe('composer submission routing', () => {
                 attachPanel: fakeEl(),
                 outlinePanel: fakeEl(),
             },
-            S: { messages: 'messages', remove: 'Remove' },
+            S: { messages: 'messages', remove: 'Remove', messageTooLong: 'Message too long (max {0} characters)' },
             vscode: { postMessage: (m: Posted) => { posted.push(m); } },
             pendingImages: [],
             messageHistory: [],
@@ -149,5 +150,25 @@ describe('composer submission routing', () => {
     it('deleteMessage is the only path that removes a message node', () => {
         deleteMessage(earlierMessage as unknown as HTMLElement);
         expect(earlierMessage.removed).toBe(1);
+    });
+
+    it('an over-long message stays in the composer instead of being lost', () => {
+        // The host refuses this too — but by then the composer was cleared, so the
+        // user's text was simply gone. The webview refuses first and keeps it.
+        const long = 'x'.repeat(MAX_MESSAGE_CHARS + 1);
+        (ctx.els.input as unknown as { value: string }).value = long;
+
+        send();
+
+        expect(posted).toEqual([]);
+        expect((ctx.els.input as unknown as { value: string }).value).toBe(long);
+    });
+
+    it('a message exactly at the limit still goes through', () => {
+        (ctx.els.input as unknown as { value: string }).value = 'x'.repeat(MAX_MESSAGE_CHARS);
+
+        send();
+
+        expect(posted.map((m) => m.type)).toEqual(['sendMessage']);
     });
 });

@@ -4,6 +4,7 @@
 
 import * as vscode from 'vscode';
 import { PiToolResult } from '../sdk/piTypes';
+import { MAX_MESSAGE_CHARS } from '../chatPanel/sharedTypes';
 import { logError } from './logger';
 
 /**
@@ -85,8 +86,8 @@ export function validateMessage(text: string): { valid: boolean; error?: string 
     if (!text.trim()) {
         return { valid: false, error: vscode.l10n.t('Message cannot be empty') };
     }
-    if (text.length > 10000) {
-        return { valid: false, error: vscode.l10n.t('Message too long (max {0} characters)', 10000) };
+    if (text.length > MAX_MESSAGE_CHARS) {
+        return { valid: false, error: vscode.l10n.t('Message too long (max {0} characters)', MAX_MESSAGE_CHARS) };
     }
     return { valid: true };
 }

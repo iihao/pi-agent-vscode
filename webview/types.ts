@@ -22,6 +22,8 @@ export interface UiStringsData {
     outputTruncated: string;
     openFullOutput: string;
     historyDivider: string;
+    /** Pre-send refusal of an over-long prompt; {0} is filled from MAX_MESSAGE_CHARS */
+    messageTooLong: string;
     changedFiles: string;
     revert: string;
     revertOne: string;

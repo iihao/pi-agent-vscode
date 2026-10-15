@@ -78,6 +78,8 @@ export interface UiStrings {
     modeQueue: string;
     modeSteer: string;
     historyDivider: string;
+    /** Pre-send refusal of an over-long prompt; {0} is filled from MAX_MESSAGE_CHARS */
+    messageTooLong: string;
     /** Transcript replay: a checkpoint left by pi's auto-compaction */
     compactedHere: string;
     /** Transcript replay: how many older items were left out */
@@ -190,6 +192,7 @@ export function getUiStrings(): UiStrings {
         modeQueue: t('Queue'),
         modeSteer: t('Steer'),
         historyDivider: t('History above'),
+        messageTooLong: t('Message too long (max {0} characters)'),
         compactedHere: t('Context compacted here'),
         historyTrimmed: t('Earlier transcript not shown ({0} items) — the full history stays in the session file'),
         exportHeader: t('# Pi Agent Conversation'),
