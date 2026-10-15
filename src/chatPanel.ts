@@ -22,7 +22,7 @@ import { getVSCodeService } from './services';
 import { WebviewMessage, PostMessage, ImageAttachment, HistoryItem } from './chatPanel/types';
 import { getGitAPI, pickGitRepository } from './chatPanel/git';
 import { buildCommitPrompt, buildPrPrompt, buildNamePrompt } from './chatPanel/prompts';
-import { parseEdits, isRevertible, revertEdits, editsToDiff, lineDiff } from './chatPanel/turnChanges';
+import { parseEdits, isRevertible, revertEditsDetailed, editsToDiff, lineDiff } from './chatPanel/turnChanges';
 import { planAssistantCompletion, planToolResultCompletion, missingSuffix } from './chatPanel/turnReconcile';
 import { KNOWN_PROVIDERS, providerLabel } from './chatPanel/providers';
 import { preferredModel, rememberModel } from './chatPanel/modelPreference';
@@ -1011,14 +1011,19 @@ export class ChatPanel {
                 } else if (change.edits) {
                     const uri = vs.uri.file(abs);
                     const current = Buffer.from(await vs.fs.readFile(uri)).toString('utf8');
-                    const reverted = revertEdits(current, change.edits);
-                    if (reverted === null) {
-                        results.push({ path: change.rel, result: 'failed',
-                            error: vscode.l10n.t('Content changed since the turn; the edit no longer matches') });
-                        logError(`revert ${abs}: edit no longer matches current content`);
+                    const outcome = revertEditsDetailed(current, change.edits);
+                    if (!outcome.ok) {
+                        // "changed since" and "cannot be determined" are different
+                        // problems: the first is pi's history, the second is a file
+                        // whose edited text now occurs in several places
+                        const error = outcome.reason === 'ambiguous'
+                            ? vscode.l10n.t('The replaced text now occurs in several places; revert this file by hand')
+                            : vscode.l10n.t('Content changed since the turn; the edit no longer matches');
+                        results.push({ path: change.rel, result: 'failed', error });
+                        logError(`revert ${abs}: ${outcome.reason}`);
                         continue;
                     }
-                    await vs.fs.writeFile(uri, Buffer.from(reverted, 'utf8'));
+                    await vs.fs.writeFile(uri, Buffer.from(outcome.content, 'utf8'));
                     this._runtime.revertSnapshot.set(change.rel, snapshot);
                     results.push({ path: change.rel, result: 'reverted' });
                 } else if (change.before !== undefined) {

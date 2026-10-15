@@ -81,14 +81,73 @@ export function editsToDiff(edits: Array<{ oldText: string; newText: string }>, 
     return lines.join('\n');
 }
 
-/** Replace newText back with oldText in reverse order; returns null when it no longer matches */
-export function revertEdits(content: string, edits: Array<{ oldText: string; newText: string }>): string | null {
-    let out = content;
-    for (let i = edits.length - 1; i >= 0; i--) {
-        const { oldText, newText } = edits[i];
-        const idx = out.indexOf(newText);
-        if (idx === -1) { return null; }
-        out = out.slice(0, idx) + oldText + out.slice(idx + newText.length);
+/** Why a revert could not be performed */
+export type RevertFailure = 'missing' | 'ambiguous';
+
+export type RevertResult = { ok: true; content: string } | { ok: false; reason: RevertFailure };
+
+/**
+ * Exploration budget for the ambiguity search: an edit whose newText also
+ * occurs elsewhere in the file (unrelated identical text, or the result of an
+ * earlier edit) has several candidate positions, and combinations grow
+ * multiplicatively. The counter keeps a pathological file bounded instead of
+ * turning Revert into a search problem — past the budget the result is
+ * "ambiguous" (refuse) rather than a guess.
+ */
+const REVERT_SEARCH_BUDGET = 256;
+
+/** All start positions of needle in haystack (non-overlapping) */
+function occurrences(haystack: string, needle: string): number[] {
+    const out: number[] = [];
+    if (!needle) { return out; }
+    let from = 0;
+    for (;;) {
+        const idx = haystack.indexOf(needle, from);
+        if (idx < 0) { return out; }
+        out.push(idx);
+        from = idx + needle.length;
     }
-    return out;
+}
+
+/**
+ * Reverse the edits, exploring every position where a newText matches, and
+ * accept the result only when exactly ONE consistent original exists.
+ *
+ * A single `indexOf(newText)` cannot know which occurrence is the one the edit
+ * produced: if the replaced text already appeared earlier in the file, the
+ * first-occurrence guess rewrites the wrong place — silent corruption of a file
+ * the user trusted Revert with. When several originals are content-consistent
+ * there is genuinely not enough information to choose; that is reported as
+ * `ambiguous` so the user is told to do it by hand instead of guessing.
+ */
+export function revertEditsDetailed(content: string, edits: Array<{ oldText: string; newText: string }>): RevertResult {
+    if (!edits.length) { return { ok: true, content }; }
+    const finals = new Set<string>();
+    let budget = REVERT_SEARCH_BUDGET;
+    let exhausted = false;
+    const walk = (current: string, i: number): void => {
+        if (i < 0) { finals.add(current); return; }
+        if (budget <= 0) { exhausted = true; return; }
+        const { oldText, newText } = edits[i];
+        // Nothing to undo (isRevertible keeps empty newText out of this path)
+        if (!newText) { return; }
+        const hits = occurrences(current, newText);
+        // No occurrence left: this branch cannot be the original
+        if (!hits.length) { return; }
+        for (const idx of hits) {
+            if (budget <= 0) { exhausted = true; return; }
+            budget--;
+            walk(current.slice(0, idx) + oldText + current.slice(idx + newText.length), i - 1);
+        }
+    };
+    walk(content, edits.length - 1);
+    if (exhausted) { return { ok: false, reason: 'ambiguous' }; }
+    if (finals.size === 1) { return { ok: true, content: [...finals][0] }; }
+    return { ok: false, reason: finals.size === 0 ? 'missing' : 'ambiguous' };
+}
+
+/** Replace newText back with oldText in reverse order; null when it no longer matches OR is ambiguous */
+export function revertEdits(content: string, edits: Array<{ oldText: string; newText: string }>): string | null {
+    const result = revertEditsDetailed(content, edits);
+    return result.ok ? result.content : null;
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseEdits, isRevertible, revertEdits, editsToDiff, lineDiff } from './chatPanel/turnChanges';
+import { parseEdits, isRevertible, revertEdits, revertEditsDetailed, editsToDiff, lineDiff } from './chatPanel/turnChanges';
 import { buildNamePrompt, buildCommitPrompt, buildPrPrompt } from './chatPanel/prompts';
 
 describe('revertEdits', () => {
@@ -15,6 +15,35 @@ describe('revertEdits', () => {
 
     it('returns null when the edited text is no longer present', () => {
         expect(revertEdits('nothing here', [{ oldText: 'x', newText: 'y' }])).toBeNull();
+        expect(revertEditsDetailed('nothing here', [{ oldText: 'x', newText: 'y' }]))
+            .toEqual({ ok: false, reason: 'missing' });
+    });
+
+    it('refuses instead of guessing when the replaced text occurs in several places', () => {
+        // The edit produced line 2; line 1 already held the same text before the
+        // turn. A first-occurrence guess would rewrite line 1 — the wrong place —
+        // and the file would look "reverted" while still containing the change.
+        const content = 'let y = 42; // pre-existing\nlet y = 42; // from the edit\n';
+        const edits = [{ oldText: 'let x = seed;', newText: 'let y = 42;' }];
+
+        expect(revertEdits(content, edits)).toBeNull();
+        expect(revertEditsDetailed(content, edits)).toEqual({ ok: false, reason: 'ambiguous' });
+    });
+
+    it('refuses an empty newText instead of prepending oldText', () => {
+        // indexOf('') is 0: the old implementation prepended oldText and
+        // duplicated the whole file (isRevertible keeps this out of the button,
+        // but the helper is exported and was silently wrong on its own)
+        expect(revertEdits('abc', [{ oldText: 'x', newText: '' }])).toBeNull();
+        expect(revertEditsDetailed('abc', [{ oldText: 'x', newText: '' }]))
+            .toEqual({ ok: false, reason: 'missing' });
+    });
+
+    it('stays inside its search budget when the text is duplicated everywhere', () => {
+        const content = 'hit\n'.repeat(60);
+        const edits = [1, 2, 3, 4].map((n) => ({ oldText: 'A' + n, newText: 'hit' }));
+        // 60^4 combinations: must come back as "ambiguous", promptly, not explore
+        expect(revertEditsDetailed(content, edits)).toEqual({ ok: false, reason: 'ambiguous' });
     });
 });
 

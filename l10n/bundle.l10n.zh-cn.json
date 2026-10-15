@@ -176,6 +176,7 @@
   "Configuration changed; restarting Pi session…": "配置已变更，正在重启 Pi 会话…",
   "Connected to pi": "已连接到 pi",
   "Content changed since the turn; the edit no longer matches": "内容在本回合后已变化，改动不再匹配",
+  "The replaced text now occurs in several places; revert this file by hand": "被替换的文本现在出现在多个位置，请手动回滚该文件",
   "Failed to create new session: {0}": "创建新会话失败：{0}",
   "Failed to switch session. The session may no longer exist or the file may be corrupted.": "切换会话失败。会话可能已不存在或文件已损坏。",
   "Install command copied — run it in the terminal, then Retry": "安装命令已复制——在终端运行后点“重试”",

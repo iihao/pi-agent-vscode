@@ -19,6 +19,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   files before mutating either so a broken models.json cannot leave auth.json
   half-deleted.
 
+- **Revert never guesses which occurrence to undo.** Reverting an edit used the
+  first `indexOf(newText)` — but the replaced text often already appears
+  elsewhere in the file (a fallback, a sibling line, an earlier edit's result),
+  and the guess would rewrite *that* place: the card said “reverted” while the
+  real change survived. Revert now explores the candidate positions with
+  backtracking (bounded by a search budget) and only writes when exactly one
+  consistent original exists; genuinely ambiguous files fail with a message
+  telling the user to do it by hand, and `missing` vs `ambiguous` are reported
+  distinctly. An empty newText — `indexOf('')` is 0, the old code prepended
+  oldText and duplicated the file — is refused too.
+
 - **Long replies stream without the stutter.** A typewriter frame re-parsed the
   entire already-revealed prefix with markdown-it + highlight.js — at 60fps the
   same growing message was re-highlighted sixty times a second, an O(n²) total
