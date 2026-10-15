@@ -19,7 +19,12 @@ import { logInfo, logError } from '../utils/logger';
 
 /** Errors from starting pi (type-checked instead of matching message text) */
 export class PiStartError extends Error {
-    constructor(message: string) {
+    /**
+     * True when the start was not a failure but was superseded: a stop/restart ran
+     * while it was in flight, so the process was discarded on purpose. Callers that
+     * merely wanted a client can leave the state to the newer connect.
+     */
+    constructor(message: string, readonly cancelled = false) {
         super(message);
         this.name = 'PiStartError';
     }
@@ -259,7 +264,7 @@ export class PiClientManager {
             unsubscribeThis?.();
             if (this._unsubscribe === unsubscribeThis) { this._unsubscribe = undefined; }
             await client.stop().catch((err) => { logError(`discarding cancelled client failed: ${(err as Error).message}`); });
-            throw new PiStartError(vscode.l10n.t('Pi client start was cancelled by a restart'));
+            throw new PiStartError(vscode.l10n.t('Pi client start was cancelled by a restart'), true);
         }
 
         this._client = client;

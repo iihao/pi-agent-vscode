@@ -34,6 +34,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A connect that a restart superseded is no longer reported as an error.** The
+  generation guard behind the C1 fix discards an in-flight start on purpose when a
+  stop/restart lands — but the panel waiting on it still treated the cancellation
+  as a connection failure: a red bubble plus a briefly emptied model list, for
+  something that was not a failure at all. It leaves the state to the newer
+  connect now.
 - **A transcript replay can no longer land after content it predates.** The
   session log is read asynchronously; sending a message (or starting a turn)
   into the still-loading panel used to let the replayed history arrive *below*

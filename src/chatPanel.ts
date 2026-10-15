@@ -1411,6 +1411,14 @@ export class ChatPanel {
             // Check the current provider's credentials asynchronously (posts a more accurate setup status)
             void this._refreshAuthStatus();
         } catch (err) {
+            // A restart that landed while this connect was in flight is not this
+            // panel's failure: the panel that restarted reconnects and posts the real
+            // state, so reporting "start was cancelled" as an error bubble (and
+            // flashing "no models") would only be noise.
+            if (err instanceof PiStartError && err.cancelled) {
+                logInfo('connect superseded by a restart; the newer connect owns the state');
+                return;
+            }
             const msg = (err as Error).message || String(err);
             this._piMissing = err instanceof PiNotFoundError;
             logError(`Connection failed: ${msg}`);

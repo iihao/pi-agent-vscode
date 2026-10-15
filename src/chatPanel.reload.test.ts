@@ -9,6 +9,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { ChatPanel } from './chatPanel';
 import { ChatRuntime } from './chatPanel/runtime';
+import { PiStartError } from './sdk/clientManager';
 import * as vscodeMock from '../test/vscode.mock';
 
 interface Posted { type: string; [k: string]: unknown }
@@ -200,5 +201,27 @@ describe('reloading a session', () => {
 
         const clear = webview.posted.find((m) => m.type === 'clear');
         expect(clear?.boot).toBe(false);
+    });
+
+    it('stays quiet when a restart superseded this panel\'s connect', async () => {
+        const { webview, inner } = make();
+        inner._refreshAuthStatus = () => Promise.resolve();
+        inner._runtime.clientManager = {
+            // C1: a stop/restart ran while this start was in flight, so the process
+            // was discarded on purpose — the restarting panel reconnects and owns the
+            // state from here
+            ensureConnected: () => Promise.reject(new PiStartError('Pi client start was cancelled by a restart', true)),
+            client: undefined,
+            isConnected: false,
+            abort: () => Promise.resolve(),
+            stop: () => Promise.resolve(),
+            onEvent: () => () => { /* noop */ },
+        };
+
+        await (inner as unknown as { _ensureClient(): Promise<void> })._ensureClient();
+
+        // No red bubble, and no “no models” flash, for something that is not a failure
+        expect(webview.posted.filter((m) => m.type === 'error')).toEqual([]);
+        expect(webview.posted.filter((m) => m.type === 'models')).toEqual([]);
     });
 });
