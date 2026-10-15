@@ -120,6 +120,15 @@ export class ChatPanel {
     private _webviewSynced = false;
 
     /**
+     * Bumped on every transcript wipe. An in-flight `_restoreHistory` carries
+     * the epoch it started under: if the webview was cleared while the session
+     * log was still being read (a New chat / reload landed mid-replay), the
+     * loaded items belong to a transcript the webview no longer shows and the
+     * replay must be dropped, not appended.
+     */
+    private _transcriptEpoch = 0;
+
+    /**
      * Wipe the transcript and record that the webview no longer has content.
      *
      * `boot` tells the webview whether the transcript state is still unknown
@@ -130,6 +139,7 @@ export class ChatPanel {
      */
     private _clearTranscript(boot = true): void {
         this._webviewSynced = false;
+        this._transcriptEpoch++;
         this._post({ type: 'clear', boot });
     }
 
@@ -1422,8 +1432,22 @@ export class ChatPanel {
      * one that was streamed.
      */
     private async _restoreHistory(client: PiRpcClient): Promise<void> {
+        // The transcript this replay belongs to (see _transcriptEpoch)
+        const epoch = this._transcriptEpoch;
+        // Still ours to fill: not wiped since the read started, and nothing live
+        // arrived in the meantime
+        const stillPending = (): boolean => epoch === this._transcriptEpoch && !this._webviewSynced;
         try {
             const items = await this._historyItems(client);
+            if (!stillPending()) {
+                // Either the user sent into the still-loading panel / a turn started,
+                // or a clear replaced the transcript mid-read: appending history below
+                // live content, or into a *new* session's view, would scramble it —
+                // drop this replay instead of interleaving. The full history stays in
+                // the session file and arrives on the next reload.
+                logInfo('history replay dropped: the transcript changed while the log was loading');
+                return;
+            }
             const capped = this._capHistory(items);
             // Posted even when empty: the webview treats this as the authoritative
             // transcript state, and needs it to leave its boot state.
@@ -1432,12 +1456,14 @@ export class ChatPanel {
             logError(`_restoreHistory failed: ${(err as Error).message}`);
             // Still settle the webview: without a `history` it would keep showing the
             // bare boot state (logo and title only, no quick actions) for the rest of
-            // the session.
-            this._post({ type: 'history', items: [], hidden: 0 });
+            // the session. Only while this replay is still the panel's current one —
+            // a newer load settles the new transcript itself.
+            if (stillPending()) { this._post({ type: 'history', items: [], hidden: 0 }); }
         } finally {
             // Either way the webview now reflects this runtime, so a later
-            // reconnect must not replay on top of it.
-            this._webviewSynced = true;
+            // reconnect must not replay on top of it — but never re-mark a
+            // transcript that was replaced under this one.
+            if (epoch === this._transcriptEpoch) { this._webviewSynced = true; }
         }
     }
 

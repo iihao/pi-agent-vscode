@@ -34,6 +34,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A transcript replay can no longer land after content it predates.** The
+  session log is read asynchronously; sending a message (or starting a turn)
+  into the still-loading panel used to let the replayed history arrive *below*
+  the live message — a scrambled transcript. New chat / reload landing during
+  a load was worse: the finished session's items were posted into the fresh,
+  empty view. The replay now carries the transcript's epoch and drops itself
+  if the panel went live or was wiped while it was reading.
 - **The `/help` panel is localized**, and so are the terminal names the login and
   setup flows open (thirteen lines of composer help plus the terminal titles, in
   both locales). The bare `Pi` tab titles stay as they are — the product name

@@ -37,6 +37,8 @@ const disposeEvent = (_listener: () => void, _thisArgs?: unknown, disposables?: 
 interface HistoryInternals {
     _restoreHistory(client: PiRpcClient): Promise<void>;
     _capHistory(items: HistoryItem[]): { items: HistoryItem[]; hidden: number };
+    _webviewSynced: boolean;
+    _clearTranscript(boot?: boolean): void;
 }
 
 const CONTEXT_BLOCK = [
@@ -104,6 +106,47 @@ describe('transcript replay', () => {
         const post = webview.posted.find((m) => m.type === 'history');
         return (post?.items as HistoryItem[]) ?? [];
     }
+
+    /** A get_entries call the test releases by hand, to act while it is in flight */
+    function gatedEntries() {
+        let release!: (v: { entries: PiSessionEntry[] }) => void;
+        const gate = new Promise<{ entries: PiSessionEntry[] }>((r) => { release = r; });
+        return { client: { getEntries: () => gate } as unknown as PiRpcClient, release };
+    }
+
+    it('drops the replay when a live message arrives while the log loads', async () => {
+        const { webview, internals } = make();
+        const { client, release } = gatedEntries();
+
+        const loading = internals._restoreHistory(client);
+        await new Promise((r) => setTimeout(r, 0)); // inside the get_entries await
+        // The user sends into the panel before the replay lands
+        internals._webviewSynced = true;
+        release({ entries: editedFileLog() });
+        await loading;
+
+        // Appending the older transcript *below* the live message would scramble
+        // the timeline; the session file keeps everything for the next reload
+        expect(webview.posted.filter((m) => m.type === 'history')).toEqual([]);
+    });
+
+    it('drops the replay when a clear replaces the transcript mid-load', async () => {
+        const { webview, internals } = make();
+        const { client, release } = gatedEntries();
+
+        const loading = internals._restoreHistory(client);
+        await new Promise((r) => setTimeout(r, 0));
+        // e.g. "New chat" clicked while this panel was still loading its session
+        internals._clearTranscript(false);
+        release({ entries: editedFileLog() });
+        await loading;
+
+        // Stale items from the previous session must not resurrect themselves in
+        // the fresh one…
+        expect(webview.posted.filter((m) => m.type === 'history')).toEqual([]);
+        // …and the cleared panel must not be marked as holding content
+        expect(internals._webviewSynced).toBe(false);
+    });
 
     it('replays every tool card, diff and thinking block from the session log', async () => {
         const { webview, internals } = make();
