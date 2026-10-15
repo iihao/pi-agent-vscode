@@ -22,13 +22,45 @@ export function getAllMessages(): MessageInfo[] {
     return messages;
 }
 
+/**
+ * Lowercased message text for matching, cached per rendered body.
+ *
+ * Extracting text means cloning the message into the document and reading
+ * innerText — a forced layout for every message, on every keystroke, when a
+ * long transcript turned typing into a slideshow. A finished message renders
+ * once and never changes, so the entry lives as long as the node (WeakMap
+ * drops it with the DOM); only the still-growing live bubble is re-extracted.
+ */
+const searchTextCache = new WeakMap<HTMLElement, string>();
+
+export function messageSearchText(el: HTMLElement): string {
+    const body = el.querySelector('.message-body') as HTMLElement | null;
+    if (!body) { return ''; }
+    if (body.classList.contains('stream-cursor')) { return getMessageText(body).toLowerCase(); }
+    let text = searchTextCache.get(body);
+    if (text === undefined) {
+        text = getMessageText(body).toLowerCase();
+        searchTextCache.set(body, text);
+    }
+    return text;
+}
+
 export function searchMessages(query: string): void {
     if (!query) { clearSearch(); return; }
     ctx.searchQuery = query.toLowerCase();
-    ctx.allMessages = getAllMessages();
-    ctx.searchMatches = ctx.allMessages.filter(function (m) {
-        return m.text.toLowerCase().includes(ctx.searchQuery);
+    const matches: MessageInfo[] = [];
+    ctx.els.chat.querySelectorAll('.message').forEach(function (el) {
+        const node = el as HTMLElement;
+        const text = messageSearchText(node);
+        if (text.indexOf(ctx.searchQuery) !== -1) {
+            matches.push({
+                role: node.classList.contains('user') ? 'user' : 'assistant',
+                text: text,
+                element: node,
+            });
+        }
     });
+    ctx.searchMatches = matches;
     ctx.searchIndex = 0;
     updateSearchUI();
     highlightMatches();

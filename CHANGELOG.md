@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Long replies stream without the stutter.** A typewriter frame re-parsed the
+  entire already-revealed prefix with markdown-it + highlight.js — at 60fps the
+  same growing message was re-highlighted sixty times a second, an O(n²) total
+  that made long answers crawl. Frames are now capped at ~20 renders per second
+  (elapsed-time driven, so typing speed is unchanged) and skip highlight.js
+  while streaming; the stream-end render applies the real formatting, with line
+  numbers kept identical so nothing shifts.
+- **Typing in search no longer freezes a long transcript.** Every keystroke
+  cloned every message into the document to read innerText — a forced layout
+  pass over the whole conversation per letter. Finished messages now cache
+  their lowercased text per node (the live bubble still re-extracts), and input
+  is debounced 150ms with Enter/next/prev flushing pending keystrokes first.
+- **Replaying a session costs one refresh pass, not one per message.** Each
+  replayed item used to trigger its own scroll (layout read+write), a full
+  `.message` sweep for the header count and a rail rebuild — quadratic work on
+  content nobody can see yet. The replay renders as a batch now with a single
+  scroll/count/rail pass at the end, and the host-side replay cap drops from
+  4000 to 1500 items (dropped items are still reported in a notice and remain
+  in the session file).
+
 ## [0.1.6] - 2026-10-15
 
 ### Changed

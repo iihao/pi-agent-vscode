@@ -11,7 +11,7 @@
 import type { WebviewContext, HistoryItem } from '../types';
 import { scrollToBottom } from '../utils';
 import { renderMermaid } from '../markdown';
-import { addMessage, addHistoryThinking, addNotice } from './messageRenderer';
+import { addMessage, addHistoryThinking, addNotice, beginReplayBatch, endReplayBatch } from './messageRenderer';
 import { addTool, endTool, endToolGroup, resetToolGroup, settleTools } from './toolRenderer';
 import { settleBoot } from './boot';
 
@@ -37,6 +37,9 @@ export function renderHistory(items: HistoryItem[], hidden = 0): void {
     // Anything dropped to keep the replay bounded is reported up front rather
     // than silently missing from the top of the transcript.
     if (hidden > 0) { addNotice(ctx.S.historyTrimmed.replace('{0}', String(hidden))); }
+    // A replay appends hundreds or thousands of nodes; without the batch each one
+    // forced a scroll, a full message-count sweep and a rail rebuild — O(n²)
+    beginReplayBatch();
     for (const item of items) {
         switch (item.kind) {
             case 'user':
@@ -81,7 +84,8 @@ export function renderHistory(items: HistoryItem[], hidden = 0): void {
     divider.className = 'history-divider';
     divider.textContent = ctx.S.historyDivider;
     ctx.els.chat.appendChild(divider);
-    scrollToBottom(ctx.els.chat);
+    // one scroll / count / rail pass for the whole replay
+    endReplayBatch();
     void renderMermaid(ctx.els.chat);
 }
 

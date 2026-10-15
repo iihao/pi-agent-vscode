@@ -71,21 +71,46 @@ function bindToolbarEvents(): void {
 
 function bindSearchEvents(): void {
     const els = ctx.els;
-    els.searchInput.addEventListener('input', function () {
+    // Matching scans the whole transcript; 150ms of debounce makes typing
+    // "needle" one search instead of six, and the cached extraction keeps even
+    // that one cheap
+    let searchTimer: ReturnType<typeof setTimeout> | undefined;
+    let searchDirty = false;
+    // Jumping between matches must see the current text — flush any pending
+    // keystroke first; re-running an up-to-date search is skipped so the match
+    // index survives Enter-mashing
+    function flushSearch(): void {
+        if (searchTimer) { clearTimeout(searchTimer); searchTimer = undefined; }
+        if (!searchDirty) { return; }
+        searchDirty = false;
         searchMessages(els.searchInput.value);
+    }
+    els.searchInput.addEventListener('input', function () {
+        searchDirty = true;
+        if (searchTimer) { clearTimeout(searchTimer); }
+        searchTimer = setTimeout(function () {
+            searchTimer = undefined;
+            searchDirty = false;
+            searchMessages(els.searchInput.value);
+        }, 150);
     });
-    els.searchPrev.addEventListener('click', function () { goToMatch(-1); });
-    els.searchNext.addEventListener('click', function () { goToMatch(1); });
+    els.searchPrev.addEventListener('click', function () { flushSearch(); goToMatch(-1); });
+    els.searchNext.addEventListener('click', function () { flushSearch(); goToMatch(1); });
     els.searchClose.addEventListener('click', function () {
         els.searchBar.classList.remove('visible');
+        if (searchTimer) { clearTimeout(searchTimer); searchTimer = undefined; }
+        searchDirty = false;
         clearSearch();
     });
     els.searchInput.addEventListener('keydown', function (e) {
         if (e.key === 'Enter') {
             e.preventDefault();
+            flushSearch();
             goToMatch(e.shiftKey ? -1 : 1);
         } else if (e.key === 'Escape') {
             els.searchBar.classList.remove('visible');
+            if (searchTimer) { clearTimeout(searchTimer); searchTimer = undefined; }
+            searchDirty = false;
             clearSearch();
         }
     });

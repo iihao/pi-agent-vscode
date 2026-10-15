@@ -5,7 +5,7 @@
 import type { WebviewContext, MessageAttachment } from '../types';
 import { escapeHtml, formatMessageTime, formatMessageDay, messageDay, scrollToBottom, isNearBottom, isElNearBottom } from '../utils';
 import type MarkdownIt from 'markdown-it';
-import { setupMarkdown, renderMarkdown, renderMermaid } from '../markdown';
+import { setupMarkdown, renderMarkdown, renderMermaid, setLiveRender } from '../markdown';
 import { updateMessageCount } from './panels';
 import { renderRail } from './navigator';
 
@@ -96,6 +96,24 @@ function appendDateDivider(timestamp?: string): void {
     ctx.els.chat.appendChild(el);
 }
 
+// ---- Replay batching ----
+
+/**
+ * During a transcript replay every appended node used to trigger its own
+ * scroll-to-bottom (forced layout), message count and rail rebuild (full
+ * `.message` sweep each) — O(n²) over a long session's items. While a batch is
+ * open those per-node refreshes are suppressed and done once at the end.
+ */
+let batchReplay = false;
+export function isReplayBatch(): boolean { return batchReplay; }
+export function beginReplayBatch(): void { batchReplay = true; }
+export function endReplayBatch(): void {
+    batchReplay = false;
+    updateMessageCount();
+    renderRail();
+    scrollToBottom(ctx.els.chat);
+}
+
 export function addMessage(
     role: string,
     markdown: string,
@@ -144,9 +162,11 @@ export function addMessage(
     if (images && images.length) { body.appendChild(renderMessageImages(images)); }
     body.insertAdjacentHTML('beforeend', render(markdown));
     ctx.els.chat.appendChild(el);
-    scrollToBottom(ctx.els.chat);
-    updateMessageCount();
-    renderRail();
+    if (!batchReplay) {
+        scrollToBottom(ctx.els.chat);
+        updateMessageCount();
+        renderRail();
+    }
     return body;
 }
 
@@ -162,7 +182,7 @@ export function createCollapsible(title: string, count: number, collapsed: boole
     wrap.appendChild(header);
     wrap.appendChild(content);
     ctx.els.chat.appendChild(wrap);
-    scrollToBottom(ctx.els.chat);
+    if (!batchReplay) { scrollToBottom(ctx.els.chat); }
     return content;
 }
 
@@ -357,9 +377,19 @@ export function resetWorking(): void {
 
 let revealRaf: number | undefined;
 let revealedLen = 0;
+let lastRevealAt = 0;
+
+/**
+ * Minimum interval between two typewriter re-renders. A reveal frame re-parses
+ * the whole already-revealed prefix (markdown output grows as O(n²) in total),
+ * and at 60fps the same message used to be re-rendered up to sixty times a
+ * second. 50ms keeps the typing feel while bounding the work to ~20 renders/s.
+ */
+const REVEAL_RENDER_MS = 50;
 
 function stopReveal(): void {
     if (revealRaf !== undefined) { cancelAnimationFrame(revealRaf); revealRaf = undefined; }
+    lastRevealAt = 0;
 }
 
 function revealTick(): void {
@@ -368,12 +398,26 @@ function revealTick(): void {
     if (!body) { return; }
     const target = ctx.currentBuffer.length;
     if (revealedLen >= target) { return; }
+    const now = Date.now();
+    if (lastRevealAt && now - lastRevealAt < REVEAL_RENDER_MS) {
+        // too early for another full re-render; keep ticking, the elapsed time
+        // (not chunk arrival) drives the pacing
+        revealRaf = requestAnimationFrame(revealTick);
+        return;
+    }
+    const elapsed = lastRevealAt ? now - lastRevealAt : REVEAL_RENDER_MS;
+    lastRevealAt = now;
     const pending = target - revealedLen;
-    // About 3-6 chars per frame normally; catch up faster when further behind so long replies don't queue up
-    const step = Math.max(3, Math.ceil(pending / 5));
+    // ~300 chars per second, with a proportional catch-up when far behind so
+    // long replies don't queue up; scaled by the time actually elapsed
+    const perTick = Math.max(15, Math.ceil(pending / 5));
+    const step = perTick * Math.max(1, Math.round(elapsed / REVEAL_RENDER_MS));
     revealedLen = Math.min(target, revealedLen + step);
     const stick = isNearBottom(ctx.els.chat);
+    // no highlight.js mid-stream; endAssistantStream renders the formatted pass
+    setLiveRender(md, true);
     body.innerHTML = render(ctx.currentBuffer.slice(0, revealedLen));
+    setLiveRender(md, false);
     if (stick) { scrollToBottom(ctx.els.chat); }
     if (revealedLen < target) { revealRaf = requestAnimationFrame(revealTick); }
 }

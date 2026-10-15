@@ -86,7 +86,6 @@ export function createContext(): WebviewContext {
         searchQuery: '',
         searchMatches: [],
         searchIndex: 0,
-        allMessages: [],
         messageHistory: [],
         historyIndex: -1,
         slashCommands: [],

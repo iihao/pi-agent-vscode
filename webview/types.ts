@@ -291,7 +291,6 @@ export interface WebviewContext {
     searchQuery: string;
     searchMatches: SearchMatch[];
     searchIndex: number;
-    allMessages: MessageInfo[];
     // History
     messageHistory: string[];
     historyIndex: number;

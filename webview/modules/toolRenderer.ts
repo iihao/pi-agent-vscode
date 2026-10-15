@@ -3,8 +3,8 @@
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext } from '../types';
-import { escapeHtml, capitalize, formatDuration, scrollToBottom, isNearBottom, bashId } from '../utils';
-import { hideThinking, activityBegin, activityEnd } from './messageRenderer';
+import { escapeHtml, capitalize, formatDuration, scrollToBottom, isNearBottom } from '../utils';
+import { hideThinking, activityBegin, activityEnd, isReplayBatch } from './messageRenderer';
 
 let ctx: WebviewContext;
 
@@ -89,7 +89,7 @@ export function addTool(tool: string, detail?: string, toolCallId?: string, tool
     if (currentGroup && currentGroupNames.length >= MAX_TOOLS_PER_GROUP) {
         endToolGroup();
     }
-    const group = ensureToolGroup();
+    ensureToolGroup();
     currentGroupNames.push(capitalize(tool));
     updateToolGroupHeader();
     const el = document.createElement('div');
@@ -117,7 +117,7 @@ export function addTool(tool: string, detail?: string, toolCallId?: string, tool
     const stick = isNearBottom(ctx.els.chat);
     toolGroupBody().appendChild(el);
     if (toolCallId) { ctx.runningTools[toolCallId] = { el: el, head: head, body: body }; }
-    if (stick) { scrollToBottom(ctx.els.chat); }
+    if (stick && !isReplayBatch()) { scrollToBottom(ctx.els.chat); }
 }
 
 /**
@@ -208,7 +208,7 @@ export function endTool(toolCallId: string | undefined, data: { isError?: boolea
         if (data.isError) { pre.classList.add('error'); }
     }
     if (data.truncated || data.fullOutputPath) { appendTruncationNote(t.body, data.fullOutputPath); }
-    if (stick) { scrollToBottom(ctx.els.chat); }
+    if (stick && !isReplayBatch()) { scrollToBottom(ctx.els.chat); }
 }
 
 export function addBashRunning(id: string, command: string): void {

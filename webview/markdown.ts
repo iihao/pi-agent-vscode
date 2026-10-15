@@ -55,7 +55,7 @@ hljs.registerLanguage('md', markdown);
 hljs.registerLanguage('sql', sql);
 hljs.registerLanguage('diff', diff);
 
-function renderFence(token: { info?: string; content?: string }, S: UiStrings): string {
+function renderFence(token: { info?: string; content?: string }, S: UiStrings, live = false): string {
     const info = token.info ? token.info.trim() : '';
     const lang = info.split(/\s+/)[0] || 'code';
     const code = (token.content || '').replace(/\n$/, '');
@@ -63,7 +63,12 @@ function renderFence(token: { info?: string; content?: string }, S: UiStrings): 
         return '<div class="mermaid">' + escapeHtml(code) + '</div>';
     }
     let codeHtml: string;
-    if (lang && hljs.getLanguage(lang)) {
+    // Live typewriter frames skip highlight.js entirely (see setLiveRender): it
+    // would re-tokenize every already-revealed block on every frame. The line
+    // numbers stay so the block does not shift when the final pass highlights it.
+    if (live) {
+        codeHtml = escapeHtml(code);
+    } else if (lang && hljs.getLanguage(lang)) {
         try { codeHtml = hljs.highlight(code, { language: lang, ignoreIllegals: true }).value; }
         catch (e) { codeHtml = escapeHtml(code); }
     } else {
@@ -86,7 +91,9 @@ function renderFence(token: { info?: string; content?: string }, S: UiStrings): 
 export function setupMarkdown(S: UiStrings): MarkdownIt {
     const md = new MarkdownIt({ html: false, linkify: true, breaks: true });
     md.use(katexPlugin);
-    md.renderer.rules.fence = function (tokens, idx) { return renderFence(tokens[idx], S); };
+    let live = false;
+    (md as unknown as { __setLive?: (on: boolean) => void }).__setLive = (on: boolean) => { live = on; };
+    md.renderer.rules.fence = function (tokens, idx) { return renderFence(tokens[idx], S, live); };
     md.renderer.rules.code_block = function (tokens, idx) { return renderFence(tokens[idx], S); };
     md.renderer.rules.link_open = function (tokens, idx, _options, _env, self) {
         tokens[idx].attrSet('target', '_blank');
@@ -109,6 +116,17 @@ export function renderMarkdown(md: MarkdownIt, src: string): string {
     return md.render(src || '');
 }
 
+/**
+ * Toggle the live typewriter mode: fenced code is escaped, not highlighted.
+ * A reveal frame re-renders the whole already-revealed prefix, and running
+ * highlight.js over every code block in it 60 times a second is what made
+ * long replies stutter. The stream-end render (live off) formats everything.
+ */
+export function setLiveRender(md: MarkdownIt, on: boolean): void {
+    const m = md as unknown as { __setLive?: (on: boolean) => void };
+    if (m.__setLive) { m.__setLive(on); }
+}
+
 /** Lazily load Mermaid (big library; only fetched when a diagram appears) */
 export function renderMermaid(chat: HTMLElement): Promise<void> {
     const nodes = Array.prototype.slice.call(chat.querySelectorAll('.mermaid:not([data-processed])'));
@@ -121,6 +139,6 @@ export function renderMermaid(chat: HTMLElement): Promise<void> {
             securityLevel: 'strict',
             theme: document.body.classList.contains('vscode-light') ? 'default' : 'dark',
         });
-        return lib.run({ nodes: nodes, suppressErrors: true }).catch(function () {});
-    }).catch(function () { return; });
+        return lib.run({ nodes: nodes, suppressErrors: true }).catch(function () { /* noop */ });
+    }).catch(function () { /* noop */ });
 }

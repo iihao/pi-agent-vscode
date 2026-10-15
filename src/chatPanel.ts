@@ -34,8 +34,11 @@ const vs = getVSCodeService();
  * Cap on replayed transcript items. A very long session would otherwise create
  * tens of thousands of DOM nodes on every reconnect; the full log always stays
  * on disk, and anything dropped is reported to the user instead of vanishing.
+ * 1500 is deliberately well below what a browser can technically render: the
+ * cost is not the node count but the per-item markdown + highlight parse on
+ * reconnect, which should stay inside a blink even on slow machines.
  */
-const HISTORY_MAX_ITEMS = 4000;
+const HISTORY_MAX_ITEMS = 1500;
 
 /** Whether an error is a "pi process / connection" problem (checked by type/code, not localized text) */
 function isProcessError(err: unknown): boolean {

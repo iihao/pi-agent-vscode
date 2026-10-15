@@ -203,7 +203,7 @@ describe('transcript replay', () => {
 
         const post = webview.posted.find((m) => m.type === 'history');
         const items = (post?.items as HistoryItem[]) ?? [];
-        expect(items.length).toBeLessThanOrEqual(4000);
+        expect(items.length).toBeLessThanOrEqual(1500);
         // Never start mid-turn: a tool result without its tool call would spin forever
         expect(items[0].kind).toBe('user');
         expect(post?.hidden).toBeGreaterThan(0);
