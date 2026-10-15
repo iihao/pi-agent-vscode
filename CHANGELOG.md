@@ -7,8 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **`Pi: Restart Session` is now `Pi: Reload Session`** (⟳ icon). "Restart" read
+  as "re-open / wipe this conversation" — which is what `/clear` and **New chat**
+  do — while this command replaces this session's pi process and rebuilds its
+  transcript from the session file. The session list also gained its own ⟳ that
+  re-reads the session directory from disk, for when another pi process created,
+  renamed or appended sessions.
+
 ### Fixed
 
+- **Reloading a session no longer kills a running turn silently.** The command
+  replaced the pi process outright, throwing away the current turn and whatever
+  had not reached the session file yet. It now asks first, aborts the turn
+  gracefully and waits briefly for its entries to land before reconnecting — so
+  reloading stays usable when pi is wedged (the main reason to reload) without
+  ever discarding work by accident. Only the current session is touched.
+- **A settings-driven reload no longer kills other sessions mid-turn.** Changing
+  `pi.executable` / `pi.arguments` / `agent.permissionMode` reloads every session
+  (settings are global) but now ends each running turn gracefully first, and
+  tells every panel that the turn ended.
+- **Panels sharing one session no longer drift out of sync.** Reconciling the
+  busy state after a reconnect only reached the panel that reconnected; every
+  panel bound to that runtime is updated now.
 - **Reloading a session no longer throws away most of the transcript.** The
   reload path rebuilt the chat from `get_messages`, which returns the *model
   context*: everything before the last compaction was already summarized away,

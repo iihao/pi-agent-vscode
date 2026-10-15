@@ -149,9 +149,9 @@ export function activate(context: vscode.ExtensionContext) {
     const attachFiles = vscode.commands.registerCommand('pi-agent.attachFiles', () =>
         withPanel((panel) => panel.attachFiles()));
 
-    // ---- Restart the session (takes effect after permission mode / executable changes) ----
+    // ---- Reload the session from disk (new pi process; only this session is touched) ----
     const restartSession = vscode.commands.registerCommand('pi-agent.restartSession', () =>
-        withPanel((panel) => panel.restartClient()));
+        withPanel(async (panel) => { await panel.restartClient(); }));
 
     // ---- Export diagnostics ----
     const exportDiagnostics = vscode.commands.registerCommand('pi-agent.exportDiagnostics', async () => {
@@ -186,6 +186,7 @@ export function activate(context: vscode.ExtensionContext) {
                 );
             }
             // Restart every session runtime, not just the one bound to the current panel
+            // (each running turn is aborted first, so nothing is killed mid-write)
             void ChatPanel.restartAllClients();
         }
     });

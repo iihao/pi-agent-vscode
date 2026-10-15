@@ -14,7 +14,11 @@
 import { PiClientManager, PiStartOptions } from '../sdk/clientManager';
 import { SessionManager } from '../sdk/sessionManager';
 import { ChatState, getInitialState } from '../state/types';
+import { logError } from '../utils/logger';
 import type { ChatPanel } from '../chatPanel';
+
+/** How long to wait for a running turn to abort before replacing the pi process */
+const ABORT_BEFORE_RESTART_MS = 3000;
 
 export class ChatRuntime {
     /** Independent pi client (one process per session) */
@@ -50,6 +54,27 @@ export class ChatRuntime {
 
     /** Per-turn revert snapshot (undo of a revert), isolated per session */
     readonly revertSnapshot = new Map<string, { content: string | null; existed: boolean }>();
+
+    /**
+     * End a running turn before the pi process is replaced: ask pi to abort, then
+     * wait briefly for the turn to settle so its last entries reach the session
+     * file. Deliberately bounded — a wedged pi is the main reason to reload.
+     */
+    async abortForRestart(timeoutMs = ABORT_BEFORE_RESTART_MS): Promise<void> {
+        const client = this.clientManager.client;
+        try {
+            await Promise.race([
+                this.clientManager.abort(),
+                new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+            ]);
+            if (client && typeof client.waitForIdle === 'function') {
+                await client.waitForIdle(timeoutMs).catch(() => { /* the process is replaced anyway */ });
+            }
+        } catch (err) {
+            logError(`abort before restart failed: ${(err as Error).message}`);
+        }
+        this.state = { ...this.state, busy: false };
+    }
 }
 
 export class ChatRuntimeRegistry {

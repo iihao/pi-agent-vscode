@@ -24,7 +24,7 @@
   "cmd.attachFile": "Pi: 附加当前文件到对话",
   "cmd.attachSelection": "Pi: 附加选中代码到对话",
   "cmd.attachFiles": "Pi: 从工作区附加文件",
-  "cmd.restartSession": "Pi: 重启会话",
+  "cmd.restartSession": "Pi: 重新载入会话",
   "cmd.exportDiagnostics": "Pi: 导出诊断信息",
   "view.chat.name": "对话",
   "config.pi.executable": "自定义 pi CLI 路径（留空则自动探测）",

@@ -24,7 +24,7 @@
   "cmd.attachFile": "Pi: 現在のファイルをチャットに添付",
   "cmd.attachSelection": "Pi: 選択範囲をチャットに添付",
   "cmd.attachFiles": "Pi: ワークスペースからファイルを添付",
-  "cmd.restartSession": "Pi: セッションを再起動",
+  "cmd.restartSession": "Pi: セッションを再読み込み",
   "cmd.exportDiagnostics": "Pi: 診断情報をエクスポート",
   "view.chat.name": "チャット",
   "config.pi.executable": "pi CLI のパスを指定（空欄なら自動検出）",

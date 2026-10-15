@@ -236,6 +236,12 @@ function bindPanelEvents(): void {
         renderSessionPanel();
     });
     els.sessionPanel.addEventListener('click', function (e) {
+        // Re-read the session directory (another pi process may have changed it)
+        const reload = (e.target as HTMLElement).closest('.session-reload') as HTMLElement | null;
+        if (reload) {
+            ctx.vscode.postMessage({ type: 'refreshSessions' });
+            return;
+        }
         const act = (e.target as HTMLElement).closest('.session-row-act') as HTMLElement | null;
         if (act) {
             const row = act.closest('.session-row') as HTMLElement | null;

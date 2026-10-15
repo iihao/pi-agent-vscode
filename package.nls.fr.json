@@ -24,7 +24,7 @@
   "cmd.attachFile": "Pi : Joindre le fichier courant au chat",
   "cmd.attachSelection": "Pi : Joindre la sélection au chat",
   "cmd.attachFiles": "Pi : Joindre des fichiers de l'espace de travail",
-  "cmd.restartSession": "Pi : Redémarrer la session",
+  "cmd.restartSession": "Pi : Recharger la session",
   "cmd.exportDiagnostics": "Pi : Exporter les diagnostics",
   "view.chat.name": "Chat",
   "config.pi.executable": "Chemin personnalisé du CLI pi (vide = détection auto)",

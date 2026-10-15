@@ -270,5 +270,8 @@
   "ready": "ready",
   "Pi is working — Enter sends, ■ stops": "Pi is working — Enter sends, ■ stops",
   "Context compacted here": "Context compacted here",
-  "Earlier transcript not shown ({0} items) — the full history stays in the session file": "Earlier transcript not shown ({0} items) — the full history stays in the session file"
+  "Earlier transcript not shown ({0} items) — the full history stays in the session file": "Earlier transcript not shown ({0} items) — the full history stays in the session file",
+  "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.": "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.",
+  "Re-read the session list from disk": "Re-read the session list from disk",
+  "Stop and reload": "Stop and reload"
 }

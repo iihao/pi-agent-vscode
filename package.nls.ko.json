@@ -24,7 +24,7 @@
   "cmd.attachFile": "Pi: 현재 파일을 채팅에 첨부",
   "cmd.attachSelection": "Pi: 선택 영역을 채팅에 첨부",
   "cmd.attachFiles": "Pi: 작업 영역에서 파일 첨부",
-  "cmd.restartSession": "Pi: 세션 재시작",
+  "cmd.restartSession": "Pi: 세션 다시 불러오기",
   "cmd.exportDiagnostics": "Pi: 진단 내보내기",
   "view.chat.name": "채팅",
   "config.pi.executable": "사용자 지정 pi CLI 경로 (비우면 자동 감지)",

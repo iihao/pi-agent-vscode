@@ -304,9 +304,10 @@
         min-width: 0;
         max-width: calc(100% - 28px);
     }
+    .session-head { display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
     .session-search {
-        width: 100%;
-        margin-bottom: 6px;
+        flex: 1;
+        min-width: 0;
         padding: 4px 8px;
         background: var(--cx-code-bg);
         border: 1px solid var(--cx-border);
@@ -315,6 +316,18 @@
         font-size: 11.5px;
         outline: none;
     }
+    .session-reload {
+        flex-shrink: 0;
+        padding: 3px 6px;
+        background: transparent;
+        border: 1px solid var(--cx-border);
+        border-radius: 6px;
+        color: var(--cx-muted);
+        font-size: 12px;
+        line-height: 1;
+        cursor: pointer;
+    }
+    .session-reload:hover { color: var(--cx-accent); border-color: var(--cx-accent); }
     .session-search:focus { border-color: var(--cx-accent); }
     .session-list { display: flex; flex-direction: column; gap: 2px; max-height: 60vh; overflow-y: auto; }
     .session-row { display: flex; align-items: center; gap: 2px; border-radius: 6px; }

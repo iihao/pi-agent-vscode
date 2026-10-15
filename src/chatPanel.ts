@@ -118,6 +118,16 @@ export class ChatPanel {
         this._post({ type: 'clear' });
     }
 
+    /**
+     * Set the shared busy state and tell every panel bound to this runtime.
+     * Busy lives on the runtime, so reconciling it from pi (a reconnect) would
+     * otherwise leave the other panels' webviews showing a stale state.
+     */
+    private _broadcastBusy(busy: boolean): void {
+        this._busy = busy;
+        for (const panel of this._runtime.panels) { panel._post({ type: 'setBusy', busy }); }
+    }
+
     // The render ledger must be panel-private: the sidebar and the editor tab are
     // separate webviews, and sharing "what was already rendered" makes the second
     // panel treat content as already sent and drop the whole thing.
@@ -267,13 +277,20 @@ export class ChatPanel {
     /**
      * Restart every session runtime's pi client (after permission mode /
      * executable changes) so each bound session reconnects and picks it up.
+     *
+     * Settings are global, so all runtimes are affected — but no running turn is
+     * killed silently: each one is aborted first so its entries reach the session
+     * file, and every panel is told the turn ended.
      */
     public static async restartAllClients(): Promise<void> {
         for (const runtime of ChatPanel._registry.all()) {
+            if (selectBusy(runtime.state)) { await runtime.abortForRestart(); }
             await runtime.clientManager.stop().catch((err) => logError(`restart stop failed: ${(err as Error).message}`));
         }
         for (const panel of ChatPanel._instances) {
             panel._contextWarned = false;
+            panel._busy = false;
+            panel._post({ type: 'setBusy', busy: false });
             await panel._ensureClient().catch((err) => logError(`restart reconnect failed: ${(err as Error).message}`));
         }
     }
@@ -327,8 +344,28 @@ export class ChatPanel {
         }
     }
 
-    /** Restart the pi client (takes effect after permission mode / executable changes) */
-    public async restartClient(): Promise<void> {
+    /**
+     * Reload this session: replace the pi process and rebuild the transcript from
+     * the session file. Only this session is affected — every runtime owns its own
+     * pi process, so other sessions (running or not) are untouched.
+     *
+     * Returns false when the user cancels at the confirmation.
+     */
+    public async restartClient(): Promise<boolean> {
+        // Replacing the process mid-turn throws the turn away (including anything
+        // not yet written to the session file), so never do that by accident. The
+        // button stays usable while busy though: reloading is the escape hatch
+        // when pi is wedged.
+        if (this._busy) {
+            const stopAndReload = vscode.l10n.t('Stop and reload');
+            const choice = await vs.showWarningMessage(
+                vscode.l10n.t('Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.'),
+                { modal: true },
+                stopAndReload,
+            );
+            if (choice !== stopAndReload) { return false; }
+            await this._runtime.abortForRestart();
+        }
         await this._clientManager.stop();
         this._busy = false;
         this._turnHadText = false;
@@ -338,6 +375,7 @@ export class ChatPanel {
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
         await this._ensureClient();
+        return true;
     }
 
     // ---------- Editor context ----------
@@ -1091,6 +1129,16 @@ export class ChatPanel {
             case 'switchSession':
                 if (message.sessionId) { await this._handleSwitchSession(message.sessionId); }
                 break;
+            case 'refreshSessions': {
+                // Re-read the session directory: another pi process (a terminal, a
+                // second window) may have created, renamed or appended sessions.
+                const client = this._clientManager.client;
+                if (client && this._clientManager.isConnected) {
+                    await this._sessionManager.loadSessions(client);
+                    this._postSessionList();
+                }
+                break;
+            }
             case 'renameSession':
                 if (message.sessionId) { await this._handleRenameSession(message.sessionId, message.currentName); }
                 break;
@@ -1210,8 +1258,7 @@ export class ChatPanel {
                     this._runtime.sessionFile = st.sessionFile;
                     this._runtime.startOptions = { sessionFile: st.sessionFile };
                 }
-                this._busy = Boolean(st.isStreaming);
-                this._post({ type: 'setBusy', busy: this._busy });
+                this._broadcastBusy(Boolean(st.isStreaming));
             } catch (err) { logError(`reconcile busy failed: ${(err as Error).message}`); }
 
             // If clear() ran while disconnected, create a new session on connect

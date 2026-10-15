@@ -270,5 +270,8 @@
   "ready": "就绪",
   "Pi is working — Enter sends, ■ stops": "Pi 正在工作 —— Enter 发送，■ 停止",
   "Context compacted here": "上下文已在此压缩",
-  "Earlier transcript not shown ({0} items) — the full history stays in the session file": "更早的记录未显示（{0} 项）—— 完整历史仍保存在会话文件中"
+  "Earlier transcript not shown ({0} items) — the full history stays in the session file": "更早的记录未显示（{0} 项）—— 完整历史仍保存在会话文件中",
+  "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.": "Pi 正在工作。重新载入会中断当前这一轮；已写入会话文件的内容都会保留。",
+  "Re-read the session list from disk": "从磁盘重新读取会话列表",
+  "Stop and reload": "停止并重新载入"
 }

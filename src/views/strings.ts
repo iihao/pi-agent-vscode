@@ -29,6 +29,8 @@ export interface UiStrings {
     newChatTitle: string;
     sessionTitle: string;
     sessionSearch: string;
+    /** Session list: re-read the directory from disk */
+    sessionReload: string;
     currentSession: string;
     searchPlaceholder: string;
     prev: string;
@@ -140,6 +142,7 @@ export function getUiStrings(): UiStrings {
         newChatTitle: t('New chat'),
         sessionTitle: t('Sessions'),
         sessionSearch: t('Search sessions…'),
+        sessionReload: t('Re-read the session list from disk'),
         currentSession: t('Current session'),
         searchPlaceholder: t('Search messages…'),
         prev: t('Previous'),

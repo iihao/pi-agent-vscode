@@ -116,7 +116,7 @@ it to, writes to pi's own credential files (`auth.json` / `models.json`).
 | Generate commit message / PR | **Pi: Generate Commit Message** / **Pi: Generate Pull Request Description** |
 | Revert last turn's changes | **Pi: Revert Changes From Last Turn** |
 | Clone session | **Pi: Clone Session** |
-| Restart session | **Pi: Restart Session** |
+| Reload session (rebuild from disk) | **Pi: Reload Session** |
 | Export diagnostics | **Pi: Export Diagnostics** |
 
 ## Settings (`pi-agent.*`)
@@ -133,8 +133,17 @@ it to, writes to pi's own credential files (`auth.json` / `models.json`).
 | `pi-agent.notifications.enabled` | `true` | Notify on completion while the window is unfocused |
 | `pi-agent.diagnostics.level` | `info` | Output-channel log level (`error`/`info`/`debug`) |
 
-Changing `pi.executable`, `pi.arguments` or `agent.permissionMode` restarts the
-session automatically (or run **Pi: Restart Session**).
+Changing `pi.executable`, `pi.arguments` or `agent.permissionMode` reloads every
+session automatically (each running turn is ended gracefully first, not killed
+mid-write).
+
+**Pi: Reload Session** (the ⟳ button in the Pi view title bar) replaces the pi
+process for *the current session only* and rebuilds its transcript from the
+session file — useful after upgrading pi, when the session was changed by
+another pi process, or when pi has stopped responding. Other sessions keep
+running. Reloading while pi is working asks first and stops the current turn;
+anything already written to the session file is kept. The session list's own ⟳
+re-reads the session directory from disk.
 
 ---
 

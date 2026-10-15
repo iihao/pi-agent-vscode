@@ -181,7 +181,7 @@
       {
         "command": "pi-agent.restartSession",
         "title": "%cmd.restartSession%",
-        "icon": "$(debug-restart)"
+        "icon": "$(refresh)"
       },
       {
         "command": "pi-agent.exportDiagnostics",

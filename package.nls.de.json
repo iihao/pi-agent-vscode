@@ -24,7 +24,7 @@
   "cmd.attachFile": "Pi: Aktuelle Datei an Chat anhängen",
   "cmd.attachSelection": "Pi: Auswahl an Chat anhängen",
   "cmd.attachFiles": "Pi: Dateien aus dem Arbeitsbereich anhängen",
-  "cmd.restartSession": "Pi: Sitzung neu starten",
+  "cmd.restartSession": "Pi: Sitzung neu laden",
   "cmd.exportDiagnostics": "Pi: Diagnose exportieren",
   "view.chat.name": "Chat",
   "config.pi.executable": "Benutzerdefinierter pi-CLI-Pfad (leer = automatisch)",

@@ -191,7 +191,10 @@ export function renderSessionPanel(): void {
     // Build the structure once so typing/refreshing never loses the search box focus or value
     if (!els.sessionPanel.querySelector('.session-search')) {
         els.sessionPanel.innerHTML =
-            '<input type="text" class="session-search" placeholder="' + escapeHtml(S.sessionSearch) + '">' +
+            '<div class="session-head">' +
+                '<input type="text" class="session-search" placeholder="' + escapeHtml(S.sessionSearch) + '">' +
+                '<button type="button" class="session-reload" title="' + escapeHtml(S.sessionReload) + '" aria-label="' + escapeHtml(S.sessionReload) + '">⟳</button>' +
+            '</div>' +
             '<div class="session-list"></div>';
         (els.sessionPanel.querySelector('.session-search') as HTMLInputElement).value = ctx.sessionQuery;
     }
