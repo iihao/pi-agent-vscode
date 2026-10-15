@@ -9,6 +9,7 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { ChatPanel } from './chatPanel';
+import { ChatRuntime } from './chatPanel/runtime';
 import type { PiRpcClient } from './sdk/piTypes';
 import type { ChatRuntime } from './chatPanel/runtime';
 import * as vscodeMock from '../test/vscode.mock';
@@ -159,6 +160,59 @@ describe('long-running turns', () => {
         await new Promise((resolve) => setTimeout(resolve, 0));
         (panel as unknown as { _onAgentEvent(e: unknown): void })._onAgentEvent({ type: 'agent_settled' });
 
+        emitMessageEnd(panel, { role: 'assistant', content: [], errorMessage: 'Provider returned 500' });
+
+        expect(webview.posted.filter((m) => m.type === 'error').map((m) => m.text)).toEqual(['Provider returned 500']);
+    });
+
+    it('replaces a crashed client even when the failure followed a stop', async () => {
+        const webview = makeWebview();
+        const panel = ChatPanel.create(
+            webview as unknown as import('vscode').Webview,
+            '/ext',
+            disposeEvent as unknown as import('vscode').Event<void>,
+        );
+        panels.push(panel);
+        const inner = panel as unknown as TurnInternals & {
+            _stopRequested: boolean;
+            _handleUserMessage(text: string): Promise<void>;
+            _buildAutoContext(): Promise<string[]>;
+            _runtime: ChatRuntime & { clientManager: unknown };
+        };
+        inner._buildAutoContext = () => Promise.resolve([]);
+        let restarted = 0;
+        const crashed = Object.assign(new Error('spawn pi ENOENT'), { code: 'ENOENT' });
+        const client = { prompt: () => Promise.reject(crashed) };
+        inner._runtime.clientManager = {
+            client,
+            isConnected: true,
+            ensureConnected: () => Promise.resolve(client as unknown as PiRpcClient),
+            stop: () => { restarted++; return Promise.resolve(); },
+            abort: () => Promise.resolve(),
+            onEvent: () => () => { /* noop */ },
+        };
+        // A stop can be exactly what reveals that the process is gone
+        inner._stopRequested = true;
+
+        await inner._handleUserMessage('hello');
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        expect(restarted).toBe(1);
+        expect(webview.posted.filter((m) => m.type === 'error')).toEqual([]);
+    });
+
+    it('does not carry a stop from one session into the next', () => {
+        const webview = makeWebview();
+        const panel = ChatPanel.create(
+            webview as unknown as import('vscode').Webview,
+            '/ext',
+            disposeEvent as unknown as import('vscode').Event<void>,
+        );
+        panels.push(panel);
+        const inner = panel as unknown as { _stopRequested: boolean; _bindRuntime(r: ChatRuntime): void };
+        inner._stopRequested = true;
+
+        inner._bindRuntime(new ChatRuntime());
         emitMessageEnd(panel, { role: 'assistant', content: [], errorMessage: 'Provider returned 500' });
 
         expect(webview.posted.filter((m) => m.type === 'error').map((m) => m.text)).toEqual(['Provider returned 500']);

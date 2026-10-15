@@ -166,6 +166,22 @@ describe('transcript replay', () => {
         expect(post?.hidden).toBeGreaterThan(0);
     });
 
+    it('still settles the webview when the replay itself fails', async () => {
+        // Without a `history` the webview keeps its boot state: the empty state would
+        // show the logo and title only, with no quick actions, for the rest of the
+        // session.
+        const { webview, internals } = make();
+        const broken = {
+            getMessages: () => Promise.reject(new Error('rpc exploded')),
+        } as unknown as PiRpcClient;
+
+        await internals._restoreHistory(broken);
+
+        const post = webview.posted.find((m) => m.type === 'history');
+        expect(post).toBeDefined();
+        expect(post?.items).toEqual([]);
+    });
+
     it('falls back to get_messages when the pi build has no get_entries', async () => {
         const { webview, internals } = make();
         await internals._restoreHistory(clientWith(undefined, undefined, [

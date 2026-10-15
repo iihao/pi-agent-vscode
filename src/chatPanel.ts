@@ -224,6 +224,9 @@ export class ChatPanel {
         this._resetRenderLedger();
         // After rebinding, the previous session's "retry" message must not carry over
         this._lastUserMessage = undefined;
+        // …nor the fact that the previous session's turn was stopped: a failure in the
+        // new session is a failure.
+        this._stopRequested = false;
         this._subscribeRuntime(runtime);
         void ChatPanel._registry.release(previous);
     }
@@ -1352,6 +1355,10 @@ export class ChatPanel {
             this._post({ type: 'history', items: capped.items, hidden: capped.hidden });
         } catch (err) {
             logError(`_restoreHistory failed: ${(err as Error).message}`);
+            // Still settle the webview: without a `history` it would keep showing the
+            // bare boot state (logo and title only, no quick actions) for the rest of
+            // the session.
+            this._post({ type: 'history', items: [], hidden: 0 });
         } finally {
             // Either way the webview now reflects this runtime, so a later
             // reconnect must not replay on top of it.
@@ -2396,18 +2403,20 @@ export class ChatPanel {
 
             const msg = (err as Error).message || String(err);
 
+            // Replace a crashed process whether or not the user stopped the turn:
+            // stopping is often what revealed the crash, and skipping this would leave
+            // the panel bound to a dead client until the user retried by hand.
+            if (isProcessError(err)) {
+                await this._clientManager.stop();
+                void this._ensureClient().catch((err) => { logError(`reconnect after crash failed: ${(err as Error).message}`); });
+            }
+
             // A stop the user asked for can make the prompt itself fail; that is not
             // something to hand back as an actionable error.
             if (this._stopRequested) {
                 logInfo(`prompt ended after a stop request: ${msg}`);
                 this._post({ type: 'notice', text: vscode.l10n.t('Stopped') });
                 return;
-            }
-
-            // Reset the client only when the process really crashed (type check, not message text)
-            if (isProcessError(err)) {
-                await this._clientManager.stop();
-                void this._ensureClient().catch((err) => { logError(`reconnect after crash failed: ${(err as Error).message}`); });
             }
 
             this._postError(msg);

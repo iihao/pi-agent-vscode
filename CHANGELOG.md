@@ -27,6 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **A failed transcript replay no longer leaves the empty state half-drawn.** If
+  reading the session log back threw, no transcript state was posted, and the
+  webview stays in its boot state until one arrives — so the empty state showed
+  the logo and title and never the quick actions. The replay now always reports
+  the settled state, even when it fails.
+- **A crashed pi process is replaced even when the failure followed a stop.**
+  The "the user stopped this turn, so don't treat it as an error" check ran
+  before the crash recovery, so stopping a turn that then failed left the panel
+  bound to a dead client until the user retried by hand.
 - **Stopping a turn no longer shows a red error.** pi marks a turn it aborted
   with `stopReason: 'aborted'`, but only when the abort lands mid-message: if it
   lands between turns the aborted message arrives as a plain error carrying the
