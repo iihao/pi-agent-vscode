@@ -48,6 +48,8 @@ export interface SetupStatus {
 export interface HistoryItem {
     kind: 'user' | 'assistant' | 'thinking' | 'tool' | 'toolResult' | 'compaction' | 'notice';
     text?: string;
+    /** When pi recorded the entry, so a replayed transcript keeps its real times */
+    timestamp?: string;
     /** tool / toolResult: tool name */
     tool?: string;
     toolCallId?: string;

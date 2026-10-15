@@ -1407,7 +1407,7 @@ export class ChatPanel {
         for (const entry of this._branchEntries(entries, leafId)) {
             if (entry.type === 'compaction') {
                 // Keep the checkpoint visible instead of silently dropping the summarized range
-                items.push({ kind: 'compaction', text: entry.summary });
+                items.push({ kind: 'compaction', text: entry.summary, timestamp: entry.timestamp });
                 continue;
             }
             if (entry.type !== 'message' || !entry.message) { continue; }
@@ -1421,6 +1421,7 @@ export class ChatPanel {
                 const refs = text ? parseContextRefs(text) : [];
                 items.push({
                     kind: 'user',
+                    timestamp: entry.timestamp,
                     text: text ? stripContextBlock(text) : '',
                     images: images.length ? images : undefined,
                     attachments: refs.length ? refs.map((r) => ({ type: r.type, path: r.path, lineRange: r.lineRange })) : undefined,
@@ -1433,12 +1434,13 @@ export class ChatPanel {
                 for (const raw of m.content) {
                     const block = raw as { type?: string; text?: string; thinking?: string; id?: string; name?: string; arguments?: unknown };
                     if (block.type === 'thinking' && typeof block.thinking === 'string' && block.thinking.trim()) {
-                        items.push({ kind: 'thinking', text: block.thinking });
+                        items.push({ kind: 'thinking', text: block.thinking, timestamp: entry.timestamp });
                     } else if (block.type === 'text' && typeof block.text === 'string' && block.text.trim()) {
-                        items.push({ kind: 'assistant', text: block.text });
+                        items.push({ kind: 'assistant', text: block.text, timestamp: entry.timestamp });
                     } else if (block.type === 'toolCall') {
                         items.push({
                             kind: 'tool',
+                            timestamp: entry.timestamp,
                             tool: block.name ?? 'tool',
                             toolCallId: block.id,
                             detail: summarizeToolArgs(block.arguments) || undefined,
@@ -1452,6 +1454,7 @@ export class ChatPanel {
             if (m.role === 'toolResult') {
                 items.push({
                     kind: 'toolResult',
+                    timestamp: entry.timestamp,
                     toolCallId: m.toolCallId,
                     tool: m.toolName,
                     isError: Boolean(m.isError),

@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 import type { WebviewContext, MessageAttachment } from '../types';
-import { escapeHtml, formatTime, scrollToBottom, isNearBottom, isElNearBottom } from '../utils';
+import { escapeHtml, formatMessageTime, formatMessageDay, messageDay, scrollToBottom, isNearBottom, isElNearBottom } from '../utils';
 import type MarkdownIt from 'markdown-it';
 import { setupMarkdown, renderMarkdown, renderMermaid } from '../markdown';
 import { updateMessageCount } from './panels';
@@ -70,6 +70,32 @@ export function renderMessageAttachments(atts: MessageAttachment[]): HTMLElement
     return wrap;
 }
 
+/** Calendar day of the last message rendered, so a day change can get a divider */
+let lastMessageDay: string | undefined;
+
+/** Forget the last rendered day (clear / new session) so the next message starts fresh */
+export function resetDates(): void {
+    lastMessageDay = undefined;
+}
+
+/**
+ * Add a day divider when the calendar day changes.
+ *
+ * Only messages that carry pi's own timestamp (a replayed transcript) can trigger
+ * one: a live turn's messages have none and simply join the current day, so the
+ * divider never appears out of nowhere while streaming.
+ */
+function appendDateDivider(timestamp?: string): void {
+    if (!timestamp) { return; }
+    const day = messageDay(timestamp);
+    if (day === lastMessageDay) { return; }
+    lastMessageDay = day;
+    const el = document.createElement('div');
+    el.className = 'date-divider';
+    el.textContent = formatMessageDay(timestamp);
+    ctx.els.chat.appendChild(el);
+}
+
 export function addMessage(
     role: string,
     markdown: string,
@@ -77,9 +103,13 @@ export function addMessage(
     pending?: string,
     images?: MessageImage[],
     attachments?: MessageAttachment[],
+    timestamp?: string,
 ): HTMLElement {
     const S = ctx.S;
     ctx.els.welcome.style.display = 'none';
+    // A gap in the calendar gets a divider, so a replayed history doesn't look like
+    // it all happened today
+    appendDateDivider(timestamp);
     const el = document.createElement('div');
     el.className = 'message ' + (isError ? 'error' : role);
     if (pending) {
@@ -87,7 +117,7 @@ export function addMessage(
         el.dataset.pendingText = markdown || '';
     }
     const label = role === 'user' ? '' : 'Pi';
-    const time = formatTime();
+    const time = formatMessageTime(timestamp);
     const badge = pending
         ? '<span class="pending-badge ' + pending + '">' + (pending === 'steering' ? S.steering : S.queued) + '</span>'
         : '';
@@ -99,7 +129,9 @@ export function addMessage(
             '</button>' +
             (role === 'user' ?
                 '<button class="msg-action-btn" data-action="edit" title="' + S.editMsg + '">' +
-                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>' +
+                    // A return arrow, not a pencil: the button reuses the text as a new
+                    // message (a pencil promised an edit of what pi already has)
+                    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"></polyline><path d="M4 9h10a6 6 0 0 1 6 6v2"></path></svg>' +
                 '</button>' : '') +
             '<button class="msg-action-btn" data-action="delete" title="' + S.deleteMsg + '">' +
                 '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"></path><path d="M10 11v6M14 11v6"></path><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"></path></svg>' +

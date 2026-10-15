@@ -21,8 +21,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   tooltip is honest about hiding the message from view rather than removing it
   from the conversation.
 
+- **The ✎ button is a reuse action now, and looks like one.** It puts the message
+  back into the composer and sending it makes a new turn (the original stays in
+  pi's context) — so the icon is a return arrow, not a pencil that promised an
+  edit. Whatever was being typed is no longer thrown away: the draft goes into the
+  input history (↑ brings it back) with a notice saying where it went, and the
+  reused text arrives selected so the swap is visible.
+- **A replayed transcript keeps its own timeline.** Messages were stamped with the
+  moment they were rendered, so a history spanning days all looked like it had
+  happened just now. pi records a timestamp per entry and the view shows it, with
+  a date divider whenever the calendar day changes.
+
 ### Fixed
 
+- **The `/help` panel is localized**, and so are the terminal names the login and
+  setup flows open (thirteen lines of composer help plus the terminal titles, in
+  both locales). The bare `Pi` tab titles stay as they are — the product name
+  reads the same in every language.
+- **An images-only queued message no longer keeps its badge.** Matching fell back
+  to "any leftover queued entry", so a pasted image stayed badged as long as
+  anything at all was queued. Text matches are taken first now — they are
+  unambiguous — and only the leftovers go to the text-less bubbles, in order.
+- **The webview no longer keeps its own copy of the context-block markers.** It
+  had a second `stripContextBlock` with duplicated marker strings, so the host and
+  the webview could drift apart and silently break badge matching. It imports the
+  host's dependency-free implementation, and a test fails if the marker strings
+  reappear under `webview/`.
 - **An over-long message is refused before the composer is cleared.** The host
   rejects prompts above 10,000 characters, but the webview had already emptied
   the input by then — so the user's long paste was simply gone, with only a

@@ -270,5 +270,6 @@
   "Available commands:": "Available commands:",
   "Pi SDK commands (from /help in pi):": "Pi SDK commands (from /help in pi):",
   "Pi login": "Pi login",
-  "Pi setup": "Pi setup"
+  "Pi setup": "Pi setup",
+  "Draft kept: press ↑ in the composer to get it back": "Draft kept: press ↑ in the composer to get it back"
 }

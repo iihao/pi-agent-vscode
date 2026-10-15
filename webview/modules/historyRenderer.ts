@@ -41,12 +41,12 @@ export function renderHistory(items: HistoryItem[], hidden = 0): void {
         switch (item.kind) {
             case 'user':
                 endToolGroup();
-                addMessage('user', item.text || '', false, undefined, item.images, item.attachments);
+                addMessage('user', item.text || '', false, undefined, item.images, item.attachments, item.timestamp);
                 break;
             case 'assistant':
                 // Same boundary rule as the live stream: text ends the running tool group
                 endToolGroup();
-                addMessage('assistant', item.text || '');
+                addMessage('assistant', item.text || '', false, undefined, undefined, undefined, item.timestamp);
                 break;
             case 'thinking':
                 endToolGroup();

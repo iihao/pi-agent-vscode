@@ -22,6 +22,33 @@ export function formatTime(): string {
     return now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
 }
 
+/**
+ * Clock time to show on a message: its own timestamp when pi recorded one (a
+ * replayed transcript keeps the real times), otherwise the current time.
+ */
+export function formatMessageTime(iso?: string): string {
+    const d = iso ? new Date(iso) : undefined;
+    if (!d || Number.isNaN(d.getTime())) { return formatTime(); }
+    return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
+}
+
+/**
+ * Local calendar day of a message, as a comparable key. Two messages belong to the
+ * same day only if this matches; `undefined` means "now", like `formatMessageTime`.
+ */
+export function messageDay(iso?: string): string {
+    const d = iso ? new Date(iso) : new Date();
+    if (Number.isNaN(d.getTime())) { return messageDay(undefined); }
+    return d.getFullYear() + '-' + (d.getMonth() + 1) + '-' + d.getDate();
+}
+
+/** Human-readable form of `messageDay`, in the display locale */
+export function formatMessageDay(iso?: string): string {
+    const d = iso ? new Date(iso) : new Date();
+    if (Number.isNaN(d.getTime())) { return formatMessageDay(undefined); }
+    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
 export function capitalize(s: string): string {
     return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }

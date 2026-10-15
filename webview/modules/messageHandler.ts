@@ -8,7 +8,7 @@ import { renderMermaid } from '../markdown';
 import {
     addMessage, addNotice, setBusy, showThinking, appendThinking, hideThinking, resetThinking,
     startAssistantStream, appendAssistantChunk, endAssistantStream,
-    renderTurnChanges, updateTurnChangesResult, finishUndoRevert, resetWorking, renderErrorActions,
+    renderTurnChanges, updateTurnChangesResult, finishUndoRevert, resetWorking, renderErrorActions, resetDates,
 } from './messageRenderer';
 import { addTool, setToolOutput, endTool, finishBash, settleTools, endToolGroup, resetToolGroup } from './toolRenderer';
 import {
@@ -260,6 +260,7 @@ function _handle(m: PostMessage): void {
             ctx.currentBuffer = '';
             resetThinking();
             resetWorking();
+            resetDates();
             ctx.runningTools = {};
             ctx.contexts = [];
             renderChips();

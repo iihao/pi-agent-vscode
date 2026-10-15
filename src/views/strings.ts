@@ -104,6 +104,8 @@ export interface UiStrings {
     remove: string;
     copyMsg: string;
     editMsg: string;
+    /** Reusing a message replaced the composer's draft, which was kept in ↑ history */
+    draftKept: string;
     deleteMsg: string;
     rename: string;
     codeApply: string;
@@ -228,6 +230,7 @@ export function getUiStrings(): UiStrings {
         remove: t('Remove'),
         copyMsg: t('Copy message'),
         editMsg: t('Reuse as a new message (Pi still sees the original)'),
+        draftKept: t('Draft kept: press ↑ in the composer to get it back'),
         deleteMsg: t('Remove from view (Pi still sees this message in context)'),
         rename: t('Rename'),
         codeApply: t('Apply'),

@@ -176,10 +176,25 @@ export function copyMessage(btn: HTMLElement, text: string): void {
  * Reuse a message: put its text back into the composer for editing and
  * resending. Nothing is removed anywhere — the resend is a new turn and pi
  * still sees the original exchange, so the view must show it too.
+ *
+ * Whatever was being typed is not thrown away: it goes into the input history
+ * (↑ brings it back) and says so, since the composer is about to show different
+ * text.
  */
 export function editMessage(text: string): void {
-    ctx.els.input.value = text;
-    ctx.els.input.focus();
+    const input = ctx.els.input;
+    const draft = input.value.trim();
+    if (draft && draft !== text) {
+        ctx.messageHistory.push(draft);
+        if (ctx.messageHistory.length > 50) { ctx.messageHistory.shift(); }
+        ctx.historyIndex = -1;
+        addNotice(ctx.S.draftKept);
+    }
+    input.value = text;
+    input.focus();
+    // Select it: the swap is visible, and typing replaces it (that is the "reuse" flow)
+    input.selectionStart = 0;
+    input.selectionEnd = text.length;
     autoResizeInput();
 }
 

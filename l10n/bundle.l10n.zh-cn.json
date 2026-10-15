@@ -270,5 +270,6 @@
   "Available commands:": "可用命令：",
   "Pi SDK commands (from /help in pi):": "Pi SDK 命令（来自 pi 的 /help）：",
   "Pi login": "Pi 登录",
-  "Pi setup": "Pi 设置"
+  "Pi setup": "Pi 设置",
+  "Draft kept: press ↑ in the composer to get it back": "草稿已保留：在输入框按 ↑ 可将其取回"
 }
