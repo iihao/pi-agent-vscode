@@ -29,7 +29,7 @@
   "view.chat.name": "对话",
   "config.pi.executable": "自定义 pi CLI 路径（留空则自动探测）",
   "config.pi.arguments": "附加到 pi 启动参数",
-  "config.permissionMode": "Pi 权限模式（修改后需重启会话生效）",
+  "config.permissionMode": "Pi 权限模式（修改后需重新载入会话生效）",
   "config.permissionMode.ask": "正常（默认）",
   "config.permissionMode.autoConfirm": "自动信任项目本地文件（--approve）",
   "config.permissionMode.restricted": "只读：禁用 bash / edit / write 工具",

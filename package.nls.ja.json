@@ -29,7 +29,7 @@
   "view.chat.name": "チャット",
   "config.pi.executable": "pi CLI のパスを指定（空欄なら自動検出）",
   "config.pi.arguments": "pi に渡す追加引数",
-  "config.permissionMode": "Pi の権限モード（変更後はセッション再起動で反映）",
+  "config.permissionMode": "Pi の権限モード（変更後はセッション再読み込みで反映）",
   "config.permissionMode.ask": "通常（既定）",
   "config.permissionMode.autoConfirm": "プロジェクト内ファイルを自動承認（--approve）",
   "config.permissionMode.restricted": "読み取り専用: bash / edit / write を無効化",

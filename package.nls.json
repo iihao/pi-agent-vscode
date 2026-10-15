@@ -29,7 +29,7 @@
   "view.chat.name": "Chat",
   "config.pi.executable": "Custom pi CLI path (leave empty to auto-detect)",
   "config.pi.arguments": "Extra arguments passed to pi",
-  "config.permissionMode": "Pi permission mode (restart session to apply)",
+  "config.permissionMode": "Pi permission mode (reload session to apply)",
   "config.permissionMode.ask": "Normal (default)",
   "config.permissionMode.autoConfirm": "Auto-trust project-local files (--approve)",
   "config.permissionMode.restricted": "Read-only: disable bash / edit / write tools",

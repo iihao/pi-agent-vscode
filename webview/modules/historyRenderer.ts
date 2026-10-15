@@ -1,7 +1,7 @@
 // ---------------------------------------------------------------------------
 // Transcript replay
 //
-// After a reconnect (the "Restart Session" button, a crash, a config change) or
+// After a reconnect (the "Reload Session" button, a crash, a config change) or
 // a session switch, the host clears the webview and replays the session log as
 // a list of items. They are fed through exactly the same renderers the live
 // event stream uses, so a restored transcript looks like the one that was

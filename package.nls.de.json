@@ -29,7 +29,7 @@
   "view.chat.name": "Chat",
   "config.pi.executable": "Benutzerdefinierter pi-CLI-Pfad (leer = automatisch)",
   "config.pi.arguments": "Zusätzliche Argumente für pi",
-  "config.permissionMode": "Pi-Berechtigungsmodus (Sitzung neu starten zum Anwenden)",
+  "config.permissionMode": "Pi-Berechtigungsmodus (Sitzung neu laden zum Anwenden)",
   "config.permissionMode.ask": "Normal (Standard)",
   "config.permissionMode.autoConfirm": "Projektlokale Dateien automatisch bestätigen (--approve)",
   "config.permissionMode.restricted": "Nur lesen: bash / edit / write deaktivieren",

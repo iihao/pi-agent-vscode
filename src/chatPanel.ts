@@ -1587,7 +1587,7 @@ export class ChatPanel {
             await vs.getConfiguration('pi-agent').update('agent.permissionMode', mode, target);
             // The config watcher restarts the session so the permission mode takes effect
             this._post({ type: 'permission', permissionMode: mode });
-            this._post({ type: 'notice', text: vscode.l10n.t('Permission mode: {0} (restarting session…)', permissionLabel(mode)) });
+            this._post({ type: 'notice', text: vscode.l10n.t('Permission mode: {0} (reloading session…)', permissionLabel(mode)) });
         } catch (err) {
             this._post({ type: 'notice', text: vscode.l10n.t('Failed to set permission mode: {0}', (err as Error).message) });
         }

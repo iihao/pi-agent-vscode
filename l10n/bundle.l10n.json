@@ -30,7 +30,6 @@
   "unknown": "unknown",
   "Connected to pi · workspace \"{0}\"": "Connected to pi · workspace \"{0}\"",
   "Connection failed: {0}": "Connection failed: {0}",
-  "Permission mode: {0} (restarting session…)": "Permission mode: {0} (restarting session…)",
   "Failed to set permission mode: {0}": "Failed to set permission mode: {0}",
   "Auto-confirmed: {0}": "Auto-confirmed: {0}",
   "Confirmation required": "Confirmation required",
@@ -273,5 +272,6 @@
   "Earlier transcript not shown ({0} items) — the full history stays in the session file": "Earlier transcript not shown ({0} items) — the full history stays in the session file",
   "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.": "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.",
   "Re-read the session list from disk": "Re-read the session list from disk",
-  "Stop and reload": "Stop and reload"
+  "Stop and reload": "Stop and reload",
+  "Permission mode: {0} (reloading session…)": "Permission mode: {0} (reloading session…)"
 }

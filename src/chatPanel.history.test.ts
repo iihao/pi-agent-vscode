@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Transcript replay (restart session / session switch)
+// Transcript replay (session reload / session switch)
 //
 // Regression tests for "reload the session and most of it disappears": the
 // replay must come from pi's own session log (tool cards, diffs, thinking) and

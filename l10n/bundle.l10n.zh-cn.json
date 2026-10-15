@@ -30,7 +30,6 @@
   "unknown": "未知",
   "Connected to pi · workspace \"{0}\"": "已连接 pi · 工作区「{0}」",
   "Connection failed: {0}": "连接失败：{0}",
-  "Permission mode: {0} (restarting session…)": "权限模式：{0}（重启会话中…）",
   "Failed to set permission mode: {0}": "设置权限模式失败：{0}",
   "Auto-confirmed: {0}": "已自动确认：{0}",
   "Confirmation required": "需要确认",
@@ -273,5 +272,6 @@
   "Earlier transcript not shown ({0} items) — the full history stays in the session file": "更早的记录未显示（{0} 项）—— 完整历史仍保存在会话文件中",
   "Pi is working. Reloading stops the current turn; everything already saved to the session file is kept.": "Pi 正在工作。重新载入会中断当前这一轮；已写入会话文件的内容都会保留。",
   "Re-read the session list from disk": "从磁盘重新读取会话列表",
-  "Stop and reload": "停止并重新载入"
+  "Stop and reload": "停止并重新载入",
+  "Permission mode: {0} (reloading session…)": "权限模式：{0}（重新载入会话中…）"
 }
