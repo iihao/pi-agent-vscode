@@ -27,6 +27,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Stopping a turn no longer shows a red error.** pi marks a turn it aborted
+  with `stopReason: 'aborted'`, but only when the abort lands mid-message: if it
+  lands between turns the aborted message arrives as a plain error carrying the
+  `AbortError` text (*"This operation was aborted"*), which the panel rendered as
+  a failure with Retry / Switch model / Show logs — for a stop the user had just
+  asked for. The panel now tracks the stop it requested (from **Stop**, or from
+  switching sessions, which stops the running turn) and reports those as a
+  neutral *Stopped* notice, while a genuine failure is still reported. The
+  abort-recovery fallback (*"did not settle within 30 seconds"*) is a notice now
+  too, instead of an actionable error bubble.
 - **A long turn is no longer cut loose after 10 minutes.** A watchdog reset the
   busy state and reported *"Pi turn timed out after 10 minutes; you can send a
   new message"* once a turn had run that long. A long turn is normal, though — a

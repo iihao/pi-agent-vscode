@@ -88,4 +88,79 @@ describe('long-running turns', () => {
         turnEnded('started');
         await sent;
     });
+
+    /** Drive pi's authoritative message through the panel's event bridge */
+    function emitMessageEnd(panel: ChatPanel, message: Record<string, unknown>): void {
+        (panel as unknown as { _onAgentEvent(e: unknown): void })._onAgentEvent({ type: 'message_end', message });
+    }
+
+    function abortViaWebview(webview: ReturnType<typeof makeWebview>): void {
+        webview.emit({ type: 'abort' });
+    }
+
+    it('reports a stopped turn as a stop even when pi calls it an error', async () => {
+        const { webview, panel, inner } = (() => {
+            const webview = makeWebview();
+            const panel = ChatPanel.create(
+                webview as unknown as import('vscode').Webview,
+                '/ext',
+                disposeEvent as unknown as import('vscode').Event<void>,
+            );
+            panels.push(panel);
+            const rt = panel as unknown as TurnInternals;
+            rt._runtime.clientManager = { abort: () => Promise.resolve(), clearQueue: () => Promise.resolve() };
+            return { webview, panel, inner: rt };
+        })();
+        inner._busy = true;
+        abortViaWebview(webview);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+
+        // This is what pi actually sends when the abort lands between turns: an
+        // empty message with AbortError text and no stopReason
+        emitMessageEnd(panel, { role: 'assistant', content: [], errorMessage: 'This operation was aborted' });
+
+        expect(webview.posted.filter((m) => m.type === 'error')).toEqual([]);
+        const notices = webview.posted.filter((m) => m.type === 'notice').map((m) => m.text);
+        expect(notices).toContain('Stopped');
+    });
+
+    it('still reports a failure that was not stopped', () => {
+        const { webview, panel } = (() => {
+            const webview = makeWebview();
+            const panel = ChatPanel.create(
+                webview as unknown as import('vscode').Webview,
+                '/ext',
+                disposeEvent as unknown as import('vscode').Event<void>,
+            );
+            panels.push(panel);
+            return { webview, panel };
+        })();
+
+        emitMessageEnd(panel, { role: 'assistant', content: [], errorMessage: 'Provider returned 500' });
+
+        expect(webview.posted.filter((m) => m.type === 'error').map((m) => m.text)).toEqual(['Provider returned 500']);
+    });
+
+    it('stops treating a failure as a stop once the stop has settled', async () => {
+        const { webview, panel, inner } = (() => {
+            const webview = makeWebview();
+            const panel = ChatPanel.create(
+                webview as unknown as import('vscode').Webview,
+                '/ext',
+                disposeEvent as unknown as import('vscode').Event<void>,
+            );
+            panels.push(panel);
+            const rt = panel as unknown as TurnInternals;
+            rt._runtime.clientManager = { abort: () => Promise.resolve(), clearQueue: () => Promise.resolve() };
+            return { webview, panel, inner: rt };
+        })();
+        inner._busy = true;
+        abortViaWebview(webview);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        (panel as unknown as { _onAgentEvent(e: unknown): void })._onAgentEvent({ type: 'agent_settled' });
+
+        emitMessageEnd(panel, { role: 'assistant', content: [], errorMessage: 'Provider returned 500' });
+
+        expect(webview.posted.filter((m) => m.type === 'error').map((m) => m.text)).toEqual(['Provider returned 500']);
+    });
 });

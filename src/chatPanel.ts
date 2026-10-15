@@ -1102,6 +1102,7 @@ export class ChatPanel {
                 await this._undoRevert();
                 break;
             case 'abort':
+                this._stopRequested = true;
                 await this._clientManager.abort();
                 // After stopping, drop pending steer / follow-up so they don't unexpectedly continue
                 await this._clearQueue();
@@ -1747,6 +1748,7 @@ export class ChatPanel {
     /** Abort the running turn first (before switch / new / clone, so streaming doesn't continue in the background) */
     private async _abortIfBusy(): Promise<void> {
         if (!this._busy) { return; }
+        this._stopRequested = true;
         await this._clientManager.abort().catch((err) => { logError(`abort failed: ${(err as Error).message}`); });
         // busy is cleared by the agent_settled event after an abort; the recovery timeout is a fallback if it never arrives
         this._clearBusyTimeout();
@@ -1756,7 +1758,8 @@ export class ChatPanel {
                 this._busy = false;
                 this._post({ type: 'toolSettle' });
                 this._post({ type: 'setBusy', busy: false });
-                this._postError(vscode.l10n.t('Pi turn was aborted and did not settle within {0} seconds; you can send a new message', ChatPanel.ABORT_RECOVERY_MS / 1000));
+                // Unlocking is a recovery step, not a failure of the turn the user stopped
+                this._post({ type: 'notice', text: vscode.l10n.t('Pi turn was aborted and did not settle within {0} seconds; you can send a new message', ChatPanel.ABORT_RECOVERY_MS / 1000) });
             }
         }, ChatPanel.ABORT_RECOVERY_MS);
     }
@@ -1899,6 +1902,8 @@ export class ChatPanel {
             case 'agent_start':
                 this._busy = true;
                 this._turnHadText = false;
+                // A new run: any earlier stop is history
+                this._stopRequested = false;
                 // This panel is rendering the turn from now on
                 this._webviewSynced = true;
                 this._resetTurnLedger();
@@ -2038,6 +2043,8 @@ export class ChatPanel {
             case 'agent_settled': {
                 this._busy = false;
                 this._clearBusyTimeout();
+                // The stop has settled; a failure from here on is a real one
+                this._stopRequested = false;
                 // Fallback: if text_end was missed (e.g. tool_execution_start once reset
                 // _turnHadText by mistake), close the assistant stream so the webview's
                 // streaming cursor never hangs forever.
@@ -2143,9 +2150,11 @@ export class ChatPanel {
         }
         if (completion.error || completion.aborted) {
             this._turnRenderedAny = true;
-            if (completion.aborted) {
-                // User stopped the turn (stopReason=aborted): not a failure, so show a
-                // neutral notice instead of an error bubble with retry / switch model / logs.
+            if (this._wasStopped(completion.aborted)) {
+                // The user (or a session switch) stopped this turn: not a failure, so
+                // show a neutral notice instead of an error bubble with retry / switch
+                // model / logs. pi reports the abort as an error when it lands between
+                // turns, which is why the requested stop is tracked as well.
                 this._post({ type: 'notice', text: vscode.l10n.t('Stopped') });
             } else {
                 logError(`pi turn failed: ${completion.error}`);
@@ -2322,6 +2331,24 @@ export class ChatPanel {
         }
     }
 
+    /**
+     * Set while a stop has been requested (Stop button, or a programmatic stop
+     * before switching sessions). pi does not always mark the message it aborts
+     * with `stopReason: 'aborted'`: when the abort lands between turns it arrives
+     * as an error carrying the AbortError text ("This operation was aborted"),
+     * which showed up as a red failure bubble the user had to act on even though
+     * they had just asked for the stop themselves.
+     *
+     * Cleared when a new run starts and once the stop has settled, so a genuine
+     * failure later on is still reported.
+     */
+    private _stopRequested = false;
+
+    /** Whether the turn ended because it was stopped rather than because it failed */
+    private _wasStopped(aborted: boolean): boolean {
+        return aborted || this._stopRequested;
+    }
+
     /** Context attachments currently in the composer (echoed on the message so the user knows it had attachments) */
     private _currentAttachments(): Array<{ type: string; path: string; lineRange?: string }> {
         return this._contexts.map((c) => ({ type: c.type, path: c.path, lineRange: c.lineRange }));
@@ -2368,6 +2395,14 @@ export class ChatPanel {
             this._post({ type: 'setBusy', busy: false });
 
             const msg = (err as Error).message || String(err);
+
+            // A stop the user asked for can make the prompt itself fail; that is not
+            // something to hand back as an actionable error.
+            if (this._stopRequested) {
+                logInfo(`prompt ended after a stop request: ${msg}`);
+                this._post({ type: 'notice', text: vscode.l10n.t('Stopped') });
+                return;
+            }
 
             // Reset the client only when the process really crashed (type check, not message text)
             if (isProcessError(err)) {
