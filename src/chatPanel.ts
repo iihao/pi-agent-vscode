@@ -708,9 +708,12 @@ export class ChatPanel {
         if (current?.name) { return; }
         const id = this._sessionManager.currentSessionId;
         if (!id || runtime.autoNameTried.has(id)) { return; }
-        runtime.autoNameTried.add(id);
         const client = this._clientManager.client;
         if (!client || typeof client.setSessionName !== 'function') { return; }
+        // Only burn the attempt once we know this can actually succeed: marking
+        // it tried while the client was momentarily missing would leave the
+        // session unnamed forever
+        runtime.autoNameTried.add(id);
         runtime.autoNameInFlight = true;
         try {
             const raw = await this._clientManager.runOneShot(this._extensionPath, buildNamePrompt(text));
@@ -1052,14 +1055,20 @@ export class ChatPanel {
         });
     }
 
-    private async _openWorkspaceFile(rel: string): Promise<void> {
+    private async _openWorkspaceFile(target: string): Promise<void> {
+        // Truncated tool output lives outside the workspace (absolute path),
+        // while turn-change rows are workspace-relative. Joining an absolute
+        // path onto the root produced a file that can never exist.
         const root = vs.workspaceFolders?.[0]?.uri;
-        if (!root) { return; }
+        const uri = path.isAbsolute(target)
+            ? vs.uri.file(target)
+            : (root ? vs.uri.joinPath(root, target) : undefined);
+        if (!uri) { return; }
         try {
-            const doc = await vs.openTextDocument(vs.uri.joinPath(root, rel));
+            const doc = await vs.openTextDocument(uri);
             await vs.showTextDocument(doc, { preview: true });
         } catch (err) {
-            this._post({ type: 'notice', text: vscode.l10n.t('Cannot open {0}: {1}', rel, (err as Error).message) });
+            this._post({ type: 'notice', text: vscode.l10n.t('Cannot open {0}: {1}', target, (err as Error).message) });
         }
     }
 
@@ -1107,10 +1116,15 @@ export class ChatPanel {
             case 'abort':
                 this._stopRequested = true;
                 await this._clientManager.abort();
+                // The Stop button must arm the same recovery fallback as the
+                // programmatic stops: if agent_settled never arrives (a wedged
+                // pi), the UI would otherwise stay locked with no way out
+                if (this._busy) { this._armAbortRecovery(); }
                 // After stopping, drop pending steer / follow-up so they don't unexpectedly continue
                 await this._clearQueue();
-                // Clear the queue/steer badges in the webview too (not relying on pi re-sending queue_update)
-                this._post({ type: 'queue', steering: [], followUp: [] });
+                // Clear the queue/steer badges in every panel of this session
+                // (not relying on pi re-sending queue_update)
+                for (const panel of this._runtime.panels) { panel._post({ type: 'queue', steering: [], followUp: [] }); }
                 break;
             case 'errorAction':
                 // Error-bubble buttons ("switch model" is handled locally in the webview)
@@ -1527,6 +1541,8 @@ export class ChatPanel {
     private _maybeWarnContext(percent: number | null | undefined): void {
         const threshold = 85;
         if (percent === null || percent === undefined) { return; }
+        // Host-level popup: once per session, not once per panel of it
+        if (!this._isEventOwner) { return; }
         if (percent >= threshold && !this._contextWarned) {
             this._contextWarned = true;
             void vs.showWarningMessage(
@@ -1758,13 +1774,23 @@ export class ChatPanel {
         this._stopRequested = true;
         await this._clientManager.abort().catch((err) => { logError(`abort failed: ${(err as Error).message}`); });
         // busy is cleared by the agent_settled event after an abort; the recovery timeout is a fallback if it never arrives
+        this._armAbortRecovery();
+    }
+
+    /** Fallback for a stop whose agent_settled never arrives (see `_abortIfBusy`) */
+    private _armAbortRecovery(): void {
         this._clearBusyTimeout();
         this._busyTimeout = setTimeout(() => {
+            this._busyTimeout = undefined;
             if (this._busy) {
                 logError('Abort recovery timeout reached; force resetting busy state');
                 this._busy = false;
-                this._post({ type: 'toolSettle' });
-                this._post({ type: 'setBusy', busy: false });
+                // busy is runtime-level: every panel of this session is still
+                // showing a running turn and must be unlocked, not just this one
+                for (const panel of this._runtime.panels) {
+                    panel._post({ type: 'toolSettle' });
+                    panel._post({ type: 'setBusy', busy: false });
+                }
                 // Unlocking is a recovery step, not a failure of the turn the user stopped
                 this._post({ type: 'notice', text: vscode.l10n.t('Pi turn was aborted and did not settle within {0} seconds; you can send a new message', ChatPanel.ABORT_RECOVERY_MS / 1000) });
             }
@@ -1896,7 +1922,10 @@ export class ChatPanel {
             return;
         }
         if (event.type === 'extension_ui_request') {
-            void this._handleExtensionUI(event);
+            // pi asks exactly one question per request id; every panel of a shared
+            // session receives the event, so only the owner shows the dialog (two
+            // modals and two stdin responses would otherwise pile up on pi)
+            if (this._isEventOwner) { void this._handleExtensionUI(event); }
             return;
         }
         // Diagnostics: log every non thinking/text event type to surface unknown events
@@ -1994,7 +2023,9 @@ export class ChatPanel {
                 // not affect. text_end relies on it to decide whether to send assistantEnd.
                 // Resetting here makes text_end skip assistantEnd after a tool, leaving the
                 // stream open forever.
-                this._trackToolTarget(event);
+                // Recording edits into the shared turn state must happen once per
+                // event, not once per panel: duplicated edits make the revert fail
+                if (this._isEventOwner) { this._trackToolTarget(event); }
                 this._post({
                     type: 'toolCall',
                     tool: event.toolName ?? 'tool',
@@ -2014,7 +2045,7 @@ export class ChatPanel {
 
             case 'tool_execution_end': {
                 // A failed tool is not a turn change (roll back the record it wrote)
-                this._settleToolTrack(event);
+                if (this._isEventOwner) { this._settleToolTrack(event); }
                 const details = event.result?.details;
                 const diff = details?.diff;
                 const output = extractToolOutput(event.result);
@@ -2075,7 +2106,7 @@ export class ChatPanel {
                 }
                 this._resetTurnLedger();
                 this._post({ type: 'setBusy', busy: false });
-                if (!event.aborted) { this._notifySettled(); }
+                if (!event.aborted && this._isEventOwner) { this._notifySettled(); }
                 this._postTurnChanges();
                 void this._maybeAutoName();
                 // Refresh stats regardless of abort, so they reflect the latest session state
@@ -2356,6 +2387,19 @@ export class ChatPanel {
         return aborted || this._stopRequested;
     }
 
+    /**
+     * Whether this panel is the one that owns the non-presentation effects of
+     * pi events. Every panel bound to a runtime subscribes to the same client,
+     * which is right for rendering (each webview streams its own copy) but
+     * wrong for anything outside the transcript: shared runtime state, host
+     * modals and system notifications must happen exactly once per event.
+     * The first live panel owns them; disposal hands ownership to the next.
+     */
+    private get _isEventOwner(): boolean {
+        const first = this._runtime.panels.values().next().value as ChatPanel | undefined;
+        return first === this;
+    }
+
     /** Context attachments currently in the composer (echoed on the message so the user knows it had attachments) */
     private _currentAttachments(): Array<{ type: string; path: string; lineRange?: string }> {
         return this._contexts.map((c) => ({ type: c.type, path: c.path, lineRange: c.lineRange }));
@@ -2382,7 +2426,10 @@ export class ChatPanel {
         this._post({ type: 'setBusy', busy: true });
 
         try {
-            const client = await this._clientManager.ensureConnected(this._extensionPath);
+            // Reconnecting must use this runtime's session options: the default
+            // (--continue) would otherwise join whichever session pi considers
+            // most recent, not the one this panel is showing
+            const client = await this._clientManager.ensureConnected(this._extensionPath, this._runtime.startOptions);
             const extra = await this._buildAutoContext();
             const disposition = await client.prompt(this._withContext(userText, extra), images);
             this._clearContexts();
@@ -2450,7 +2497,8 @@ export class ChatPanel {
             images: images && images.length ? images : undefined,
         });
         try {
-            const client = await this._clientManager.ensureConnected(this._extensionPath);
+            // Same as _handleUserMessage: reconnect must rejoin this runtime's session
+            const client = await this._clientManager.ensureConnected(this._extensionPath, this._runtime.startOptions);
             const extra = await this._buildAutoContext();
             const message = this._withContext(userText, extra);
             if (steering && typeof client.steer === 'function') {
