@@ -12,6 +12,7 @@
   "Auto": "自动",
   "Read-only": "只读",
   "No active editor": "没有打开的编辑器",
+  "Only file editors can be attached": "只能附加文件编辑器",
   "Current file": "当前文件",
   "Current selection": "当前选区",
   "Files & folders…": "文件与文件夹…",

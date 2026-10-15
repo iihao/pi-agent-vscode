@@ -435,22 +435,42 @@ export class ChatPanel {
     // ---------- Editor context ----------
 
     /** Attach the active editor: the selection if there is one, otherwise the whole file */
-    public attachActive(): void {
+    /**
+     * Guard shared by the three attach commands. A context item is a *path
+     * reference* — pi reads it from disk — so non-file editors (untitled
+     * buffers, diff views, output panels) cannot be attached at all; silently
+     * turning their uri into a path only produced references nothing can read.
+     */
+    private _attachableEditor(): vscode.TextEditor | undefined {
         const editor = vs.activeTextEditor;
-        if (!editor) { this._post({ type: 'notice', text: vscode.l10n.t('No active editor') }); return; }
+        if (!editor) {
+            this._post({ type: 'notice', text: vscode.l10n.t('No active editor') });
+            return undefined;
+        }
+        if (editor.document.uri.scheme !== 'file') {
+            this._post({ type: 'notice', text: vscode.l10n.t('Only file editors can be attached') });
+            return undefined;
+        }
+        return editor;
+    }
+
+    public attachActive(): void {
+        const editor = this._attachableEditor();
+        if (!editor) { return; }
         if (!editor.selection.isEmpty) { this._addSelectionContext(editor); }
         else { this._addFileContext(editor); }
     }
 
     public attachFile(): void {
-        const editor = vs.activeTextEditor;
-        if (!editor) { this._post({ type: 'notice', text: vscode.l10n.t('No active editor') }); return; }
+        const editor = this._attachableEditor();
+        if (!editor) { return; }
         this._addFileContext(editor);
     }
 
     public attachSelection(): void {
-        const editor = vs.activeTextEditor;
-        if (!editor || editor.selection.isEmpty) { this._post({ type: 'notice', text: vscode.l10n.t('Please select some code first') }); return; }
+        const editor = this._attachableEditor();
+        if (!editor) { return; }
+        if (editor.selection.isEmpty) { this._post({ type: 'notice', text: vscode.l10n.t('Please select some code first') }); return; }
         this._addSelectionContext(editor);
     }
 

@@ -53,6 +53,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   notice as company. The same limit now lives once in the shared protocol
   (`MAX_MESSAGE_CHARS`); the webview checks it first and leaves the text in
   place. A duplicated limit had already drifted once between the two sides.
+- **Attach commands refuse editors that are not files.** Attach File / Attach
+  Selection / the composer's attach-active on an untitled buffer, a diff view
+  or an output panel used to create a context chip from its uri anyway — but a
+  chip is a *path reference* pi resolves on disk, so the reference pointed at
+  nothing and the prompt quietly carried dead context. Non-`file` editors now
+  get a clear refusal instead.
 - **New chat / Reload Session / Clone refresh every view of the session.** A
   session belongs to the runtime, but these actions only cleared the panel
   they were triggered from: the sidebar could start a fresh session while the

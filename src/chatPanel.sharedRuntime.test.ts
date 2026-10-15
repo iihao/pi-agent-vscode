@@ -304,4 +304,28 @@ describe('panels sharing a runtime', () => {
         // replaying marks the panel as holding content again
         expect(sib._webviewSynced).toBe(true);
     });
+
+    it('attach commands refuse editors that are not files', () => {
+        const web = makeWebview();
+        const panel = ChatPanel.create(web as unknown as import('vscode').Webview, '/ext', disposeEvent as unknown as import('vscode').Event<void>, 'attach-surface');
+        const inner = panel as unknown as { _contexts: Array<{ path: string }> };
+
+        (vscodeMock.window as { activeTextEditor?: unknown }).activeTextEditor = {
+            document: { uri: { scheme: 'untitled', fsPath: 'Untitled-1' }, languageId: 'plaintext' },
+            selection: { isEmpty: true, start: { line: 0 }, end: { line: 0 } },
+        };
+        panel.attachFile();
+        // context items are path references pi resolves on disk — an untitled
+        // buffer has no path, so attaching it must be refused, not faked
+        expect(web.posted.filter((m) => m.type === 'notice').map((m) => m.text)).toContain('Only file editors can be attached');
+        expect(inner._contexts.length).toBe(0);
+
+        (vscodeMock.window as { activeTextEditor?: unknown }).activeTextEditor = {
+            document: { uri: { scheme: 'file', fsPath: '/ws/src/a.ts' }, languageId: 'typescript' },
+            selection: { isEmpty: true, start: { line: 0 }, end: { line: 0 } },
+        };
+        panel.attachFile();
+        expect(inner._contexts.length).toBe(1);
+        expect(inner._contexts[0].path).toBe('/ws/src/a.ts');
+    });
 });
