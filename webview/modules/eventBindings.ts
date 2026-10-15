@@ -5,6 +5,7 @@
 import type { WebviewContext } from '../types';
 import { getMessageText } from '../utils';
 import { closePopovers, togglePopover, renderSessionPanel } from './panels';
+import { clickedInsidePopover } from './popovers';
 import { jumpToUserMessage, navigateUserMessage, updateRailActive, renderOutline } from './navigator';
 import { searchMessages, goToMatch, clearSearch } from './search';
 import { updateSuggest, renderSuggest, acceptSuggest, closeSuggest, suggestOpen, setSuggestIndex } from './slashCommands';
@@ -156,10 +157,6 @@ function bindInputEvents(): void {
             e.preventDefault();
             // Ctrl/Cmd+Enter forces steer; otherwise use the current mode
             send(e.ctrlKey || e.metaKey ? 'steer' : (ctx.busy ? ctx.sendMode : undefined));
-        } else if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            els.searchBar.classList.add('visible');
-            els.searchInput.focus();
         } else if (e.key === 'ArrowUp' && !ctx.busy && els.input.selectionStart === 0) {
             e.preventDefault();
             navigateHistory(-1);
@@ -198,9 +195,24 @@ function bindPanelEvents(): void {
         ctx.vscode.postMessage({ type: 'setThinking', level: item.dataset.level });
         closePopovers();
     });
-    document.addEventListener('click', function () { closePopovers(); });
+    // A click *inside* a popover must not close it. The session panel holds a search
+    // input, so typing in it used to shut the panel immediately, and the refresh
+    // button's result was dismissed before it could be read. Rows that switch or
+    // rename a session close the panel themselves.
+    document.addEventListener('click', function (e) {
+        if (clickedInsidePopover(e.target)) { return; }
+        closePopovers();
+    });
     document.addEventListener('keydown', function (e) {
         if (e.key === 'Escape') { closePopovers(); return; }
+        // Handled here, not on the textarea: the shortcut is advertised as Ctrl+F and
+        // the button is always visible, so it has to work whatever has focus.
+        if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+            e.preventDefault();
+            els.searchBar.classList.add('visible');
+            els.searchInput.focus();
+            return;
+        }
         if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
             e.preventDefault();
             navigateUserMessage(e.key === 'ArrowDown' ? 1 : -1);

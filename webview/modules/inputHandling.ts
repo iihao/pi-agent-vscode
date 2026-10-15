@@ -39,19 +39,17 @@ export function send(mode?: string): void {
     const text = input.value.trim();
     const images = ctx.pendingImages.map(function (i) { return { type: 'image', data: i.data, mimeType: i.mimeType }; });
     if (!text && !images.length) { return; }
-    // Edit & resend: drop the original message and everything after it
-    if (ctx.editingMessageEl) {
-        removeMessagesFrom(ctx.editingMessageEl);
-        ctx.editingMessageEl.classList.remove('editing');
-        ctx.editingMessageEl = null;
-    }
     // Save to input history
     if (text && (ctx.messageHistory.length === 0 || ctx.messageHistory[ctx.messageHistory.length - 1] !== text)) {
         ctx.messageHistory.push(text);
         if (ctx.messageHistory.length > 50) { ctx.messageHistory.shift(); }
     }
     ctx.historyIndex = -1;
-    // Intercept slash commands
+    // Intercept slash commands / `!` shell before the edit-resend bookkeeping below:
+    // these do not send a prompt, so there is nothing to resend and the message
+    // being edited (and everything after it) must stay where it is. Deleting first
+    // meant that editing a message and typing `/model` silently dropped the rest of
+    // the conversation from the view.
     if (text.charAt(0) === '/') {
         const cmd = text.split(/\s/)[0];
         if (cmd === '/compact') {
@@ -143,6 +141,13 @@ export function send(mode?: string): void {
         input.value = '';
         autoResizeInput();
         return;
+    }
+    // Edit & resend: drop the original message and everything after it, now that we
+    // know this really is a prompt to pi
+    if (ctx.editingMessageEl) {
+        removeMessagesFrom(ctx.editingMessageEl);
+        ctx.editingMessageEl.classList.remove('editing');
+        ctx.editingMessageEl = null;
     }
     // While busy: send using the current mode (queue / steer); a modifier forces steer
     ctx.vscode.postMessage({ type: 'sendMessage', text: text, mode: ctx.busy ? (mode ?? ctx.sendMode) : undefined, images: images.length ? images : undefined });

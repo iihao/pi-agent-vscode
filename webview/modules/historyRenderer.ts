@@ -12,7 +12,7 @@ import type { WebviewContext, HistoryItem } from '../types';
 import { scrollToBottom } from '../utils';
 import { renderMermaid } from '../markdown';
 import { addMessage, addHistoryThinking, addNotice } from './messageRenderer';
-import { addTool, endTool, endToolGroup, resetToolGroup } from './toolRenderer';
+import { addTool, endTool, endToolGroup, resetToolGroup, settleTools } from './toolRenderer';
 import { settleBoot } from './boot';
 
 let ctx: WebviewContext;
@@ -32,6 +32,8 @@ export function renderHistory(items: HistoryItem[], hidden = 0): void {
     }
     ctx.els.welcome.style.display = 'none';
     resetToolGroup();
+    // Tool cards rendered by this replay, so only those are settled at the end
+    const replayedTools = new Set<string>();
     // Anything dropped to keep the replay bounded is reported up front rather
     // than silently missing from the top of the transcript.
     if (hidden > 0) { addNotice(ctx.S.historyTrimmed.replace('{0}', String(hidden))); }
@@ -51,6 +53,7 @@ export function renderHistory(items: HistoryItem[], hidden = 0): void {
                 addHistoryThinking(item.text || '');
                 break;
             case 'tool':
+                if (item.toolCallId) { replayedTools.add(item.toolCallId); }
                 addTool(item.tool || 'tool', item.detail, item.toolCallId, item.args);
                 break;
             case 'toolResult':
@@ -69,6 +72,11 @@ export function renderHistory(items: HistoryItem[], hidden = 0): void {
         }
     }
     endToolGroup();
+    // A transcript can end in a tool that never got a result (the turn was stopped or
+    // the process died). Without this the card spins forever and the activity counter
+    // stays raised, which throws off the "working" indicator for the rest of the
+    // session.
+    settleTools(replayedTools);
     const divider = document.createElement('div');
     divider.className = 'history-divider';
     divider.textContent = ctx.S.historyDivider;

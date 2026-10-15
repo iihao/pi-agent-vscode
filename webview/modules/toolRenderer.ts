@@ -238,9 +238,12 @@ export function addBashRunning(id: string, command: string): void {
  * End-of-turn safety net: close any card still "running" so nothing spins
  * forever. Only the status marker changes; card content is kept as-is.
  */
-export function settleTools(): void {
+export function settleTools(only?: ReadonlySet<string>): void {
     const ids = Object.keys(ctx.runningTools);
     for (const id of ids) {
+        // A replay settles only the cards it rendered itself, so a tool that is
+        // genuinely still running elsewhere is not closed prematurely
+        if (only && !only.has(id)) { continue; }
         const t = ctx.runningTools[id];
         delete ctx.runningTools[id];
         t.el.classList.remove('running');
