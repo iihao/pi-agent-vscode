@@ -24,6 +24,7 @@ import { renderImages } from './imagePaste';
 import { updateContextUsage, resetContextUsage } from './contextUsage';
 import { renderHistory } from './historyRenderer';
 import { clearTranscript } from './transcript';
+import { enterBoot, settleBoot } from './boot';
 
 let ctx: WebviewContext;
 
@@ -48,14 +49,17 @@ function _handle(m: PostMessage): void {
     const S = ctx.S;
     switch (m.type) {
         case 'addUserMessage':
+            // Typing before the transcript settled: this is content now
+            settleBoot();
             addMessage('user', m.text || '', false, m.pending, m.images, m.attachments);
             break;
 
         case 'history':
-            if (m.items && m.items.length) {
+            if (m.items) {
                 renderHistory(m.items as HistoryItem[], m.hidden);
             } else if (m.messages && m.messages.length) {
                 // Legacy text-only replay (pi builds without the get_entries RPC)
+                settleBoot();
                 els.welcome.style.display = 'none';
                 m.messages.forEach(function (msg) { addMessage(msg.role, msg.text, false, undefined, msg.images as never, msg.attachments); });
                 const div = document.createElement('div');
@@ -64,6 +68,8 @@ function _handle(m: PostMessage): void {
                 els.chat.appendChild(div);
                 scrollToBottom(els.chat);
                 void renderMermaid(els.chat);
+            } else {
+                settleBoot();
             }
             break;
 
@@ -246,6 +252,8 @@ function _handle(m: PostMessage): void {
             break;
 
         case 'clear':
+            // `boot: false` means the host already knows the session is empty
+            if (m.boot === false) { settleBoot(); } else { enterBoot(); }
             clearTranscript(els.chat);
             els.welcome.style.display = '';
             ctx.currentBody = null;

@@ -178,4 +178,27 @@ describe('reloading a session', () => {
         // The list is re-sent so another pi process's changes show up without a reload
         expect(webview.posted.some((m) => m.type === 'sessions')).toBe(true);
     });
+
+    it('marks a rebuild clear as booting so the webview keeps its bare empty state', async () => {
+        const { webview, inner } = make();
+        const { manager } = stubManager();
+        inner._runtime.clientManager = manager;
+
+        await inner.restartClient();
+
+        const clear = webview.posted.find((m) => m.type === 'clear');
+        // The transcript is read back afterwards, so nothing must be promised yet
+        expect(clear?.boot).toBe(true);
+    });
+
+    it('marks a user-initiated clear as settled, since the new session is empty', async () => {
+        const { webview, panel } = make();
+        const { manager } = stubManager();
+        (panel as unknown as { _runtime: { clientManager: unknown } })._runtime.clientManager = manager;
+
+        await panel.clear();
+
+        const clear = webview.posted.find((m) => m.type === 'clear');
+        expect(clear?.boot).toBe(false);
+    });
 });

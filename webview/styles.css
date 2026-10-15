@@ -453,6 +453,16 @@
         align-items: center;
         animation: fadeIn .25s ease;
     }
+
+    /* ---------- Boot (transcript state still unknown) ---------- */
+    /* Only the identity is shown until we know whether the session is empty, so
+       opening a session that has history doesn't flash a full welcome screen.
+       `visibility` (not `display`) keeps the layout, so the logo and title sit
+       exactly where they will settle and the extras just appear. The setup
+       checklist is deliberately left visible: it only shows when the user has
+       something to act on, which is worth interrupting the boot for. */
+    body.booting .quick-actions,
+    body.booting .welcome-shortcuts { visibility: hidden; }
     .welcome-logo {
         width: 62px; height: 62px;
         display: grid; place-items: center;

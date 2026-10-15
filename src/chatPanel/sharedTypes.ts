@@ -74,6 +74,13 @@ export interface PostMessage {
     items?: HistoryItem[];
     /** How many earlier items were left out of `items` (kept in the session file) */
     hidden?: number;
+    /**
+     * `clear`: whether the transcript state is still unknown afterwards. True
+     * when the transcript is being rebuilt from disk (the webview keeps its boot
+     * state until the replayed `history` arrives); false when the host already
+     * knows the session is empty (New chat / `/clear`).
+     */
+    boot?: boolean;
     models?: Array<{ provider: string; id: string }>;
     current?: { provider: string; id: string } | string | null;
     levels?: string[];

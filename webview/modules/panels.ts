@@ -5,6 +5,7 @@
 import type { WebviewContext, PermissionOption, SetupStatus, SessionInfo } from '../types';
 import { escapeHtml, escapeAttr, formatTokens, sessionDisplayName } from '../utils';
 import { needsSetupAttention } from './setupStatus';
+import { settleBoot } from './boot';
 
 let ctx: WebviewContext;
 
@@ -230,6 +231,8 @@ export function renderSetup(status: SetupStatus | undefined): void {
         return;
     }
     el.classList.remove('hidden');
+    // There is something to act on: no reason to stay in the bare boot state
+    settleBoot();
     interface Row { label: string; ok: boolean; pending?: boolean; action?: string; actionLabel?: string }
     const providerSuffix = status.provider ? ' · ' + status.provider : '';
     const rows: Row[] = [

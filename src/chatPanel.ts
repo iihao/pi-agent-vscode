@@ -112,10 +112,18 @@ export class ChatPanel {
      */
     private _webviewSynced = false;
 
-    /** Wipe the transcript and record that the webview no longer has content */
-    private _clearTranscript(): void {
+    /**
+     * Wipe the transcript and record that the webview no longer has content.
+     *
+     * `boot` tells the webview whether the transcript state is still unknown
+     * afterwards: true when the transcript is about to be rebuilt from disk (so
+     * it keeps showing only the empty state's identity until the replay), false
+     * when we already know the session is empty (New chat / `/clear`), which
+     * lets the full empty state appear right away.
+     */
+    private _clearTranscript(boot = true): void {
         this._webviewSynced = false;
-        this._post({ type: 'clear' });
+        this._post({ type: 'clear', boot });
     }
 
     /**
@@ -325,7 +333,9 @@ export class ChatPanel {
         this._contextWarned = false;
         this._runtime.firstUserMessage = undefined;
         this._resetTurnChanges();
-        this._clearTranscript();
+        // The new session is empty by definition: no boot state, the empty state
+        // can be shown straight away
+        this._clearTranscript(false);
         this._post({ type: 'setBusy', busy: false });
         this._postContexts();
         const client = this._clientManager.client;
@@ -1329,8 +1339,9 @@ export class ChatPanel {
     private async _restoreHistory(client: PiRpcClient): Promise<void> {
         try {
             const items = await this._historyItems(client);
-            if (!items.length) { return; }
             const capped = this._capHistory(items);
+            // Posted even when empty: the webview treats this as the authoritative
+            // transcript state, and needs it to leave its boot state.
             this._post({ type: 'history', items: capped.items, hidden: capped.hidden });
         } catch (err) {
             logError(`_restoreHistory failed: ${(err as Error).message}`);

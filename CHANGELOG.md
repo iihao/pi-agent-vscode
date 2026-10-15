@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **The empty state no longer flashes when the view opens.** Starting pi and
+  reading the transcript from disk takes about a second, and the view used to
+  spend it showing the full welcome screen — logo, quick actions and shortcut
+  hints — which a session with history then replaced. It now shows just the logo
+  and title for that moment, in the place they end up (the space is reserved, so
+  nothing reflows); an empty session simply reveals the extras once it is known
+  to be empty.
 - **`Pi: Restart Session` is now `Pi: Reload Session`** (⟳ icon). "Restart" read
   as "re-open / wipe this conversation" — which is what `/clear` and **New chat**
   do — while this command replaces this session's pi process and rebuilds its

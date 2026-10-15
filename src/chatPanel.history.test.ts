@@ -179,10 +179,12 @@ describe('transcript replay', () => {
         expect(webview.posted.some((m) => m.type === 'history' && m.messages)).toBe(false);
     });
 
-    it('posts nothing when the session is empty', async () => {
+    it('posts the settled state for an empty session, so the webview can leave its boot state', async () => {
         const { webview, internals } = make();
         await internals._restoreHistory(clientWith([{ id: 'e1', type: 'session' }]));
-        expect(webview.posted.some((m) => m.type === 'history')).toBe(false);
+        const post = webview.posted.find((m) => m.type === 'history');
+        expect(post).toBeDefined();
+        expect(post?.items).toEqual([]);
     });
 
     it('keeps the live transcript when the webview is already in sync', async () => {

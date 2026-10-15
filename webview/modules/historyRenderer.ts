@@ -13,6 +13,7 @@ import { scrollToBottom } from '../utils';
 import { renderMermaid } from '../markdown';
 import { addMessage, addHistoryThinking, addNotice } from './messageRenderer';
 import { addTool, endTool, endToolGroup, resetToolGroup } from './toolRenderer';
+import { settleBoot } from './boot';
 
 let ctx: WebviewContext;
 
@@ -21,7 +22,14 @@ export function initHistoryRenderer(c: WebviewContext): void {
 }
 
 export function renderHistory(items: HistoryItem[], hidden = 0): void {
-    if (!items.length) { return; }
+    // The host posts this whenever it has settled the transcript, empty or not:
+    // it is what ends the boot state.
+    settleBoot();
+    if (!items.length) {
+        // A settled, empty transcript *is* the empty state
+        ctx.els.welcome.style.display = '';
+        return;
+    }
     ctx.els.welcome.style.display = 'none';
     resetToolGroup();
     // Anything dropped to keep the replay bounded is reported up front rather
