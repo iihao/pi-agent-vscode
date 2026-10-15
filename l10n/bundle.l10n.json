@@ -147,6 +147,7 @@
   "Auto-confirm": "Auto-confirm",
   "Disable bash/edit/write": "Disable bash/edit/write",
   "Pi client failed to start": "Pi client failed to start",
+  "Pi client start was cancelled by a restart": "Pi client start was cancelled by a restart",
   "pi not found; please install it and retry: {0}": "pi not found; please install it and retry: {0}",
   "Failed to load pi SDK: {0}": "Failed to load pi SDK: {0}",
   "pi process failed to start: {0}": "pi process failed to start: {0}",

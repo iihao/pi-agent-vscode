@@ -147,6 +147,7 @@
   "Auto-confirm": "自动确认",
   "Disable bash/edit/write": "禁用 bash/edit/write",
   "Pi client failed to start": "Pi 客户端未能启动",
+  "Pi client start was cancelled by a restart": "Pi 客户端的启动被一次重启取消了",
   "pi not found; please install it and retry: {0}": "未找到 pi，请先安装后重试：{0}",
   "Failed to load pi SDK: {0}": "加载 pi SDK 失败：{0}",
   "pi process failed to start: {0}": "pi 进程启动失败：{0}",

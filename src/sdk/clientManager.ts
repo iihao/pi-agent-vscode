@@ -82,6 +82,13 @@ export class PiClientManager {
     private _client: PiRpcClient | undefined;
     private _unsubscribe: (() => void) | undefined;
     private _starting: Promise<void> | undefined;
+    /**
+     * Bumped by every `_resetClient`. `_startClient` captures it and refuses to
+     * install a client whose start finished after a stop: that process has no
+     * owner any more, and keeping it would leak a live pi child that outlives
+     * the manager and races any client started afterwards.
+     */
+    private _generation = 0;
     private _eventListeners: Array<(event: PiAgentEvent) => void> = [];
     private readonly _deps: PiClientDeps;
 
@@ -100,10 +107,13 @@ export class PiClientManager {
     public async ensureConnected(extensionPath: string, options?: PiStartOptions): Promise<PiRpcClient> {
         if (this._client) { return this._client; }
         if (!this._starting) {
-            this._starting = this._startClient(extensionPath, options).catch((err) => {
-                this._starting = undefined;
+            const starting = this._startClient(extensionPath, options).catch((err) => {
+                // Only drop the handle if it is still ours: a reset + new start
+                // may already have installed a fresher promise here meanwhile
+                if (this._starting === starting) { this._starting = undefined; }
                 throw err;
             });
+            this._starting = starting;
         }
         await this._starting;
         if (!this._client) {
@@ -187,6 +197,7 @@ export class PiClientManager {
     }
 
     private async _startClient(extensionPath: string, options?: PiStartOptions): Promise<void> {
+        const generation = this._generation;
         const config = vscode.workspace.getConfiguration('pi-agent');
         const executable = (config.get<string>('pi.executable') || '').trim();
         const resolved = this._deps.resolvePi(extensionPath, executable || undefined);
@@ -220,13 +231,16 @@ export class PiClientManager {
                 try { listener(event); } catch (err) { logError(`event listener failed: ${(err as Error).message}`); }
             }
         });
+        // Local handle too: if this start is later cancelled, the shared field may
+        // already belong to a *newer* client and must not be cleared through it
+        const unsubscribeThis = this._unsubscribe;
 
         try {
             await client.start();
         } catch (startErr) {
             // Start failed: drop the listener just registered so a dead client's subscription isn't left behind
-            this._unsubscribe?.();
-            this._unsubscribe = undefined;
+            unsubscribeThis?.();
+            if (this._unsubscribe === unsubscribeThis) { this._unsubscribe = undefined; }
             const stderr = client.getStderr().trim();
             const detail = stderr
                 ? stderr.split('\n').slice(-2).join(' ').slice(0, 200)
@@ -238,11 +252,23 @@ export class PiClientManager {
         // The SDK's send has a hard-coded 30s timeout, too short for long tasks like compact / bash; widen it.
         patchLongRunningTimeouts(client);
 
+        if (generation !== this._generation) {
+            // stop()/restart ran while this start was in flight: the manager no
+            // longer wants this process. Kill it instead of installing an ownerless
+            // client that no future stop() can reach.
+            unsubscribeThis?.();
+            if (this._unsubscribe === unsubscribeThis) { this._unsubscribe = undefined; }
+            await client.stop().catch((err) => { logError(`discarding cancelled client failed: ${(err as Error).message}`); });
+            throw new PiStartError(vscode.l10n.t('Pi client start was cancelled by a restart'));
+        }
+
         this._client = client;
         logInfo('pi client ready');
     }
 
     private async _resetClient(): Promise<void> {
+        // Invalidate any start currently in flight (see _generation)
+        this._generation++;
         if (this._unsubscribe) {
             this._unsubscribe();
             this._unsubscribe = undefined;

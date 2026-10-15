@@ -11,6 +11,8 @@ class FakeRpcClient {
     public lastText: string | null = 'generated title';
     public options: { cliPath?: string; cwd?: string; args?: string[] };
     public failStart = false;
+    /** When set, start() waits for it — used to keep a start in flight */
+    public startGate: Promise<void> | undefined;
     public process = { stdin: { write: (data: string) => { this.writes.push(data); return true; } } };
     private listeners: Array<(e: PiAgentEvent) => void> = [];
 
@@ -20,6 +22,7 @@ class FakeRpcClient {
 
     async start(): Promise<void> {
         if (this.failStart) { throw new Error('boom'); }
+        if (this.startGate) { await this.startGate; }
         this.started = true;
     }
     async stop(): Promise<void> { this.stopped = true; }
@@ -39,7 +42,7 @@ class FakeRpcClient {
     emit(e: PiAgentEvent): void { this.listeners.slice().forEach((l) => l(e)); }
 }
 
-function setup(opts: { notFound?: boolean; failStart?: boolean } = {}) {
+function setup(opts: { notFound?: boolean; failStart?: boolean; holdFirstStart?: Promise<void> } = {}) {
     const instances: FakeRpcClient[] = [];
     const deps: PiClientDeps = {
         resolvePi: () => (opts.notFound ? null : { cliPath: '/pi/dist/cli.js', sdkEntry: '/pi/dist/index.js' }),
@@ -48,6 +51,9 @@ function setup(opts: { notFound?: boolean; failStart?: boolean } = {}) {
                 constructor(o: { cliPath?: string; cwd?: string; args?: string[] }) {
                     super(o);
                     this.failStart = Boolean(opts.failStart);
+                    // Only the first client is held, so a test can stop() while it
+                    // is still starting and then start a second one normally
+                    if (instances.length === 0) { this.startGate = opts.holdFirstStart; }
                     instances.push(this);
                 }
             } as unknown as PiRpcClientCtor,
@@ -83,6 +89,46 @@ describe('PiClientManager.ensureConnected', () => {
         const { manager, instances } = setup();
         await manager.ensureConnected('/ext');
         expect(instances[0].options.args).toContain('--continue');
+    });
+
+    it('kills a client whose start finishes after a stop (no orphan process)', async () => {
+        let release!: () => void;
+        const gate = new Promise<void>((r) => { release = r; });
+        const { manager, instances } = setup({ holdFirstStart: gate });
+
+        const connecting = manager.ensureConnected('/ext');
+        // let _startClient reach its awaited start()
+        await new Promise((r) => setTimeout(r, 0));
+        expect(instances).toHaveLength(1);
+
+        await manager.stop();          // the manager resets while the start is in flight
+        release();
+
+        await expect(connecting).rejects.toBeInstanceOf(PiStartError);
+        expect(manager.isConnected).toBe(false);
+        // the late-starting process destroys itself instead of being installed
+        expect(instances[0].stopped).toBe(true);
+    });
+
+    it('a restart during a start leaves the newer client intact', async () => {
+        let release!: () => void;
+        const gate = new Promise<void>((r) => { release = r; });
+        const { manager, instances } = setup({ holdFirstStart: gate });
+
+        const stale = manager.ensureConnected('/ext').catch((e) => e);
+        await new Promise((r) => setTimeout(r, 0));
+        await manager.stop();
+
+        // a fresh connect wins, then the abandoned first start lands late
+        const client = await manager.ensureConnected('/ext');
+        release();
+        expect(await stale).toBeInstanceOf(PiStartError);
+
+        expect(instances).toHaveLength(2);
+        expect(instances[0].stopped).toBe(true);    // orphan cleaned up
+        expect(instances[1].stopped).toBe(false);   // current client untouched
+        expect(manager.client).toBe(client as unknown);
+        expect(manager.isConnected).toBe(true);
     });
 });
 
