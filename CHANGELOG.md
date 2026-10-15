@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **“Edit” on a message no longer pretends to rewrite history.** Pressing ✎ kept
+  the old behaviour of filling the composer, but sending no longer drops that
+  message and everything after it from the transcript. A session file is
+  append-only: pi always keeps the original exchange in the model context, and
+  deleting the DOM tail made the view claim the conversation was shorter than
+  it was — after which pi would cheerfully quote the answer the user had just
+  “deleted”, and the removed turn's file changes stayed on disk with their
+  **Revert** card gone. The transcript now shows exactly what pi sees, and the
+  button's tooltip says so (“Reuse as a new message”). Likewise the 🗑 button's
+  tooltip is honest about hiding the message from view rather than removing it
+  from the conversation.
+
 ### Fixed
 
 - **A failed tool is still rolled back when the panel that recorded it goes away

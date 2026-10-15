@@ -269,8 +269,6 @@ export interface WebviewContext {
     thinkingContent: string;
     // Tool state
     runningTools: Record<string, ToolRuntime>;
-    // Edit state
-    editingMessageEl: HTMLElement | null;
     // Model/thinking config
     modelsList: ModelInfo[];
     currentModel: ModelInfo | null;

@@ -1,14 +1,18 @@
 // ---------------------------------------------------------------------------
-// Composer submission routing
+// Composer submission routing & the honesty of "edit"
 //
-// Regression test: `send()` dropped the message being edited (and everything
-// after it) before it checked whether the text was a local slash command — so
-// editing a message and typing `/model` silently deleted the rest of the
-// transcript while nothing was resent.
+// Two rules the transcript must never break:
+//  - a local slash command / `!` shell command does not send a prompt, so it
+//    must not disturb the transcript at all;
+//  - "edit" only prefills the composer. A resend is a *new* message: pi's
+//    session file is append-only, so the original exchange stays in the model
+//    context. Dropping it from the DOM made the view claim the conversation
+//    was shorter than it is — the model kept quoting "deleted" answers.
+//    The view now shows exactly what pi sees.
 // ---------------------------------------------------------------------------
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { send, initInputHandling } from '../webview/modules/inputHandling';
+import { send, editMessage, deleteMessage, initInputHandling } from '../webview/modules/inputHandling';
 import { initPanels } from '../webview/modules/panels';
 import { initNavigator } from '../webview/modules/navigator';
 import { initImagePaste } from '../webview/modules/imagePaste';
@@ -36,6 +40,7 @@ function fakeEl(): Record<string, unknown> {
         addEventListener() { /* noop */ },
         appendChild() { /* noop */ },
         insertBefore() { /* noop */ },
+        focus() { /* noop */ },
         remove() { (el.removed as number); el.removed = ((el.removed as number) || 0) + 1; },
         removed: 0,
     };
@@ -45,7 +50,7 @@ function fakeEl(): Record<string, unknown> {
 describe('composer submission routing', () => {
     let posted: Posted[];
     let ctx: WebviewContext & Record<string, unknown>;
-    let edited: Record<string, unknown>;
+    let earlierMessage: Record<string, unknown>;
     const realDocument = (globalThis as { document?: unknown }).document;
 
     beforeEach(() => {
@@ -59,7 +64,7 @@ describe('composer submission routing', () => {
             addEventListener() { /* noop */ },
         };
         const input = fakeEl();
-        edited = fakeEl();
+        earlierMessage = fakeEl();
         ctx = {
             els: {
                 input,
@@ -81,7 +86,6 @@ describe('composer submission routing', () => {
             pendingImages: [],
             messageHistory: [],
             historyIndex: -1,
-            editingMessageEl: null,
             busy: false,
             sendMode: 'queue',
             railCount: 0,
@@ -99,37 +103,51 @@ describe('composer submission routing', () => {
         (globalThis as { document?: unknown }).document = realDocument;
     });
 
-    it('leaves the transcript alone when a local command is sent while editing', () => {
-        (ctx as unknown as { editingMessageEl: unknown }).editingMessageEl = edited;
+    it('sends nothing and removes nothing when a local command is typed', () => {
         (ctx.els.input as unknown as { value: string }).value = '/model';
 
         send();
 
-        // `/model` only opens the picker: nothing is resent, so nothing may be dropped
+        // `/model` only opens the picker: no prompt was sent, the transcript stays
         expect(posted).toEqual([]);
-        expect(edited.removed).toBe(0);
-        expect((ctx as unknown as { editingMessageEl: unknown }).editingMessageEl).toBe(edited);
+        expect(earlierMessage.removed).toBe(0);
         expect((ctx.els.input as unknown as { value: string }).value).toBe('');
     });
 
-    it('leaves the transcript alone when a shell command is sent while editing', () => {
-        (ctx as unknown as { editingMessageEl: unknown }).editingMessageEl = edited;
+    it('routes a shell command to runBash without touching the transcript', () => {
         (ctx.els.input as unknown as { value: string }).value = '!ls';
 
         send();
 
         expect(posted.map((m) => m.type)).toEqual(['runBash']);
-        expect(edited.removed).toBe(0);
+        expect(earlierMessage.removed).toBe(0);
     });
 
-    it('still drops the message being edited when a real prompt is sent', () => {
-        (ctx as unknown as { editingMessageEl: unknown }).editingMessageEl = edited;
-        (ctx.els.input as unknown as { value: string }).value = 'fixed version';
+    it('a resent message is a plain new prompt — the view drops nothing', () => {
+        // Pretend the user pressed ✎ on an earlier message: the composer now holds
+        // the edited text. Sending must behave exactly like any other prompt.
+        editMessage('fixed version');
+        expect((ctx.els.input as unknown as { value: string }).value).toBe('fixed version');
 
         send();
 
-        expect(edited.removed).toBe(1);
-        expect((ctx as unknown as { editingMessageEl: unknown }).editingMessageEl).toBeNull();
         expect(posted).toEqual([{ type: 'sendMessage', text: 'fixed version', mode: undefined, images: undefined }]);
+        // pi still holds the original exchange in context, so the transcript keeps
+        // showing it: no DOM removal, ever, as a side effect of sending
+        expect(earlierMessage.removed).toBe(0);
+    });
+
+    it('editMessage only prefills the composer', () => {
+        editMessage('recall this');
+
+        expect((ctx.els.input as unknown as { value: string }).value).toBe('recall this');
+        // there is no "editing" state left to carry: nothing is marked and nothing is
+        // scheduled for removal when the next send happens
+        expect(earlierMessage.removed).toBe(0);
+    });
+
+    it('deleteMessage is the only path that removes a message node', () => {
+        deleteMessage(earlierMessage as unknown as HTMLElement);
+        expect(earlierMessage.removed).toBe(1);
     });
 });

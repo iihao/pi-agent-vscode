@@ -373,7 +373,7 @@ function bindChatEvents(): void {
                 const body = msgEl.querySelector('.message-body') as HTMLElement | null;
                 const text = getMessageText(body);
                 if (msgBtn.dataset.action === 'copy') { copyMessage(msgBtn, text); }
-                else if (msgBtn.dataset.action === 'edit') { editMessage(text, msgEl); }
+                else if (msgBtn.dataset.action === 'edit') { editMessage(text); }
                 else if (msgBtn.dataset.action === 'delete') { deleteMessage(msgEl); }
             }
         }

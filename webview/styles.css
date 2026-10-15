@@ -576,7 +576,6 @@
     /* Notices right after a message (e.g. "usage this turn") don't need the full message bottom margin */
     .message:has(+ .status-line) { margin-bottom: 2px; }
     .message.flash { background: var(--cx-accent-soft); transition: background .4s; }
-    .message.editing { opacity: .45; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
     .message-header { display: flex; align-items: center; gap: 8px; margin-bottom: 7px; }
     .role-label {

@@ -100,7 +100,7 @@ function _handle(m: PostMessage): void {
         case 'editLast': {
             const users = els.chat.querySelectorAll('.message.user');
             const last = users[users.length - 1] as HTMLElement | undefined;
-            if (last) { editMessage(getMessageText(last.querySelector('.message-body') as HTMLElement | null), last); }
+            if (last) { editMessage(getMessageText(last.querySelector('.message-body') as HTMLElement | null)); }
             break;
         }
         case 'queue': updateQueueBadges(m.steering, m.followUp); break;
@@ -261,7 +261,6 @@ function _handle(m: PostMessage): void {
             resetThinking();
             resetWorking();
             ctx.runningTools = {};
-            ctx.editingMessageEl = null;
             ctx.contexts = [];
             renderChips();
             els.ctxStats.classList.add('hidden');

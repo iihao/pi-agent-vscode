@@ -23,17 +23,6 @@ export function autoResizeInput(): void {
     input.style.height = newHeight + 'px';
 }
 
-export function removeMessagesFrom(el: HTMLElement): void {
-    let current: HTMLElement | null = el;
-    while (current) {
-        const next = current.nextElementSibling;
-        current.remove();
-        current = next as HTMLElement | null;
-    }
-    updateMessageCount();
-    renderRail();
-}
-
 export function send(mode?: string): void {
     const input = ctx.els.input;
     const text = input.value.trim();
@@ -45,11 +34,7 @@ export function send(mode?: string): void {
         if (ctx.messageHistory.length > 50) { ctx.messageHistory.shift(); }
     }
     ctx.historyIndex = -1;
-    // Intercept slash commands / `!` shell before the edit-resend bookkeeping below:
-    // these do not send a prompt, so there is nothing to resend and the message
-    // being edited (and everything after it) must stay where it is. Deleting first
-    // meant that editing a message and typing `/model` silently dropped the rest of
-    // the conversation from the view.
+    // Intercept slash commands / `!` shell: these do not send a prompt to pi
     if (text.charAt(0) === '/') {
         const cmd = text.split(/\s/)[0];
         if (cmd === '/compact') {
@@ -142,14 +127,11 @@ export function send(mode?: string): void {
         autoResizeInput();
         return;
     }
-    // Edit & resend: drop the original message and everything after it, now that we
-    // know this really is a prompt to pi
-    if (ctx.editingMessageEl) {
-        removeMessagesFrom(ctx.editingMessageEl);
-        ctx.editingMessageEl.classList.remove('editing');
-        ctx.editingMessageEl = null;
-    }
-    // While busy: send using the current mode (queue / steer); a modifier forces steer
+    // While busy: send using the current mode (queue / steer); a modifier forces steer.
+    // "Edit" only prefills the composer: the send lands as a fresh message at the end
+    // of the conversation, which is exactly what pi receives — the transcript never
+    // pretends the original exchange disappeared (a session file is append-only;
+    // silently dropping the DOM tail made the view lie about the model's context).
     ctx.vscode.postMessage({ type: 'sendMessage', text: text, mode: ctx.busy ? (mode ?? ctx.sendMode) : undefined, images: images.length ? images : undefined });
     input.value = '';
     ctx.pendingImages = [];
@@ -182,19 +164,19 @@ export function copyMessage(btn: HTMLElement, text: string): void {
     setTimeout(function () { btn.innerHTML = original; }, 1000);
 }
 
-export function editMessage(text: string, msgEl: HTMLElement | null): void {
-    if (ctx.editingMessageEl) {
-        ctx.editingMessageEl.classList.remove('editing');
-    }
-    ctx.editingMessageEl = msgEl || null;
-    if (ctx.editingMessageEl) {
-        ctx.editingMessageEl.classList.add('editing');
-    }
+/**
+ * Reuse a message: put its text back into the composer for editing and
+ * resending. Nothing is removed anywhere — the resend is a new turn and pi
+ * still sees the original exchange, so the view must show it too.
+ */
+export function editMessage(text: string): void {
     ctx.els.input.value = text;
     ctx.els.input.focus();
     autoResizeInput();
 }
 
+/** Hide a message from the transcript. Presentation only: pi's context and
+ *  the session file keep it; the button's tooltip says so. */
 export function deleteMessage(msgEl: HTMLElement): void {
     msgEl.remove();
     updateMessageCount();

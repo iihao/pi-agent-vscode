@@ -73,7 +73,6 @@ export function createContext(): WebviewContext {
         thinkingLine: null,
         thinkingContent: '',
         runningTools: {},
-        editingMessageEl: null,
         modelsList: [],
         currentModel: null,
         thinkingLevels: [],
