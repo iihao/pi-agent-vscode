@@ -402,6 +402,9 @@
     /* ---------- Chat area ---------- */
     .chat-wrap { position: relative; flex: 1; min-height: 0; display: flex; }
     .chat-container { flex: 1; overflow-y: auto; padding: 18px 16px 10px; display: flex; flex-direction: column; }
+    /* Focus ring would be noise on a scroll container; tabindex is here only so a
+       click inside the transcript keeps keyboard focus in the chat (copy, etc.) */
+    .chat-container:focus { outline: none; }
     .chat-container > * { flex-shrink: 0; }
 
     /* ---------- Message rail (one tick per user question) ---------- */

@@ -1288,6 +1288,16 @@ export class ChatPanel {
                     vs.showInformationMessage(vscode.l10n.t('Code copied to clipboard'));
                 }
                 break;
+            case 'copyText':
+                // Ctrl/Cmd+C on a transcript selection: the webview's native copy
+                // never reaches the document, so the shortcut is served by the same
+                // clipboard path the copy buttons use. No toast — a keyboard copy
+                // that silently works is the expected behavior.
+                if (message.text) {
+                    try { await vs.clipboard.writeText(message.text); }
+                    catch (err) { logError(`copy failed: ${(err as Error).message}`); }
+                }
+                break;
             case 'openLink':
                 if (message.href) {
                     // Only allow common safe schemes; never hand command:/vscode:/ms-* to the OS

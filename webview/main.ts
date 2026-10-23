@@ -19,6 +19,7 @@ import { initEventBindings } from './modules/eventBindings';
 import { initMessageHandler } from './modules/messageHandler';
 import { initContextUsage } from './modules/contextUsage';
 import { initHistoryRenderer } from './modules/historyRenderer';
+import { initCopyShortcut, bindCopyShortcut } from './modules/copyShortcut';
 
 const ctx = createContext();
 
@@ -37,6 +38,8 @@ initEventBindings(ctx);
 initMessageHandler(ctx);
 initContextUsage(ctx);
 initHistoryRenderer(ctx);
+initCopyShortcut(ctx);
+bindCopyShortcut();
 
 // Initial render
 scrollToBottom(ctx.els.chat);

@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Ctrl/Cmd+C works on transcript text.** The VS Code webview never receives the
+  native edit command, so copying a selection out of a message did nothing — and
+  with no focused element left, focus fell back into the composer, which is what
+  made it look like a shortcut conflict (nothing in the extension binds copy).
+  The shortcut now goes through the extension's own clipboard channel — the same
+  one the copy buttons already used — for any non-empty selection outside an
+  input; text inside the composer and the search box keeps native behaviour.
+  The transcript also takes keyboard focus on click, so the next shortcut stays
+  in the chat instead of jumping away.
 - **Selecting and copying text out of a live answer works again.** The typewriter
   rewrites the streaming bubble's `innerHTML` every ~50ms, which destroyed any
   DOM selection inside it — `Ctrl/Cmd+C` then had nothing to copy, and with the

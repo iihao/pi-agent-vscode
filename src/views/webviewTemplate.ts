@@ -90,7 +90,7 @@ export function getWebviewHtml(assets: WebviewAssets, S: UiStrings): string {
     </div>
 
     <div class="chat-wrap">
-    <div class="chat-container" id="chat">
+    <div class="chat-container" id="chat" tabindex="-1">
         <div class="welcome" id="welcome">
             <div class="welcome-logo" aria-hidden="true">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 8 10 12 6 16"></polyline><line x1="13" y1="16" x2="18" y2="16"></line></svg>
