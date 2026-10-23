@@ -107,7 +107,7 @@ it to, writes to pi's own credential files (`auth.json` / `models.json`).
 | New chat | `⌘⇧N` / `Ctrl+Shift+N` in the sidebar, or **Pi: New Chat** |
 | Open in editor tab / beside | **Pi: Open Chat in Editor Tab** / **Pi: Open Chat Beside** |
 | Jump between questions | `Alt+↑` / `Alt+↓`, or the `‹ ›` buttons and rail |
-| Search messages | `Ctrl+F` / `⌘F` in the composer |
+| Search messages | `Ctrl+F` / `⌘F` anywhere in the chat view |
 | Explain / refactor selection | Select code → right-click → **Pi: Explain Code** / **Pi: Refactor Code** |
 | Generate code | **Pi: Generate Code** |
 | Attach file / selection | 📎 in the composer, or right-click → **Pi: Attach…** |

@@ -392,12 +392,45 @@ function stopReveal(): void {
     lastRevealAt = 0;
 }
 
+/**
+ * Whether the user has an active (non-collapsed) selection inside `el`.
+ *
+ * Rewriting an element's innerHTML destroys the DOM selection inside it. The
+ * typewriter re-renders every ~50ms, so selecting text in a live answer — in
+ * order to copy it — wiped the selection before Ctrl/Cmd+C could act on it
+ * (nothing to copy), and with the focused text node gone Chromium dropped focus
+ * back to the page, which in the webview lands on the composer. Same for the
+ * final formatted render at the end of a stream.
+ *
+ * Deliberately defensive about the environment: the renderer is imported in
+ * DOM-less unit tests too.
+ */
+export function hasSelectionInside(el: HTMLElement): boolean {
+    const getSelection = (globalThis as { getSelection?: () => Selection | null }).getSelection;
+    if (typeof getSelection !== 'function') { return false; }
+    const sel = getSelection.call(globalThis);
+    if (!sel || sel.rangeCount === 0 || sel.isCollapsed) { return false; }
+    if (!String(sel).length) { return false; }
+    try {
+        return el.contains(sel.getRangeAt(0).commonAncestorContainer);
+    } catch {
+        return false;   // detached range (node replaced under us): treat as free
+    }
+}
+
 function revealTick(): void {
     revealRaf = undefined;
     const body = ctx.currentBody;
     if (!body) { return; }
     const target = ctx.currentBuffer.length;
     if (revealedLen >= target) { return; }
+    // The user is selecting this text: a re-render would throw the selection (and
+    // the copy about to happen) away. Keep the frame pending and catch up as soon
+    // as the selection is gone — the buffer keeps growing meanwhile.
+    if (hasSelectionInside(body)) {
+        revealRaf = requestAnimationFrame(revealTick);
+        return;
+    }
     const now = Date.now();
     if (lastRevealAt && now - lastRevealAt < REVEAL_RENDER_MS) {
         // too early for another full re-render; keep ticking, the elapsed time
@@ -446,16 +479,67 @@ export function appendAssistantChunk(text: string): void {
 
 export function endAssistantStream(): void {
     stopReveal();
-    if (ctx.currentBody) {
-        const stick = isNearBottom(ctx.els.chat);
-        ctx.currentBody.innerHTML = render(ctx.currentBuffer);
-        ctx.currentBody.classList.remove('stream-cursor');
-        ctx.currentBody = null;
-        ctx.currentBuffer = '';
-        revealedLen = 0;
-        if (stick) { scrollToBottom(ctx.els.chat); }
+    const body = ctx.currentBody;
+    if (!body) { void renderMermaid(ctx.els.chat); return; }
+    const buffer = ctx.currentBuffer;
+    ctx.currentBody = null;
+    ctx.currentBuffer = '';
+    revealedLen = 0;
+    if (hasSelectionInside(body)) {
+        // The final pass rewrites every text node (highlight.js), which would
+        // destroy a selection the user is right now copying from. Do it the
+        // moment the selection is released.
+        deferFinalRender(body, buffer);
+        return;
     }
+    finalizeBody(body, buffer);
+}
+
+/** Render the finished, fully formatted message into its bubble */
+function finalizeBody(body: HTMLElement, buffer: string): void {
+    const stick = isNearBottom(ctx.els.chat);
+    body.innerHTML = render(buffer);
+    body.classList.remove('stream-cursor');
+    if (stick) { scrollToBottom(ctx.els.chat); }
     void renderMermaid(ctx.els.chat);
+}
+
+/**
+ * Finished messages whose formatted render is waiting for the user to finish
+ * selecting. Flushed on `selectionchange` once nothing is selected inside them.
+ */
+const deferredFinals: Array<{ body: HTMLElement; buffer: string }> = [];
+let listeningForSelection = false;
+
+function deferFinalRender(body: HTMLElement, buffer: string): void {
+    deferredFinals.push({ body, buffer });
+    if (listeningForSelection) { return; }
+    const doc = (globalThis as { document?: Document }).document;
+    if (!doc || typeof doc.addEventListener !== 'function') {
+        // No DOM (unit tests): nothing can be selected, render immediately
+        flushDeferredFinals();
+        return;
+    }
+    listeningForSelection = true;
+    doc.addEventListener('selectionchange', flushDeferredFinals);
+}
+
+/** Render every finished message whose selection has been released */
+export function flushDeferredFinals(): void {
+    const doc = (globalThis as { document?: Document }).document;
+    for (let i = deferredFinals.length - 1; i >= 0; i--) {
+        const pending = deferredFinals[i];
+        // Dropped by a transcript clear (New chat / session switch): nothing to do
+        const attached = !doc || typeof doc.contains !== 'function' ? true : doc.contains(pending.body);
+        if (!attached) { deferredFinals.splice(i, 1); continue; }
+        if (hasSelectionInside(pending.body)) { continue; }
+        deferredFinals.splice(i, 1);
+        finalizeBody(pending.body, pending.buffer);
+    }
+    if (deferredFinals.length === 0 && listeningForSelection && doc) {
+        listeningForSelection = false;
+        doc.removeEventListener('selectionchange', flushDeferredFinals);
+    }
 }
 
 export function abortAssistantStream(): void {

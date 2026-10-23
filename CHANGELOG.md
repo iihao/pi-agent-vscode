@@ -9,6 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Selecting and copying text out of a live answer works again.** The typewriter
+  rewrites the streaming bubble's `innerHTML` every ~50ms, which destroyed any
+  DOM selection inside it — `Ctrl/Cmd+C` then had nothing to copy, and with the
+  focused text node gone Chromium dropped focus back to the page, which in the
+  webview lands in the composer (it looked like a shortcut conflict; the
+  extension only binds `⌥⌘P` and `⌘⇧N`, neither is copy). Frames now pause while
+  text inside the streaming message is selected and catch up when it is
+  released; the final highlighted pass waits for the same, and is flushed as
+  soon as the selection collapses.
+
+### Fixed
+
 - **A broken auth.json / models.json can no longer erase every saved provider.**
   All four writers treated “the file cannot be parsed” like “the file does not
   exist” and rebuilt from `{}` — one truncated write on pi's side and the next
