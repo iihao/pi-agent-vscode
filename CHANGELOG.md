@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.7] - 2026-10-26
+
 ### Fixed
 
 - **Ctrl/Cmd+C works on transcript text.** The VS Code webview never receives the
@@ -683,7 +685,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   language.
 - Trusted-workspace gating and a settings namespace (`pi-agent.*`).
 
-[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.6...HEAD
+[Unreleased]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.7...HEAD
+[0.1.7]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/iihao/pi-agent-vscode/compare/v0.1.3...v0.1.4
