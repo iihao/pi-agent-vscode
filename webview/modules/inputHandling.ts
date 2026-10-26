@@ -9,7 +9,7 @@ import { renderRail } from './navigator';
 import { renderImages } from './imagePaste';
 import { addBashRunning } from './toolRenderer';
 import { addNotice } from './messageRenderer';
-import { bashId, escapeHtml } from '../utils';
+import { bashId } from '../utils';
 import { getAllMessages } from './search';
 
 let ctx: WebviewContext;
