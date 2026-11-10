@@ -9,7 +9,7 @@
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.80%2B-007ACC.svg)](https://code.visualstudio.com/)
 [![Marketplace installs](https://img.shields.io/visual-studio-marketplace/i/iihao.pi-agent-assistant?label=installs&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=iihao.pi-agent-assistant)
 [![Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-Pi%20Agent-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=iihao.pi-agent-assistant)
-[![visitors](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fiihao%2Fpi-agent-vscode%2Fmain%2Fmetrics%2Fbadge.json)](https://github.com/iihao/pi-agent-vscode/graphs/traffic)
+[![visitors](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fiihao%2Fdevcheck%2Fmain%2Fmetrics%2Fbadges%2Fpi-agent-vscode-visitors.json)](https://github.com/iihao/pi-agent-vscode/graphs/traffic)
 
 **English** · [简体中文](./README.zh-CN.md)
 
