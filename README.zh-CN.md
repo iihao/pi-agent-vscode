@@ -18,6 +18,15 @@
 > ⚠️ **Pi Agent 只是前端。** 它会启动你本机安装的 `pi` CLI，而 `pi` 可以
 > **读写工作区文件、执行 shell 命令**。仅在你的**受信任工作区**中激活，请自行判断风险。
 
+### 为什么是这一个
+
+同一个「Pi Agent」名字下已经有好几个扩展。这个的不同之处只有一句话：**它不是另一个 agent，而是你本机 `pi` 的前端。**
+
+- **不搬家**：模型、API key、会话、skills、prompt 全部复用你已有的 `~/.pi`，扩展自己不存任何凭据。
+- **一个会话，多个窗口**：侧边栏和编辑器标签页共享同一份 session，代码在哪一栏，聊天就在哪一栏。
+- **能反悔**：每一轮列出改过的文件，可以一键回滚到这一轮之前；会话也能克隆、导出、重建。
+- **权限只有三档**：Manual / Auto / Read-only，默认只在受信任的工作区激活。
+
 <div align="center">
   <img src="https://raw.githubusercontent.com/iihao/pi-agent-vscode/main/docs/images/pi-vscode-main.png" alt="Pi Agent 在 VS Code 中：侧边栏对话与编辑器标签面板并排，流式回答、代码块，以及带模型 / 思考级别 / 权限控制的输入栏" width="100%">
 </div>

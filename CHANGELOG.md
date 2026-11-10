@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.8] - 2026-11-10
+
+### Changed
+
+- **Listing and metadata, no behaviour change.** Added `pi`, `pi-agent`, `local`,
+  `offline`, `privacy` and `vscode` to `keywords` — the extension never matched a
+  search for "pi" before — and rewrote the Marketplace description to say what it
+  actually is: a local-first front-end for the `pi` CLI, reusing your own models
+  and credentials.
+- **README: "Why this one" section.** Four bullets on how this extension differs
+  from the other "Pi Agent" extensions (nothing moves out of `~/.pi`; sidebar and
+  editor tab share one session; a turn can be reverted; three permission modes),
+  plus a Marketplace install-count badge.
+
 ## [0.1.7] - 2026-10-26
 
 ### Fixed

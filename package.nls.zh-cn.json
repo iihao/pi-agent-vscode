@@ -1,6 +1,6 @@
 {
   "displayName": "Pi Agent for VS Code",
-  "description": "在 VSCode 中使用 AI 助手进行代码对话、解释、生成和重构",
+  "description": "本地优先的 VS Code AI 编程助手，模型与凭据都来自你自己的 pi",
   "capabilities.untrusted": "Pi 会读写工作区文件并执行命令，仅在受信任工作区启用。",
   "cmd.openChat": "Pi: 打开对话",
   "cmd.explainCode": "Pi: 解释代码",

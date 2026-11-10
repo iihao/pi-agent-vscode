@@ -2,7 +2,7 @@
   "name": "pi-agent-assistant",
   "displayName": "%displayName%",
   "description": "%description%",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "publisher": "iihao",
   "license": "MIT",
   "author": {
@@ -38,12 +38,18 @@
     "Other"
   ],
   "keywords": [
+    "pi",
+    "pi-agent",
     "ai",
+    "agent",
     "assistant",
+    "local",
+    "offline",
+    "privacy",
     "claude",
     "chat",
-    "code",
-    "copilot"
+    "copilot",
+    "vscode"
   ],
   "activationEvents": [
     "onCommand:pi-agent.openChat",

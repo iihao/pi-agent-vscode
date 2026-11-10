@@ -7,6 +7,7 @@
 [![CI](https://github.com/iihao/pi-agent-vscode/actions/workflows/ci.yml/badge.svg)](https://github.com/iihao/pi-agent-vscode/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![VS Code](https://img.shields.io/badge/VS%20Code-1.80%2B-007ACC.svg)](https://code.visualstudio.com/)
+[![Marketplace installs](https://img.shields.io/visual-studio-marketplace/i/iihao.pi-agent-assistant?label=installs&color=007ACC)](https://marketplace.visualstudio.com/items?itemName=iihao.pi-agent-assistant)
 [![Marketplace](https://img.shields.io/badge/VS%20Code%20Marketplace-Pi%20Agent-007ACC?logo=visualstudiocode)](https://marketplace.visualstudio.com/items?itemName=iihao.pi-agent-assistant)
 
 **English** · [简体中文](./README.zh-CN.md)
@@ -18,6 +19,15 @@ coding agent — a Claude Code / Codex-style chat UI that runs entirely on
 > ⚠️ **Pi Agent is a front-end.** It launches the `pi` CLI installed on your
 > machine, which can **read/write workspace files and run shell commands**. It
 > activates **only in trusted workspaces**. Use at your own discretion.
+
+### Why this one
+
+There are already a handful of "Pi Agent" extensions. This one is different in a single sentence: **it is not another agent — it is a front-end for the `pi` you already run.**
+
+- **Nothing moves.** Models, API keys, sessions, skills and prompts come from your existing `~/.pi`. The extension stores no credentials of its own.
+- **One session, many surfaces.** The sidebar and the editor tab share the same session, so the chat follows your code.
+- **Undo a turn.** Every turn lists the files it touched and can be reverted in one click; sessions can be cloned, exported or rebuilt from disk.
+- **Three permission modes.** Manual / Auto / Read-only, and it only activates in trusted workspaces.
 
 <div align="center">
   <img src="https://raw.githubusercontent.com/iihao/pi-agent-vscode/main/docs/images/pi-vscode-main.png" alt="Pi Agent in VS Code: the sidebar chat and the editor-tab panel side by side, with streaming answers, code blocks, and the composer with model / thinking / permission controls" width="100%">
